@@ -1,0 +1,11 @@
+{
+  "name": "kimseek",
+  "version": "0.1.0",
+  "description": "Kimseek — semantisches SBKIM-Such-Werkzeug als eigenständiger Endknoten (Modul 22 Such-Widget + Endknoten-Stack 01/02/03/04/05/05b/07/15/16/17/23). Server-los, im Browser.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "UNLICENSED"
+}
