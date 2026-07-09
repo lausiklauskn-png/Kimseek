@@ -1,0 +1,127 @@
+<!doctype html>
+<!--
+  Impressum & Datenschutz — SBKIM Such-Werkzeug (Standalone-Vorlage).
+  HINWEIS für Betreiber/Forker: Die Kontakt-/Betreiber-Angaben sind
+  Platzhalter ([…]). Vor der Veröffentlichung mit den eigenen, real
+  erforderlichen Angaben füllen (rechtlich Pflicht je nach Land). Es
+  werden bewusst KEINE personenbezogenen Daten in dieser Vorlage
+  hartcodiert (Sage-Protokol-Konvention: keine PII im Code).
+-->
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Impressum &amp; Datenschutz — SBKIM Such-Werkzeug</title>
+  <style>
+    body {
+      font-family: system-ui, Arial, sans-serif;
+      max-width: 820px; margin: 40px auto; padding: 20px;
+      line-height: 1.6; color: #e8e4da; background: #0b0a16;
+    }
+    a { color: #6EE7D3; }
+    h1, h2 { color: #f3efe6; }
+    h2 { margin-top: 1.8em; }
+    .section { margin-bottom: 32px; }
+    .back { display: inline-block; margin-bottom: 1.4rem; color: #b9b3a6; text-decoration: none; }
+    .back:hover { color: #6EE7D3; }
+    code { background: rgba(255,255,255,0.08); padding: 0.1em 0.35em; border-radius: 4px; }
+    .placeholder { color: #d6b76a; }
+  </style>
+</head>
+<body>
+  <a class="back" href="./index.html">← zurück zum Such-Werkzeug</a>
+  <h1>Impressum &amp; Datenschutz</h1>
+
+  <div class="section">
+    <h2>Impressum</h2>
+    <p>
+      Angaben gemäß § 5 DDG (Digitale-Dienste-Gesetz) / § 18 Abs. 2 MStV:<br>
+      Klaus Nitzsche<br>
+      Märchenweg 14, 21077 Hamburg, Deutschland<br>
+      Kontakt: <a href="mailto:klaus-nitzsche@t-online.de">klaus-nitzsche@t-online.de</a>
+    </p>
+    <p><strong>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV:</strong> Klaus Nitzsche (Anschrift wie oben).</p>
+    <p>
+      <em>Hinweis für Forker:</em> Wer dieses Werkzeug kopiert und selbst
+      veröffentlicht, ersetzt die obigen Betreiber-/Kontakt-Angaben durch die
+      eigenen, real erforderlichen Angaben (Impressumspflicht je nach Land,
+      z. B. § 5 DDG / § 18 MStV in Deutschland).
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>Datenschutz</h2>
+    <p>
+      <strong>Verantwortlicher</strong> im Sinne der DSGVO: Klaus Nitzsche,
+      Märchenweg 14, 21077 Hamburg, Deutschland —
+      <a href="mailto:klaus-nitzsche@t-online.de">klaus-nitzsche@t-online.de</a>.
+    </p>
+    <p>
+      Das SBKIM Such-Werkzeug ist eine <strong>server-lose</strong> Anwendung:
+      Es existiert kein eigener Anwendungs-Server, kein Nutzerkonto und keine
+      Analyse- oder Tracking-Software. Es werden keine personenbezogenen Daten
+      an den Betreiber übertragen.
+    </p>
+
+    <h3>Hosting</h3>
+    <p>
+      Diese Seite wird über <strong>GitHub Pages</strong> (GitHub Inc.)
+      ausgeliefert. Beim Aufruf werden technisch notwendige Zugriffsdaten
+      (z. B. IP-Adresse, Browser-Angaben) an GitHub übertragen, um die Seite
+      auszuliefern; es gelten deren Datenschutzbestimmungen.
+    </p>
+
+    <h3>Was lokal im Browser bleibt</h3>
+    <ul>
+      <li>
+        <strong>Such-Einstellungen</strong> (Position, Größe, gewählte
+        Suchmaschine, EU-Politik) werden in <code>localStorage</code>
+        gespeichert — nur auf deinem Gerät.
+      </li>
+      <li>
+        Ein optionaler <strong>API-Schlüssel</strong> (für Sprach-Cloud oder
+        KI-Richter) wird verschlüsselt in einem lokalen <strong>Tresor</strong>
+        gespeichert (PBKDF2 + AES-GCM, Wiederherstellung über Shamir 2-von-3).
+        Er verlässt dein Gerät <strong>nur</strong> in Richtung des von dir
+        gewählten Anbieters — nie an den Betreiber, nie an Dritte.
+      </li>
+    </ul>
+
+    <h3>Verbindungen zu Dritten (nur auf deine Aktion)</h3>
+    <ul>
+      <li>
+        <strong>Embedding-Modell:</strong> Beim ersten Gebrauch der
+        semantischen Suche wird ein KI-Modell einmalig von einem öffentlichen
+        CDN (jsDelivr / Hugging Face) geladen. Dabei gelten deren
+        Datenschutzbestimmungen.
+      </li>
+      <li>
+        <strong>KI-Anbieter</strong> (ChatGPT, Claude, Gemini, Perplexity):
+        nur, wenn du den KI-Pfad bewusst auslöst. Deine Anfrage geht dann an
+        den gewählten Anbieter; dessen Datenschutz gilt.
+      </li>
+      <li>
+        <strong>Sprach-Cloud</strong> (optional, EU-Endpunkt): nur, wenn du die
+        Cloud-Spracheingabe mit eigenem Schlüssel nutzt.
+      </li>
+      <li>
+        <strong>Web-Suche „↗ neuer Tab"</strong>: öffnet die von dir gewählte
+        Suchmaschine in einem neuen Tab — das Werkzeug selbst lädt nichts.
+      </li>
+    </ul>
+
+    <p>
+      Es findet <strong>keine eigenständige Datensammlung</strong> statt. Jede
+      Außenverbindung ist benannt, sichtbar und durch dich ausgelöst.
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>Urheberrecht</h2>
+    <p>
+      SBKIM Such-Werkzeug — Teil des SBKIM-Protokolls. Quelltext und Aufbau:
+      <a href="https://github.com/lausiklauskn-png/Sage-Protokol">Sage·Protokol</a>.
+    </p>
+  </div>
+</body>
+</html>
