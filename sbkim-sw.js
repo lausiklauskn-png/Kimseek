@@ -19,7 +19,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimseek-v3";
+var CACHE_VERSION = "kimseek-v4";
 
 var APP_SHELL = [
   "./",
