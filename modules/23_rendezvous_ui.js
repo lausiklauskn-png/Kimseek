@@ -465,24 +465,56 @@
     if (!r || typeof r.askNode !== "function") { setOut("Modul 23 mit Bau 23.B (askNode) nicht geladen."); return; }
     var text = askInputEl ? String(askInputEl.value || "").trim() : "";
     if (!text) { if (outEl) outEl.textContent = "❓ Zuerst oben eine Frage eintippen (z.B. kuchen), dann ❓ Fragen antippen."; return; }
-    if (outEl) outEl.textContent = "❓ Frage <" + text + "> an " + (card.nodeName || "Knoten") + " — warte auf Antwort (max ~15 s) …";
+    askWithRetry(r, card, text, true);
+  }
+
+  function renderAskSuccess(card, res) {
+    if (!outEl) return;
+    var lines = ["✓ Antwort von " + (card.nodeName || "Knoten") + " (" + Math.round((res.tookMs || 0) / 100) / 10 + " s):"];
+    if (res.results && res.results.length) {
+      res.results.forEach(function (h, i) {
+        lines.push("  " + (i + 1) + ". " + h.label + (typeof h.score === "number" ? "  (" + h.score.toFixed(2) + ")" : ""));
+      });
+      lines.push("— Das ist die bidirektionale Bedeutungs-Suche: sein Knoten hat in SEINEM Buch nach deinem Sinn gesucht.");
+    } else {
+      lines.push("  (keine Treffer in seinem Buch — ehrlich leer)");
+    }
+    outEl.textContent = lines.join("\n");
+  }
+
+  // Fragen mit EINEM automatischen Nachschlag (Klaus 2026-07-10): bleibt die
+  // Antwort aus (Karte evtl. veraltet, Alt-Identität nicht wach), den Raum
+  // EINMAL neu lesen, die frischeste Karte desselben Knoten-NAMENS nehmen und
+  // nachfragen. Fängt genau den „Visitenkarte veraltet"-Fall ab.
+  function askWithRetry(r, card, text, allowRetry) {
+    if (outEl) outEl.textContent = "❓ Frage <" + text + "> an " + (card.nodeName || "Knoten") + " — warte auf Antwort …";
     r.askNode(card, text).then(function (res) {
       if (!outEl) return;
-      if (res && res.ok) {
-        var lines = ["✓ Antwort von " + (card.nodeName || "Knoten") + " (" + Math.round((res.tookMs || 0) / 100) / 10 + " s):"];
-        if (res.results && res.results.length) {
-          res.results.forEach(function (h, i) {
-            lines.push("  " + (i + 1) + ". " + h.label + (typeof h.score === "number" ? "  (" + h.score.toFixed(2) + ")" : ""));
-          });
-          lines.push("— Das ist die bidirektionale Bedeutungs-Suche: sein Knoten hat in SEINEM Buch nach deinem Sinn gesucht.");
-        } else {
-          lines.push("  (keine Treffer in seinem Buch — ehrlich leer)");
-        }
-        outEl.textContent = lines.join("\n");
-      } else {
-        outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Keine Antwort.") +
-          "\nTipp: der Gegenknoten muss <💬 Antworten: an> geschaltet haben und den Tab offen halten.";
+      if (res && res.ok) { renderAskSuccess(card, res); return; }
+      if (allowRetry && typeof r.discover === "function") {
+        outEl.textContent = "… keine Antwort — Karte evtl. veraltet. Ich lese den Raum neu und frage die frischeste Karte …";
+        r.discover().then(function (d) {
+          var fresh = null;
+          if (d && d.ok && Array.isArray(d.cards)) {
+            for (var i = 0; i < d.cards.length; i++) {
+              if ((d.cards[i].nodeName || "") === (card.nodeName || "")) { fresh = d.cards[i]; break; }
+            }
+          }
+          if (fresh && fresh.nodeId !== card.nodeId) {
+            askWithRetry(r, fresh, text, false);   // genau EIN Nachschlag mit frischer ID
+          } else if (outEl) {
+            outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Keine Antwort.") +
+              (fresh ? "\n(Auch die frischeste Karte im Raum ist dieselbe — der Gegenknoten ist wohl offline oder sein Tab schläft im Hintergrund.)"
+                     : "\n(Keine frische Karte im Raum — der Gegenknoten hat sich noch nicht neu angemeldet.)") +
+              "\nTipp: Gegenknoten-Tab vorn + wach halten und <💬 Antworten: an> geschaltet lassen.";
+          }
+        }).catch(function () {
+          if (outEl) outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Keine Antwort.") + "\n(Raum-Neulesen fehlgeschlagen.)";
+        });
+        return;
       }
+      outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Keine Antwort.") +
+        "\nTipp: der Gegenknoten muss <💬 Antworten: an> geschaltet haben und den Tab vorn + wach halten.";
     }).catch(function (e) { if (outEl) outEl.textContent = "✗ Fehler: " + (e && e.message ? e.message : e); });
   }
 
