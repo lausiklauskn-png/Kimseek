@@ -491,6 +491,22 @@
             };
           })
           .sort(function (a, b) { return b.ts - a.ts; });
+        // Adress-Wand-Härtung (Klaus 2026-07-10): ein Knoten kann durch
+        // wiederholtes „Aufräumen & neu anmelden" mehrere Alt-Identitäten
+        // hinterlassen — deren Präsenz-Kärtchen leben ~30 min weiter und
+        // fluten den Raum („immer mehr Identitäten"). Pro Knoten-NAME nur die
+        // NEUESTE Karte zeigen (Liste ist bereits ts-absteigend sortiert). So
+        // trifft „❓ Fragen" immer die frischeste, lauschende ID; die toten
+        // Alt-Kärtchen verschwinden aus Raum + Karte. Opt-out: collapseByName:false.
+        if (opts.collapseByName !== false) {
+          var seenName = Object.create(null);
+          cards = cards.filter(function (c) {
+            var key = (c.nodeName || "").toLowerCase();
+            if (!key) return true;
+            if (seenName[key]) return false;
+            seenName[key] = true; return true;
+          });
+        }
         // Reine Anzeige-Anreicherung: zentrierter Verwandtschafts-Score je Karte
         // (gatet nichts; Handshake bleibt 0.80-Riegel). Fail-soft ohne Modul 04.
         resolve({ ok: true, cards: relatednessForCards(cards, own) });
@@ -607,6 +623,11 @@
     var own = await getOwnLiveSpore();
     if (!own || !own.id) return { ok: false, reason: "Noch keine Identität — zuerst anmelden (announce)." };
     var ownId = own.id;
+    // Adress-Wand-Härtung (Klaus 2026-07-10): beim Einschalten des Antwortrechts
+    // eine FRISCHE Präsenz-Karte unter GENAU dieser lauschenden ID ans Brett
+    // heften. So ist die neueste Karte im Raum immer die, die auch wirklich
+    // Fragen beantwortet — der Frager (discover: newest-per-name) trifft sie.
+    try { await doAnnounce(own); } catch (_e) { /* fail-soft: Lauschen läuft trotzdem */ }
     var kCap = (typeof opts.k === "number" && isFinite(opts.k) && opts.k >= 1)
       ? Math.min(Math.floor(opts.k), RDV_QUERY_K_MAX) : RDV_QUERY_K_MAX;
     // Korpus-leer-Falle absichern: vor dem Lauschen den lokalen Korpus aktiv
