@@ -2544,7 +2544,18 @@
     // A4 (Bau 04.H): mit mehreren Frage-Varianten suchen und via RRF verschmelzen
     //   (queryLocalMulti). Rein additiv — senkt keine Schwelle, gatet nichts;
     //   der Andock-Riegel (Modul 05) bleibt unberührt.
+    // A4 (Bau 04.I): Ausschluss-/Negations-Filter. „alkoholfrei" / „ohne
+    //   Erdbeeren" (Allergie) sind Constraints, keine Ähnlichkeit — der
+    //   Cosinus filtert sie nicht. EINMAL aus der Original-Frage geparst
+    //   (konsistent über alle Multi-Query-Varianten) und als fertige Menge
+    //   durchgereicht. Ohne Verneinung passiert nichts (byte-gleiches Ranking).
     var hybridOpts = { corpus: corpus, hybrid: true };
+    var exclusions = (typeof match.parseExclusions === "function")
+      ? match.parseExclusions(query) : null;
+    if (exclusions && (exclusions.alcoholFree ||
+        (exclusions.terms && exclusions.terms.length))) {
+      hybridOpts.exclude = exclusions;
+    }
     var ranked;
     if (typeof match.queryLocalMulti === "function") {
       ranked = Promise.resolve(match.queryLocalMulti(expandVariants(match, query), k, hybridOpts));
@@ -2557,7 +2568,9 @@
         // Fail-soft: A1/A4-Pfad-Fehler → zurück auf den einfachen Cosinus-Pfad
         // (Bau 04.C), damit die Suche nie an der Verbesserung scheitert.
         warn("Hybrid/Multi-Query fehlgeschlagen — Fallback auf einfachen Vorfilter.", err);
-        return Promise.resolve(match.queryLocal(query, k, { corpus: corpus }))
+        var fbOpts = { corpus: corpus };
+        if (hybridOpts.exclude) fbOpts.exclude = hybridOpts.exclude;
+        return Promise.resolve(match.queryLocal(query, k, fbOpts))
           .then(function (res) { return enrichRanked(res, corpus, source); })
           .catch(function (err2) { warn("Vorfilter-Fallback fehlgeschlagen.", err2); return []; });
       });
