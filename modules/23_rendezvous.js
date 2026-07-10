@@ -47,10 +47,14 @@
  * Public surface (registered on window.SbkimRendezvous):
  *   init(opts?) -> Promise<void>
  *       opts = { nodeName, relayClient, anastomose, spore, storage, dbSuffix,
- *                createIdentity, ensureIdentity, freshSec, listenMs }
+ *                createIdentity, ensureIdentity, prepareCorpus, freshSec,
+ *                listenMs }
  *       Alle optional. relayClient/anastomose/spore/storage sonst aus den
  *       Globals. dbSuffix = eigene Schublade. createIdentity = app-eigener
  *       async-Callback. ensureIdentity:true fährt Modus A einmal (lokal).
+ *       prepareCorpus = app-eigener async-Provider → [{label,text,anchorId,
+ *       passageVec}]; enableAnswering() koppelt damit den lokalen Such-Korpus
+ *       aktiv an Modul 04 (setLocalCorpus), gegen die „Korpus-leer-Falle".
  *       init() ist idempotent + fail-soft, baut NICHTS ins Netz.
  *   configure(opts) -> void           (Teil-Update der Konfig, gleiche Felder)
  *   ensureIdentity(opts?) -> Promise<{ ok, created, nodeId?, reason? }>  (Modus A)
@@ -81,15 +85,17 @@
  *       Antwortrecht bewusst AN: lauscht auf Frage-Zettel (Tag "sbkim-qry")
  *       an die eigene lebende nodeId und antwortet mit Top-k der lokalen
  *       Bedeutungs-Suche (Modul 04 queryLocal). Default AUS, Dedupe + Rate-
- *       Limit 6/min. disableAnswering() schaltet ab.
+ *       Limit 6/min. disableAnswering() schaltet ab. Beim Einschalten wird der
+ *       lokale Korpus über cfg.prepareCorpus aktiv gekoppelt (Korpus-leer-
+ *       Falle abgesichert; fail-soft ohne Provider).
  *   askNode(cardOderNodeId, text, opts?) -> Promise<{ ok, results?, ... }>
  *       (Bau 23.B) Nutzer-ausgelöste Cross-Knoten-Frage; wartet auf den
  *       Antwort-Zettel (Default 15 s). Vertrag: INTERFACES §1 Modul 23.
  *   _meta -> { version, tag, presenceKind, sharedDbName, dbSuffix, freshSec,
  *              listenMs, nodeName, hasRelay, hasAnastomose, hasSpore, hasMatch,
  *              hasStorage, hasCreateIdentity,
- *              answering, answeredCount, queryTag, queryKind, queryResKind,
- *              queryMaxPerMin }
+ *              answering, answeredCount, hasPrepareCorpus, answerCorpusEnsured,
+ *              queryTag, queryKind, queryResKind, queryMaxPerMin }
  *
  * Self-check: emits a console.info line on script load. Siehe
  * docs/components/23_rendezvous.md + INTERFACES.md §1 Modul 23.
@@ -122,6 +128,7 @@
     storage: null,       // null → global.SbkimStorage (Identitäts-Hygiene)
     dbSuffix: null,      // eigene Schublade `sbkim_<dbSuffix>`
     createIdentity: null,// app-eigener async-Callback (Spore-Erzeugung)
+    prepareCorpus: null, // async → [{label,text,anchorId,passageVec}] (Korpus-Kopplung, Bau 23.B-Härtung)
     freshSec: RDV_FRESH_SEC_DEFAULT,
     listenMs: RDV_LISTEN_MS_DEFAULT,
   };
@@ -326,6 +333,10 @@
     if (opts.storage !== undefined) cfg.storage = opts.storage;
     if (typeof opts.dbSuffix === "string" && opts.dbSuffix.length > 0) cfg.dbSuffix = opts.dbSuffix;
     if (typeof opts.createIdentity === "function") cfg.createIdentity = opts.createIdentity;
+    if (opts.prepareCorpus !== undefined) {
+      cfg.prepareCorpus = (typeof opts.prepareCorpus === "function") ? opts.prepareCorpus : null;
+      answerCorpusEnsured = false; // neuer Provider → beim nächsten Antwort-AN neu koppeln
+    }
     if (typeof opts.freshSec === "number" && isFinite(opts.freshSec) && opts.freshSec > 0) {
       cfg.freshSec = Math.floor(opts.freshSec);
     }
@@ -533,16 +544,48 @@
   var RDV_QUERY_MAX_PER_MIN = 6;     // Antwort-Rate-Limit (Vorgriff Modul 11)
   var RDV_QUERY_TEXT_MAX = 300;      // Frage-Text hart gekappt (untrusted input)
   var RDV_QUERY_K_MAX = 5;           // maximal 5 Treffer je Antwort
-  var RDV_ASK_TIMEOUT_MS = 15000;
+  var RDV_ASK_TIMEOUT_MS = 60000; // 15 s war zu knapp: der Antworter lädt beim ersten Mal sein ~30-MB-Modell
 
   var answerUnsub = null;            // aktiver Antwort-Lauscher (null = AUS)
   var answeredCount = 0;
   var seenQids = [];                 // Dedupe-Fenster (Cap 200)
   var answerTimestamps = [];         // für das Rate-Limit (ms-Zeitstempel)
+  var answerCorpusEnsured = false;   // Korpus-Kopplung schon erzwungen? (Bau 23.B-Härtung)
 
   function resolveQueryMatch() {
     var m = cfg.match || global.SbkimMatch;
     return (m && typeof m.queryLocal === "function") ? m : null;
+  }
+
+  // ---- Korpus-Kopplung härten (Bau 23.B-Härtung, 2026-07-10) ----
+  // Die Korpus-leer-Falle: enableAnswering() ruft beim Fragen queryLocal —
+  // ECHTE Treffer gibt es aber nur, wenn Modul 04 vorher einen lokalen Korpus
+  // registriert bekam (setLocalCorpus). Bisher tat das AUSSCHLIESSLICH das
+  // Such-Widget (Modul 22) LAZY bei der ERSTEN Widget-Suche. Antwort-Pfad (23)
+  // und Korpus-Aufbau (22) waren also nicht gekoppelt → wer „Antworten" AN-
+  // schaltet, aber nie selbst suchte, antwortete mit LEERER Liste trotz
+  // vorhandener Daten (live zugeschlagen, PULS.md 2026-07-02). Beim bewussten
+  // Einschalten des Antwortrechts stellen wir den Korpus jetzt AKTIV sicher —
+  // unabhängig davon, ob je eine Widget-Suche lief.
+  //
+  // Verfassungstreu + fail-soft: rein lokal (kein Netz), nutzt NUR die
+  // öffentliche Fläche von Modul 04 (setLocalCorpus). Ohne cfg.prepareCorpus
+  // (App koppelt den Korpus anders, z.B. selbst übers Widget) ODER ohne
+  // setLocalCorpus-Fähigkeit ODER bei einem Fehler im Provider → wir tun
+  // NICHTS bzw. lassen den Korpus wie er ist; queryLocal liefert dann ehrlich
+  // leer, es bricht NICHTS. Idempotent: nur einmal je Provider.
+  async function ensureAnswerCorpus() {
+    if (answerCorpusEnsured) return;
+    if (typeof cfg.prepareCorpus !== "function") return; // App koppelt anders → nicht erzwingen
+    var m = cfg.match || global.SbkimMatch;
+    if (!m || typeof m.setLocalCorpus !== "function") return; // kein Registrier-Pfad → fail-soft
+    try {
+      var corpus = await cfg.prepareCorpus();
+      if (Array.isArray(corpus)) {
+        m.setLocalCorpus(corpus);
+        answerCorpusEnsured = true;
+      }
+    } catch (_e) { /* fail-soft: Korpus bleibt unverändert, queryLocal ggf. ehrlich leer */ }
   }
   function qidSeen(qid) { return seenQids.indexOf(qid) !== -1; }
   function rememberQid(qid) {
@@ -566,6 +609,10 @@
     var ownId = own.id;
     var kCap = (typeof opts.k === "number" && isFinite(opts.k) && opts.k >= 1)
       ? Math.min(Math.floor(opts.k), RDV_QUERY_K_MAX) : RDV_QUERY_K_MAX;
+    // Korpus-leer-Falle absichern: vor dem Lauschen den lokalen Korpus aktiv
+    // sicherstellen, damit die erste eingehende Frage nicht ins Leere greift
+    // (fail-soft — ohne Provider/Registrier-Pfad passiert nichts, kein Bruch).
+    await ensureAnswerCorpus();
     try {
       answerUnsub = relay.subscribe(
         { kinds: [NOSTR_KIND], "#t": [RDV_QUERY_TAG], since: nowSec() },
@@ -589,7 +636,11 @@
             var match = resolveQueryMatch();
             if (match) {
               try {
-                var hits = await match.queryLocal(text, k, { hybrid: true });
+                // exclude:true — die Frage eines fremden Knotens kann eine
+                // Verneinung tragen („alkoholfrei", „ohne Erdbeeren"). Modul 04
+                // parst sie und filtert VOR dem Ranking (Bau 04.I). Ohne
+                // Verneinung byte-gleich; Andock-Riegel unberührt.
+                var hits = await match.queryLocal(text, k, { hybrid: true, exclude: true });
                 results = (Array.isArray(hits) ? hits : []).slice(0, k).map(function (h) {
                   var r = { label: String(h.label || ""), score: (typeof h.score === "number") ? h.score : null };
                   if (typeof h.anchorId === "string" && h.anchorId) r.anchorId = h.anchorId;
@@ -617,6 +668,18 @@
       answerUnsub = null;
       return { ok: false, reason: "Antwort-Lauscher fehlgeschlagen: " + (e && e.message ? e.message : e) };
     }
+    // Vorwärmen (Bau 23.B-Härtung II, 2026-07-10): der Antworter lädt sein
+    // ~30-MB-Modell + baut seinen Korpus SONST erst bei der ersten eingehenden
+    // Frage — das kann 30 s–2 min dauern und läuft in den Frage-Timeout. Deshalb
+    // beim Einschalten des Antwortrechts JETZT im Hintergrund eine Aufwärm-Suche
+    // absetzen: das lädt Modell + Korpus vor, sodass die erste echte Frage
+    // sofort beantwortet wird. Fire-and-forget, fail-soft (kein Netz, rein lokal).
+    (function warmUpAnswerer() {
+      var m = resolveQueryMatch();
+      if (!m) return;
+      try { Promise.resolve(m.queryLocal("aufwärmen", 1)).catch(function () {}); }
+      catch (_e) { /* fail-soft */ }
+    })();
     signalListening(true);
     return { ok: true };
   }
@@ -728,6 +791,8 @@
         hasCreateIdentity: typeof cfg.createIdentity === "function",
         answering: answerUnsub !== null,          // Bau 23.B
         answeredCount: answeredCount,             // Bau 23.B
+        hasPrepareCorpus: typeof cfg.prepareCorpus === "function", // Bau 23.B-Härtung
+        answerCorpusEnsured: answerCorpusEnsured,  // Bau 23.B-Härtung (Korpus gekoppelt?)
         queryTag: RDV_QUERY_TAG,                  // Bau 23.B
         queryKind: RDV_QUERY_KIND,                // Bau 23.B
         queryResKind: RDV_QUERY_RES_KIND,         // Bau 23.B

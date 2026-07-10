@@ -951,6 +951,22 @@
     // 3. Leerer Korpus → leere Liste, KEIN Embedding-Call, kein Throw.
     if (corpus.length === 0) return [];
 
+    // 3b. Ausschluss-/Negations-Filter (Bau 04.I, OPT-IN). Ohne opts.exclude
+    //     byte-gleich. opts.exclude===true → aus der Frage parsen; ein Objekt →
+    //     als fertige Ausschluss-Menge nehmen. Filtert VOR dem Ranking über den
+    //     Kandidaten-Inhalt (`text`). Riegel/Schwellen unberührt (nur Entfernen).
+    if (opts.exclude) {
+      var _ex = (opts.exclude === true) ? parseExclusions(text) : opts.exclude;
+      if (_ex && (_ex.alcoholFree || (_ex.terms && _ex.terms.length))) {
+        corpus = corpus.filter(function (it) {
+          return !contentExcluded(
+            (typeof it.text === "string" && it.text) ? it.text : it.label, _ex,
+          );
+        });
+        if (corpus.length === 0) return [];
+      }
+    }
+
     // 4. Embedding. Modul-03-Fehler werden mit `cause` rethrown.
     var queryVec;
     try {
@@ -1164,6 +1180,158 @@
       return b.score - a.score;
     });
     return merged.slice(0, effectiveK);
+  }
+
+  // ---- Bau 04.I: Ausschluss-/Negations-Filter (Strang A4, deterministisch, additiv) ----
+  //
+  // PROBLEM (Klaus 2026-07-10, Live-Befund): Semantische Ähnlichkeit rankt einen
+  // Erdbeer-Drink NAH an „Erdbeere" — auch wenn der Nutzer Erdbeeren AUSSCHLIESSEN
+  // will („ohne Erdbeeren", Allergie). Und „alkoholfrei" nennt keine konkrete Zutat,
+  // sondern eine KLASSE — der Cosinus sieht den Wodka in der Zutatenliste nicht als
+  // Ausschlussgrund. Ähnlichkeit ist kein Constraint. Dieser Filter IST der
+  // Constraint: er liest Verneinungen aus der Frage und wirft Kandidaten raus, deren
+  // INHALT (Titel + Zutaten + Schritte, im Korpus-Feld `text`) den verbotenen
+  // Begriff trägt.
+  //
+  // EIGENSCHAFTEN:
+  //   - Rein deterministisch, offline, KEIN LLM, KEIN Netz.
+  //   - OPT-IN: queryLocal(text,k,{exclude:true}) parst die Frage selbst;
+  //     {exclude:<parseExclusions-Ergebnis>} nimmt eine fertige Ausschluss-Menge.
+  //     OHNE opts.exclude bleibt queryLocal BYTE-GLEICH (kein Verhaltenswechsel).
+  //   - Filtert VOR dem Ranking → gilt für Default- UND Hybrid-Pfad gleichermaßen.
+  //   - PROVIDER_MIN_MATCH + Andock-Riegel (Modul 05) UNBERÜHRT: der Filter ENTFERNT
+  //     nur Kandidaten, er senkt keine Schwelle und hebt keine an.
+
+  // Alkohol-Lexikon (normalisiert, ae/oe/ue/ss): „alkoholfrei" nennt die Klasse,
+  // nicht die Zutat — deshalb schlägt der Filter bei JEDEM dieser Begriffe im Inhalt an.
+  var ALCOHOL_TERMS = [
+    "alkohol", "wodka", "vodka", "rum", "gin", "whisky", "whiskey", "tequila",
+    "brandy", "cognac", "likoer", "liqueur", "wein", "rotwein", "weisswein",
+    "sekt", "prosecco", "champagner", "aperol", "campari", "schnaps", "bier",
+    "cointreau", "amaretto", "baileys", "kahlua", "malibu", "bacardi",
+    "jaegermeister", "absinth", "portwein", "sherry", "wermut", "vermouth",
+    "curacao", "ouzo", "sambuca", "limoncello", "cachaca", "pastis",
+  ];
+
+  function _exclEscapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  // Wort-Grenzen fürs Alkohol-Lexikon (kurze Wörter wie „gin"/„rum" sonst falsch-
+  // positiv in „ginger"/„krume"); triviale Plural-Endung -s/-e erlaubt.
+  var ALCOHOL_RE = new RegExp(
+    "\\b(" + ALCOHOL_TERMS.map(_exclEscapeRe).join("|") + ")(e|s)?\\b",
+  );
+
+  // Verbinder halten den Ausschluss-Modus offen für den nächsten Begriff
+  // („ohne Erdbeeren UND Himbeeren").
+  var EXCL_CONNECT = { "und": 1, "oder": 1, "and": 1, "or": 1 };
+  // Artikel/Füllwörter werden übersprungen, beenden aber den Modus nicht.
+  var EXCL_SKIP = {
+    "die": 1, "der": 1, "das": 1, "den": 1, "dem": 1, "ein": 1, "eine": 1,
+    "einen": 1, "einem": 1, "einer": 1, "viel": 1, "jegliche": 1,
+    "jeglichen": 1, "jeglicher": 1, "any": 1, "the": 1, "a": 1, "of": 1,
+    "added": 1, "bitte": 1, "gerne": 1, "gern": 1,
+  };
+  // Positive Kontext-Wörter beenden den Ausschluss-Modus („ohne X, aber MIT Y").
+  var EXCL_STOP = {
+    "mit": 1, "aber": 1, "sondern": 1, "jedoch": 1, "dafuer": 1, "dazu": 1,
+    "with": 1, "but": 1, "plus": 1,
+  };
+
+  function _normDe(s) {
+    return String(s == null ? "" : s).toLowerCase()
+      .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
+  }
+  // Grobes Stemming (Plural/Flexion) — nur wenn der Rest lang genug bleibt, sonst
+  // ganzes Wort. So trifft „erdbeeren" (Frage) den Inhalt „Erdbeere".
+  function _exclStem(w) {
+    // Englisch -ies -> Stamm (strawberries -> strawberr); dann simple Plural-/
+    // Flexions-Endung. KEIN -er strippen (dt. Nomen: Zucker/Wasser/Butter).
+    var s = w.replace(/ies$/, "").replace(/(en|e|n|s)$/, "");
+    return (s.length >= 4) ? s : w;
+  }
+
+  // parseExclusions(text) -> { terms: string[](Stämme), alcoholFree: boolean }
+  // Liest Verneinungen aus der Frage. Erkennt: „ohne X", „kein(e) X", „frei von X",
+  // „allergisch gegen X", „X-frei" (zuckerfrei/laktosefrei/…), „without X", „no X",
+  // und die Alkohol-Klasse („alkoholfrei", „ohne Alkohol", „alcohol-free",
+  // „non-alcoholic", „virgin"). Mehrere Begriffe („ohne Erdbeeren und Himbeeren")
+  // werden alle erfasst.
+  function parseExclusions(text) {
+    var res = { terms: [], alcoholFree: false };
+    if (typeof text !== "string" || text.trim().length === 0) return res;
+    var t = _normDe(text);
+    if (/alkoholfrei|alkohol[\s-]?frei|ohne\s+alkohol|alcohol[\s-]?free|non[\s-]?alcoholic|\bvirgin\b/.test(t)) {
+      res.alcoholFree = true;
+    }
+    var toks = t.split(/[^a-z0-9]+/).filter(Boolean);
+    var KEIN = /^kein(e|en|em|er|es)?$/;
+    var TRIG = { "ohne": 1, "without": 1, "no": 1 };
+    var seen = Object.create(null);
+    function add(w) {
+      if (w === "alkohol") { res.alcoholFree = true; return; }
+      var s = _exclStem(w);
+      if (s.length >= 3 && !seen[s]) { seen[s] = 1; res.terms.push(s); }
+    }
+    // mode: false | "open" (nächstes Inhalts-Wort ausschließen) | "chain"
+    // (gerade eins genommen; nur ein Verbinder öffnet den nächsten Begriff).
+    var mode = false, pendingAllerg = false, pendingFrei = false;
+    for (var i = 0; i < toks.length; i++) {
+      var w = toks[i];
+      var mf = /^(.{4,})frei$/.exec(w); // zuckerfrei / laktosefrei / alkoholfrei …
+      if (mf) {
+        if (mf[1] === "alkohol" || mf[1] === "alko") res.alcoholFree = true;
+        else add(mf[1]);
+        mode = false; continue;
+      }
+      if (pendingAllerg) { pendingAllerg = false; if (w === "gegen") { mode = "open"; continue; } }
+      if (/^allerg/.test(w)) { pendingAllerg = true; continue; }
+      if (pendingFrei) { pendingFrei = false; if (w === "von") { mode = "open"; continue; } }
+      if (w === "frei") { pendingFrei = true; continue; }
+      if (TRIG[w] || KEIN.test(w)) { mode = "open"; continue; }
+      if (!mode) continue;
+      if (EXCL_STOP[w]) { mode = false; continue; }
+      if (EXCL_CONNECT[w]) { mode = "open"; continue; }
+      if (EXCL_SKIP[w]) continue;            // Artikel überspringen, Modus bleibt
+      if (mode === "chain") { mode = false; continue; } // Verb/Folge-Wort → Ende
+      add(w);
+      mode = "chain";
+    }
+    return res;
+  }
+
+  // contentExcluded(contentText, exclusions) -> boolean
+  // true, wenn der Inhalt einen ausgeschlossenen Begriff trägt (Alkohol-Klasse per
+  // Wort-Grenze, freie Begriffe per Teilstring auf dem Stamm).
+  function contentExcluded(content, ex) {
+    if (!ex) return false;
+    var c = _normDe(content);
+    if (ex.alcoholFree && ALCOHOL_RE.test(c)) return true;
+    var terms = ex.terms || [];
+    for (var i = 0; i < terms.length; i++) {
+      if (terms[i] && c.indexOf(terms[i]) >= 0) return true;
+    }
+    return false;
+  }
+
+  // applyExclusions(candidates, exclusions, getText?) -> gefilterte Kopie
+  // Allgemeiner Nachfilter für beliebige Kandidaten-Listen (Widget-Treffer,
+  // Antwort-Kandidaten). getText(cand,i) liefert den prüfbaren Inhalt; Default:
+  // cand.text || cand.label. Fail-soft: ohne Ausschlüsse unveränderte Kopie.
+  function applyExclusions(candidates, exclusions, getText) {
+    if (!Array.isArray(candidates)) return candidates;
+    if (!exclusions || (!exclusions.alcoholFree &&
+        (!exclusions.terms || exclusions.terms.length === 0))) {
+      return candidates.slice();
+    }
+    var out = [];
+    for (var i = 0; i < candidates.length; i++) {
+      var content = "";
+      try {
+        content = getText ? getText(candidates[i], i)
+          : (candidates[i] && (candidates[i].text || candidates[i].label)) || "";
+      } catch (_e) { content = ""; }
+      if (!contentExcluded(content, exclusions)) out.push(candidates[i]);
+    }
+    return out;
   }
 
   // ---- Bau 04.D: Hybrid-Match — Match-Zeit-LLM-Richter (additiv) ----
@@ -1878,6 +2046,9 @@
     queryLocalJudged: queryLocalJudged,
     queryLocalMulti: queryLocalMulti,
     expandQuerySimple: expandQuerySimple,
+    parseExclusions: parseExclusions,
+    applyExclusions: applyExclusions,
+    contentExcluded: contentExcluded,
     setLocalCorpus: setLocalCorpus,
     bm25Scores: bm25Scores,
     tokenizeBM25: tokenizeBM25,
@@ -1921,6 +2092,9 @@
       // Bau 04.H Query-Expansion / Multi-Query (Strang A4) Read-Anker.
       multiMaxVariants: MULTI_MAX_VARIANTS,
       queryLocalMultiNote: "expandQuerySimple(text,{synonyms?,maxVariants?}) erzeugt gratis/offline Varianten (Original zuerst); queryLocalMulti(queries,k,{hybrid?,...}) sucht mit jeder + verschmilzt via RRF. Rein additiv, PROVIDER_MIN_MATCH + Andock-Riegel unberührt; LLM-Varianten-Generator wäre späterer opt-in-Aufsatz.",
+      // Bau 04.I Ausschluss-/Negations-Filter (Strang A4) Read-Anker.
+      alcoholTermCount: ALCOHOL_TERMS.length,
+      exclusionNote: "parseExclusions(text) liest Verneinungen ('ohne X', 'kein(e) X', 'X-frei', 'allergisch gegen X', 'alkoholfrei'->Alkohol-Klasse, EN 'without/no X'); applyExclusions(cands,ex,getText?) filtert Kandidaten deterministisch/offline; queryLocal(text,k,{exclude:true|<ex>}) filtert VOR dem Ranking. Ohne exclude byte-gleich; PROVIDER_MIN_MATCH + Andock-Riegel unberührt (nur Entfernen).",
       // Bau 04.D Hybrid-Match (Richter) Read-Anker.
       hybridProviders: Object.keys(HYBRID_PROVIDERS).map(function (id) {
         return { id: id, label: HYBRID_PROVIDERS[id].label, region: HYBRID_PROVIDERS[id].region };
