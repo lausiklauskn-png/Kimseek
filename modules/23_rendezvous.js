@@ -41,8 +41,12 @@
  *     falls keine da. Kein Löschen, KEIN Auto-Anmelden (Empfangsmodus).
  *   Modus B — repairAndReconnect(): zerstörend, NUR hinter Nutzer-Knopf.
  *     Reinigt NUR die eigene Origin (löscht `sbkim`, Service-Worker, Caches —
- *     eigene Schublade bleibt), dann frische Identität + Spore + Anmelden +
- *     „hart neu laden".
+ *     eigene Schublade bleibt), dann Anmelden + „hart neu laden".
+ *     Identitäts-Isolierung (2026-07-11): liegt die einzige Identität noch im
+ *     geteilten Topf `sbkim`, wird sie ERST in die eigene Schublade migriert
+ *     (Modul 01 migrateIdentityFrom), DANN der Topf gelöscht — Kollision
+ *     aufgelöst UND Identität behalten. Scheitert die Migration, bleibt der
+ *     Topf als Fallback stehen (reiner Schutz vor Identitätsverlust).
  *
  * Public surface (registered on window.SbkimRendezvous):
  *   init(opts?) -> Promise<void>
@@ -279,6 +283,22 @@
     if (suffix && storage) {
       try { await storage.init({ dbSuffix: suffix }); } catch (_e) { /* fail-soft */ }
     }
+    // Identitäts-Isolierung (2026-07-11, Teil 2): liegt die einzige Identität
+    // noch im geteilten Topf `sbkim` und die eigene Schublade ist leer, holen
+    // wir sie herüber, BEVOR getOrCreateIdentity unten eine NEUE erzeugt (was
+    // die geteilte-Topf-Kollision fortschreiben würde). Modus A = sanft,
+    // additiv, nicht-zerstörend (der geteilte Topf bleibt hier stehen; erst
+    // repairAndReconnect löscht ihn). Fail-soft; ohne migrateIdentityFrom
+    // (älteres Storage-Modul) passiert nichts.
+    if (suffix && storage && typeof storage.migrateIdentityFrom === "function") {
+      try {
+        var sharedHasIdA = await dbHasIdentity(SHARED_DB_NAME);
+        var suffixHasIdA = await dbHasIdentity("sbkim_" + suffix);
+        if (sharedHasIdA && !suffixHasIdA) {
+          await storage.migrateIdentityFrom(SHARED_DB_NAME);
+        }
+      } catch (_e) { /* fail-soft: dann erzeugt getOrCreateIdentity ggf. neu */ }
+    }
     var spore = resolveSpore();
     if (!spore || typeof spore.getOrCreateIdentity !== "function") {
       return { ok: false, created: false, reason: "Modul 02 (Spore) nicht geladen." };
@@ -364,14 +384,39 @@
     // gemeldete Symptom. Im Zweifel (Probe-Fehler) NICHT löschen (fail-safe:
     // Identität behalten geht vor geteilten Topf leeren). Bei newIdentity:true
     // will der Nutzer ausdrücklich frisch anfangen → volle Reinigung.
-    var protectShared = false, identityNote = null;
+    // Identitäts-Isolierung (2026-07-11): Alt-Fall (Identität nur im geteilten
+    // Topf) wird jetzt AUFGELÖST statt nur geschützt — die Identität wird in
+    // die eigene Schublade MIGRIERT, dann der geteilte Topf gefahrlos gelöscht
+    // (Kollision weg UND Identität behalten). Nur wenn die Migration fehlschlägt
+    // oder kein Migrations-Pfad da ist (älteres Storage-Modul), bleibt der reine
+    // Schutz als Fallback (Topf stehen lassen). Bei newIdentity:true will der
+    // Nutzer ausdrücklich frisch anfangen → volle Reinigung, keine Migration.
+    var protectShared = false, identityNote = null, migrated = false;
     if (opts.newIdentity !== true) {
       try {
         var sharedHasId = await dbHasIdentity(SHARED_DB_NAME);
         var suffixHasId = suffix ? await dbHasIdentity("sbkim_" + suffix) : false;
         if (sharedHasId && !suffixHasId) {
-          protectShared = true;
-          identityNote = "Deine Identität lag noch im geteilten Speicher — sie wurde NICHT gelöscht (kein Identitätsverlust). Nach dem harten Neuladen läuft sie in deiner eigenen Schublade weiter.";
+          if (suffix && storage && typeof storage.migrateIdentityFrom === "function") {
+            try {
+              await storage.migrateIdentityFrom(SHARED_DB_NAME);
+              var suffixHasIdAfter = await dbHasIdentity("sbkim_" + suffix);
+              if (suffixHasIdAfter) {
+                migrated = true;
+                identityNote = "Deine Identität lag im geteilten Speicher — sie wurde in deine eigene Schublade übernommen; der geteilte Topf wird jetzt geleert (Kollision aufgelöst, Identität behalten).";
+              } else {
+                protectShared = true;
+                identityNote = "Migration unvollständig — geteilte DB vorsichtshalber NICHT gelöscht (Identität geschützt).";
+              }
+            } catch (_e2) {
+              protectShared = true;
+              identityNote = "Migration fehlgeschlagen — geteilte DB vorsichtshalber NICHT gelöscht (Identität geschützt).";
+            }
+          } else {
+            // Kein Migrations-Pfad (älteres Storage-Modul) → reiner Schutz.
+            protectShared = true;
+            identityNote = "Deine Identität lag noch im geteilten Speicher — sie wurde NICHT gelöscht (kein Identitätsverlust). Nach dem harten Neuladen läuft sie in deiner eigenen Schublade weiter.";
+          }
         }
       } catch (_e) { protectShared = true; identityNote = "Speicher-Probe fehlgeschlagen — geteilte DB vorsichtshalber NICHT gelöscht (Identität geschützt)."; }
     }
@@ -393,7 +438,7 @@
     var res = await connectAndAnnounce({ createIdentity: opts.createIdentity || cfg.createIdentity || undefined });
     return {
       ok: res.ok, cleaned: cleaned, created: res.created,
-      protectedIdentity: protectShared, identityNote: identityNote,
+      protectedIdentity: protectShared, migratedIdentity: migrated, identityNote: identityNote,
       nodeId: res.nodeId, reason: res.reason, reloadHint: RELOAD_HINT,
     };
   }
@@ -885,6 +930,10 @@
         hasSpore: resolveSpore() !== null,
         hasMatch: resolveMatch() !== null,
         hasStorage: resolveStorage() !== null,
+        // Identitäts-Isolierung (2026-07-11): trägt das aktive Storage-Modul
+        // den Migrations-Pfad? (älteres Bundle ohne migrateIdentityFrom → false,
+        // dann greift der reine Schutz-Fallback in repairAndReconnect).
+        hasMigrate: (function () { var s = resolveStorage(); return !!(s && typeof s.migrateIdentityFrom === "function"); })(),
         hasCreateIdentity: typeof cfg.createIdentity === "function",
         answering: answerUnsub !== null,          // Bau 23.B
         answeredCount: answeredCount,             // Bau 23.B
