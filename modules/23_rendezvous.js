@@ -232,6 +232,43 @@
     }
   }
 
+  // ---- dbHasIdentity(dbName) — read-only IndexedDB-Probe (Identitäts-Schutz) ----
+  // Prüft OHNE Seiteneffekt, ob eine benannte SBKIM-DB bereits eine Identität
+  // trägt (nicht-leerer Store `sbkim_keys`). Rein lesend, fail-soft: ohne
+  // IndexedDB / bei jedem Fehler → false. Legt die DB NICHT dauerhaft an — muss
+  // sie zum Prüfen geöffnet werden und existierte sie vorher nicht (onupgrade-
+  // needed feuert), wird die frisch-leere Phantom-DB gleich wieder gelöscht.
+  // Nutzt NUR die Web-IndexedDB-API + die bekannten Store-Namen — Modul 01/02
+  // bleiben unangetastet.
+  function dbHasIdentity(dbName) {
+    return new Promise(function (resolve) {
+      var idb = (typeof global.indexedDB !== "undefined" && global.indexedDB) ? global.indexedDB : null;
+      if (!idb || typeof idb.open !== "function" || !dbName) return resolve(false);
+      var req, created = false;
+      try { req = idb.open(dbName); } catch (_e) { return resolve(false); }
+      req.onupgradeneeded = function () { created = true; };
+      req.onerror = function () { resolve(false); };
+      req.onblocked = function () { resolve(false); };
+      req.onsuccess = function () {
+        var db = req.result;
+        function finish(has) {
+          try { db.close(); } catch (_e) {}
+          if (created) { try { idb.deleteDatabase(dbName); } catch (_e2) {} }
+          resolve(has);
+        }
+        try {
+          if (created || !db.objectStoreNames || !db.objectStoreNames.contains("sbkim_keys")) {
+            return finish(false);
+          }
+          var tx = db.transaction("sbkim_keys", "readonly");
+          var cnt = tx.objectStore("sbkim_keys").count();
+          cnt.onsuccess = function () { finish(typeof cnt.result === "number" && cnt.result > 0); };
+          cnt.onerror = function () { finish(false); };
+        } catch (_e) { finish(false); }
+      };
+    });
+  }
+
   // ==== IDENTITÄTS-HYGIENE (Skill „saubere-netz-anmeldung") ====
 
   // ---- Modus A: ensureIdentity() — sanft, automatisch, idempotent ----
@@ -259,9 +296,20 @@
     return { ok: true, created: !existed, nodeId: (id && id.nodeId) ? id.nodeId : undefined };
   }
 
-  // ---- cleanupSharedOrigin() — Modus-B-Reinigung (NUR eigene Origin) ----
-  async function cleanupSharedOrigin() {
-    var result = { dbDeleted: false, swUnregistered: 0, cachesDeleted: 0, notes: [] };
+  // ---- cleanupSharedOrigin(opts?) — Modus-B-Reinigung (NUR eigene Origin) ----
+  // opts.deleteSharedDb (Default true): löscht den geteilten Alt-Topf `sbkim`.
+  // Identitäts-Schutz (Weg A, 2026-07-11): repairAndReconnect() setzt das auf
+  // FALSE, wenn die einzige Identität noch im geteilten Topf steckt — dann
+  // bleibt `sbkim` STEHEN (sonst wäre die Identität weg). SW-Abmeldung +
+  // Cache-Leerung laufen IMMER (heilen den häufigsten Kollisions-Anteil).
+  async function cleanupSharedOrigin(opts) {
+    opts = (opts && typeof opts === "object") ? opts : {};
+    var deleteSharedDb = opts.deleteSharedDb !== false;
+    var result = { dbDeleted: false, dbKept: false, swUnregistered: 0, cachesDeleted: 0, notes: [] };
+    if (!deleteSharedDb) {
+      result.dbKept = true;
+      result.notes.push("Geteilte DB 'sbkim' NICHT gelöscht — sie trägt noch die einzige Identität (Schutz vor Identitätsverlust).");
+    } else {
     try {
       var idb = (typeof global.indexedDB !== "undefined" && global.indexedDB) ? global.indexedDB : null;
       if (idb && typeof idb.deleteDatabase === "function") {
@@ -276,6 +324,7 @@
         });
       } else { result.notes.push("Kein IndexedDB verfügbar."); }
     } catch (_e) { result.notes.push("DB-Löschen übersprungen (fail-soft)."); }
+    }
     try {
       var nav = global.navigator;
       if (nav && nav.serviceWorker && typeof nav.serviceWorker.getRegistrations === "function") {
@@ -297,12 +346,38 @@
     return result;
   }
 
-  // ---- Modus B: repairAndReconnect() — zerstörend, nutzer-ausgelöst ----
+  // ---- Modus B: repairAndReconnect() — nutzer-ausgelöst, identitäts-schonend ----
   async function repairAndReconnect(opts) {
     opts = (opts && typeof opts === "object") ? opts : {};
-    var cleaned = await cleanupSharedOrigin();
     var suffix = (typeof opts.dbSuffix === "string" && opts.dbSuffix.length > 0) ? opts.dbSuffix : cfg.dbSuffix;
     var storage = resolveStorage();
+    // Reihenfolge (Weg A, 2026-07-11): eigene Schublade ZUERST aktivieren, DANN
+    // erst reinigen — sonst könnte die spätere init den geteilten Topf gar nicht
+    // mehr von der eigenen Schublade unterscheiden.
+    if (suffix && storage) {
+      try { await storage.init({ dbSuffix: suffix }); } catch (_e) { /* fail-soft */ }
+    }
+    // Identitäts-Schutz: den geteilten Topf `sbkim` NUR löschen, wenn die eigene
+    // Schublade `sbkim_<suffix>` die Identität schon trägt. Steckt die einzige
+    // Identität (Alt-Fall / frühe Ordering-Kollision) noch in `sbkim`, würde das
+    // Löschen sie vernichten und beim Neu-Anmelden eine NEUE erzeugen — genau das
+    // gemeldete Symptom. Im Zweifel (Probe-Fehler) NICHT löschen (fail-safe:
+    // Identität behalten geht vor geteilten Topf leeren). Bei newIdentity:true
+    // will der Nutzer ausdrücklich frisch anfangen → volle Reinigung.
+    var protectShared = false, identityNote = null;
+    if (opts.newIdentity !== true) {
+      try {
+        var sharedHasId = await dbHasIdentity(SHARED_DB_NAME);
+        var suffixHasId = suffix ? await dbHasIdentity("sbkim_" + suffix) : false;
+        if (sharedHasId && !suffixHasId) {
+          protectShared = true;
+          identityNote = "Deine Identität lag noch im geteilten Speicher — sie wurde NICHT gelöscht (kein Identitätsverlust). Nach dem harten Neuladen läuft sie in deiner eigenen Schublade weiter.";
+        }
+      } catch (_e) { protectShared = true; identityNote = "Speicher-Probe fehlgeschlagen — geteilte DB vorsichtshalber NICHT gelöscht (Identität geschützt)."; }
+    }
+    var cleaned = await cleanupSharedOrigin({ deleteSharedDb: !protectShared });
+    // Nach der Reinigung die eigene Schublade erneut sicherstellen (der geteilte
+    // Topf kann jetzt weg sein; die eigene Schublade überlebt in jedem Fall).
     if (suffix && storage) {
       try { await storage.init({ dbSuffix: suffix }); } catch (_e) { /* fail-soft */ }
     }
@@ -318,6 +393,7 @@
     var res = await connectAndAnnounce({ createIdentity: opts.createIdentity || cfg.createIdentity || undefined });
     return {
       ok: res.ok, cleaned: cleaned, created: res.created,
+      protectedIdentity: protectShared, identityNote: identityNote,
       nodeId: res.nodeId, reason: res.reason, reloadHint: RELOAD_HINT,
     };
   }
