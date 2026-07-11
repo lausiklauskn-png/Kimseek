@@ -105,6 +105,24 @@
  *   all(name) -> Promise<Array<{key, value}>>
  *   clear(name) -> Promise<void>
  *   ensureStore(name) -> Promise<void>   (Bau 01.Y; sync InvalidStoreNameError bei Pattern-Verstoß; async EnsureStoreError bei Bump-Fehler)
+ *   migrateIdentityFrom(oldDbName) -> Promise<Summary>   (Härtung 2026-07-11; kopiert Identitäts-Stores fehlend-only aus fremder DB in die aktive; fail-soft)
+ *
+ * Härtung „Identitäts-Isolierung" (2026-07-11) — zwei additive Eingriffe im
+ *   Speicher-Fundament, DB_VERSION UNBERÜHRT (kein Schema-Bruch):
+ *   (1) init({dbSuffix}) Re-Point: ein Folge-init mit ABWEICHENDEM Suffix wird
+ *       nicht mehr blind mit InvalidDbSuffixError abgewiesen. Ist die bereits
+ *       offene DB identitäts-LEER (Store sbkim_keys count 0 — typisch, wenn ein
+ *       früher suffix-loser init() den geteilten Topf `sbkim` aufmachte, bevor
+ *       der Andocker den Suffix setzen konnte), schließt Modul 01 die
+ *       Verbindung sauber und öffnet sie mit dem gewünschten Suffix neu
+ *       (sicheres Re-Point, nichts verloren, Kollision im geteilten Topf
+ *       vermieden). Trägt sie schon Identität ODER ist die Probe unsicher →
+ *       weiter fail-fast (Migration ist ein eigener, ausdrücklicher Schritt).
+ *       Verhalten bei gleichem/keinem Suffix byte-gleich.
+ *   (2) migrateIdentityFrom(oldDbName): holt eine im geteilten Topf gelandete
+ *       Identität in die eigene Schublade `sbkim_<suffix>` (raw get→put, nur
+ *       fehlende Schlüssel — kein Überschreiben). Identität isoliert UND
+ *       behalten. Aufrufer: Modul 23 repairAndReconnect / ensureIdentity.
  *
  * Self-check: emits a console.info line on script load. See INTERFACES.md
  * and docs/components/01_storage.md for the binding spec.
@@ -116,6 +134,13 @@
   var DB_VERSION = 4;
   var SBKIM_STORE_PREFIX = "sbkim_";
   var DB_SUFFIX_PATTERN = /^[a-z0-9_-]+$/;
+
+  // Härtung „Identitäts-Isolierung" (2026-07-11): der Store, in dem die
+  // SBKIM-Identität (privater/öffentlicher Schlüssel pro Slot) liegt. Anker
+  // für die Identitäts-Leer-Probe im dbSuffix-Re-Point (init) und für die
+  // Migration (migrateIdentityFrom). Modul 01 kennt die Identität NICHT
+  // inhaltlich — es prüft nur, ob dieser Store leer ist (count 0).
+  var IDENTITY_KEYS_STORE = "sbkim_keys";
 
   // Bau 01.Y (2026-05-19): Modul-01-Pattern für ensureStore-Namen.
   // Strenger als DB_SUFFIX_PATTERN: Store-Namen tragen den sbkim_-Präfix
@@ -354,22 +379,92 @@
     }
     if (dbPromise) {
       // Idempotenz: zweite init()-Aufrufe geben die gleiche DB-Promise zurück.
-      // Konflikt-Wurf nur, wenn der Folge-Aufruf EXPLIZIT einen abweichenden
+      // Konflikt-Fall nur, wenn der Folge-Aufruf EXPLIZIT einen abweichenden
       // dbSuffix mitgibt — sonst (ohne Optionen, Module 05/06/07/00 rufen so
       // intern nach) bleibt der zuerst gesetzte DB-Name aktiv. Wer den
-      // PWA-Suffix setzen will, muss zuerst kommen — das ist genau der
-      // Andocker-Pfad in Karte 09 Schritt 4.
+      // PWA-Suffix setzen will, sollte zuerst kommen — das ist der Andocker-
+      // Pfad in Karte 09 Schritt 4.
+      //
+      // Härtung „Identitäts-Isolierung" (2026-07-11): ein abweichender
+      // dbSuffix wird nicht mehr blind abgewiesen. War die zuerst geöffnete
+      // DB identitäts-LEER (typisch: ein früher init() ohne Suffix hat den
+      // geteilten Topf `sbkim` aufgemacht, bevor der Andocker den Suffix
+      // setzen konnte), re-pointen wir sicher auf den gewünschten Suffix —
+      // nichts geht verloren, die Kollision im geteilten Topf wird
+      // vermieden. Trägt die offene DB schon eine Identität ODER ist die
+      // Probe unsicher, bleibt es beim fail-fast (Migration ist der
+      // ausdrückliche Schritt migrateIdentityFrom, nicht init()).
       if (explicitSuffix !== null && explicitSuffix !== dbNameInUse) {
-        return Promise.reject(makeError(
-          "InvalidDbSuffixError",
-          "Storage.init bereits mit DB-Namen '" + dbNameInUse +
-            "' geoeffnet — Folgeaufruf mit '" + explicitSuffix +
-            "' wuerde stillschweigend ignoriert. dbSuffix muss beim ERSTEN init-Aufruf gesetzt werden.",
-        ));
+        return repointOrReject(explicitSuffix);
       }
       return dbPromise;
     }
-    dbNameInUse = explicitSuffix !== null ? explicitSuffix : DB_NAME_DEFAULT;
+    return openWithName(explicitSuffix !== null ? explicitSuffix : DB_NAME_DEFAULT);
+  }
+
+  // Härtung „Identitäts-Isolierung" (2026-07-11): probt die AKTUELL offene
+  // Verbindung read-only, ob sie eine Identität trägt (nicht-leerer Store
+  // sbkim_keys). Resolves "empty" | "has" | "uncertain". Rein lesend,
+  // fail-soft: keine Verbindung / kein Identitäts-Store / jeder Fehler →
+  // "uncertain" bzw. "empty" (fehlender Store = keine Identität). Kein
+  // Seiteneffekt, kein Versions-Bump.
+  function probeCurrentDbIdentity() {
+    return new Promise(function (resolve) {
+      var db = currentDb;
+      if (!db) return resolve("uncertain");
+      var contains;
+      try {
+        contains = db.objectStoreNames && db.objectStoreNames.contains(IDENTITY_KEYS_STORE);
+      } catch (_e) { return resolve("uncertain"); }
+      if (!contains) return resolve("empty"); // kein Identitäts-Store → keine Identität
+      var req;
+      try {
+        var tx = db.transaction(IDENTITY_KEYS_STORE, "readonly");
+        req = tx.objectStore(IDENTITY_KEYS_STORE).count();
+      } catch (_e) { return resolve("uncertain"); }
+      req.onsuccess = function () {
+        resolve((typeof req.result === "number" && req.result > 0) ? "has" : "empty");
+      };
+      req.onerror = function () { resolve("uncertain"); };
+    });
+  }
+
+  // Härtung „Identitäts-Isolierung" (2026-07-11): behandelt einen Folge-
+  // init({dbSuffix}) mit ABWEICHENDEM Namen. Ist die offene DB identitäts-
+  // leer → sicheres Re-Point (alte Verbindung schließen, State zurücksetzen,
+  // mit neuem Suffix neu öffnen). Sonst (Identität vorhanden / Probe
+  // unsicher) → fail-fast wie bisher (InvalidDbSuffixError).
+  function repointOrReject(explicitSuffix) {
+    var priorDb = currentDb;
+    var priorPromise = dbPromise;
+    var rejectMsg = "Storage.init bereits mit DB-Namen '" + dbNameInUse +
+      "' geoeffnet — Folgeaufruf mit '" + explicitSuffix +
+      "' wuerde stillschweigend ignoriert. dbSuffix muss beim ERSTEN init-Aufruf gesetzt werden.";
+    return probeCurrentDbIdentity().then(function (state) {
+      if (state !== "empty") {
+        // Trägt Identität oder unsicher → fail-safe: nicht re-pointen.
+        return Promise.reject(makeError("InvalidDbSuffixError", rejectMsg));
+      }
+      // Race-Schutz: zwischen Probe und Re-Point könnte ein paralleler
+      // Aufruf die Verbindung/den Namen ausgetauscht haben.
+      if (dbPromise !== priorPromise) {
+        if (explicitSuffix === dbNameInUse) return dbPromise; // schon re-gepointet
+        return Promise.reject(makeError("InvalidDbSuffixError", rejectMsg));
+      }
+      var closeP = priorDb ? closeConnectionAndWait(priorDb) : Promise.resolve();
+      return closeP.then(function () {
+        if (currentDb === priorDb) currentDb = null;
+        dbPromise = null;
+        return openWithName(explicitSuffix);
+      });
+    });
+  }
+
+  // Öffnet die DB unter dem gegebenen Namen und setzt dbNameInUse/dbPromise.
+  // Ausgegliedert aus init() (Härtung 2026-07-11), damit der Initial-Pfad und
+  // der Re-Point-Pfad denselben Open-Körper teilen. Verhalten UNVERÄNDERT.
+  function openWithName(effectiveName) {
+    dbNameInUse = effectiveName;
     dbPromise = new Promise(function (resolve, reject) {
       if (typeof indexedDB === "undefined" || indexedDB === null) {
         reject(makeError(
@@ -903,6 +998,146 @@
     });
   }
 
+  // Härtung „Identitäts-Isolierung" — Teil 2 (2026-07-11): raw-IndexedDB-
+  // Lesehilfe. Öffnet die benannte DB OHNE Version-Parameter, liest ALLE
+  // sbkim_*-Stores komplett aus und schließt wieder. Legt die DB NICHT
+  // dauerhaft an — existierte sie vorher nicht (onupgradeneeded feuert), wird
+  // die frisch-leere Phantom-DB gleich wieder gelöscht und { existed:false }
+  // gemeldet. Rein lesend, konsequent fail-soft (jeder Fehler → leeres
+  // Ergebnis). Rührt Modul-01-State (dbPromise/currentDb) NICHT an — separate,
+  // transiente Verbindung zur Quell-DB.
+  function readAllSbkimStoresRaw(name) {
+    return new Promise(function (resolve) {
+      if (typeof indexedDB === "undefined" || indexedDB === null) {
+        return resolve({ existed: false, data: {} });
+      }
+      var req, created = false;
+      try { req = indexedDB.open(name); } catch (_e) { return resolve({ existed: false, data: {} }); }
+      req.onupgradeneeded = function () { created = true; };
+      req.onblocked = function () { resolve({ existed: false, data: {} }); };
+      req.onerror = function () { resolve({ existed: false, data: {} }); };
+      req.onsuccess = function () {
+        var db = req.result;
+        // Fail-soft onversionchange, damit ein späterer Bump uns nicht blockt.
+        attachVersionChangeHandler(db);
+        function finish(result) {
+          try { db.close(); } catch (_e) {}
+          if (created) { try { indexedDB.deleteDatabase(name); } catch (_e2) {} }
+          resolve(result);
+        }
+        if (created) return finish({ existed: false, data: {} });
+        var names = [];
+        try {
+          for (var i = 0; i < db.objectStoreNames.length; i++) {
+            var sn = db.objectStoreNames[i];
+            if (sn.indexOf(SBKIM_STORE_PREFIX) === 0) names.push(sn);
+          }
+        } catch (_e) { return finish({ existed: true, data: {} }); }
+        if (!names.length) return finish({ existed: true, data: {} });
+        var data = {};
+        var tx;
+        try { tx = db.transaction(names, "readonly"); } catch (_e) { return finish({ existed: true, data: {} }); }
+        var pending = names.length;
+        function maybeDone() { if (--pending === 0) finish({ existed: true, data: data }); }
+        names.forEach(function (sn) {
+          var out = [];
+          data[sn] = out;
+          var cursorReq;
+          try { cursorReq = tx.objectStore(sn).openCursor(); } catch (_e) { maybeDone(); return; }
+          cursorReq.onsuccess = function () {
+            var cursor = cursorReq.result;
+            if (cursor) { out.push({ key: cursor.key, value: cursor.value }); cursor.continue(); }
+            else { maybeDone(); }
+          };
+          cursorReq.onerror = function () { maybeDone(); };
+        });
+      };
+    });
+  }
+
+  // Kopiert die Einträge eines Stores in die AKTIVE DB — aber nur Schlüssel,
+  // die dort noch FEHLEN (kein Überschreiben). Nutzt die eigenen get/put-
+  // Pfade (aktive Verbindung); der Store muss vorher via ensureStore
+  // existieren. Fail-soft pro Eintrag; zählt copied/skipped in `summary`.
+  function copyMissingEntries(storeName, entries, summary) {
+    summary.stores[storeName] = summary.stores[storeName] || { copied: 0, skipped: 0 };
+    if (summary.storesTouched.indexOf(storeName) === -1) summary.storesTouched.push(storeName);
+    var chain = Promise.resolve();
+    entries.forEach(function (entry) {
+      chain = chain.then(function () {
+        return get(storeName, entry.key).then(function (existing) {
+          if (existing !== undefined) {
+            summary.stores[storeName].skipped++; summary.skippedExisting++;
+            return undefined;
+          }
+          return put(storeName, entry.key, entry.value).then(function () {
+            summary.stores[storeName].copied++; summary.copied++;
+          }, function () { /* fail-soft pro Eintrag */ });
+        }, function () { /* get scheiterte → Eintrag überspringen, fail-soft */ });
+      });
+    });
+    return chain;
+  }
+
+  // Härtung „Identitäts-Isolierung" — Teil 2 (2026-07-11):
+  // migrateIdentityFrom(oldDbName) → Promise<Summary>.
+  // Kopiert die Identitäts-Stores (alle sbkim_*-Stores: sbkim_keys,
+  // sbkim_spore, sbkim_meta + identitäts-spezifische Stores) aus einer
+  // FREMDEN DB in die AKTUELL aktive DB (dbNameInUse) — aber NUR Schlüssel,
+  // die dort noch fehlen (kein Überschreiben einer schon vorhandenen
+  // Identität). Zweck: eine im geteilten Topf `sbkim` gelandete Identität in
+  // die eigene Schublade `sbkim_<suffix>` holen, ohne sie zu verlieren
+  // (Kollision auflösen + Identität behalten). Raw-Kopie (get→put),
+  // strukturklonbar (JWK/CryptoKey). KEIN DB_VERSION-Bump, KEIN Schema-Bruch;
+  // fehlende Stores werden additiv via ensureStore angelegt. Fail-soft:
+  // resolves IMMER ein Summary-Objekt (auch bei fehlender/leerer Quelle);
+  // wirft nur synchron bei Programmier-Fehler (oldDbName kein String).
+  // Summary = { ok, copied, skippedExisting, stores:{name:{copied,skipped}},
+  //             storesTouched:[...], reason }.
+  function migrateIdentityFrom(oldDbName) {
+    if (typeof oldDbName !== "string" || !oldDbName) {
+      throw makeError(
+        "InvalidDbSuffixError",
+        "migrateIdentityFrom erwartet einen nicht-leeren Quell-DB-Namen.",
+      );
+    }
+    var summary = { ok: false, copied: 0, skippedExisting: 0, stores: {}, storesTouched: [], reason: null };
+    return init().then(function () {
+      if (oldDbName === dbNameInUse) {
+        summary.ok = true; summary.reason = "Quelle == Ziel (nichts zu migrieren).";
+        return summary;
+      }
+      return readAllSbkimStoresRaw(oldDbName).then(function (probe) {
+        if (!probe.existed) {
+          summary.ok = true; summary.reason = "Quell-DB existierte nicht (nichts zu migrieren).";
+          return summary;
+        }
+        var data = probe.data;
+        var storeNames = Object.keys(data).filter(function (n) {
+          return n.indexOf(SBKIM_STORE_PREFIX) === 0 && data[n] && data[n].length > 0;
+        });
+        var chain = Promise.resolve();
+        storeNames.forEach(function (storeName) {
+          chain = chain.then(function () {
+            // ensureStore via Promise.resolve, damit ein synchroner Pattern-
+            // Wurf (untypischer Store-Name) in eine Rejection wird → fail-soft.
+            return Promise.resolve().then(function () { return ensureStore(storeName); })
+              .then(function () { return copyMissingEntries(storeName, data[storeName], summary); },
+                    function () { /* fail-soft: Store nicht anlegbar → überspringen */ });
+          });
+        });
+        return chain.then(function () {
+          summary.ok = true;
+          if (!summary.reason) summary.reason = "Migration abgeschlossen.";
+          return summary;
+        });
+      });
+    }, function (e) {
+      summary.reason = "Ziel-DB nicht geoeffnet: " + (e && e.message ? e.message : e);
+      return summary;
+    });
+  }
+
   function getStore(storeName) {
     assertKnownStore(storeName);
     return {
@@ -923,6 +1158,10 @@
     all: all,
     clear: clear,
     ensureStore: ensureStore,
+    // Härtung „Identitäts-Isolierung" — Teil 2 (2026-07-11): Alt-Identität
+    // aus einer fremden DB (typisch geteilter Topf `sbkim`) in die aktive
+    // Schublade holen, ohne Vorhandenes zu überschreiben. Siehe oben.
+    migrateIdentityFrom: migrateIdentityFrom,
     // Bau 01.Y (2026-05-19): Fehler-Factories als Export, analog Modul
     // 02 / 08. Tests können sowohl `err.name === "InvalidStoreNameError"`
     // als auch `err instanceof SbkimStorage.InvalidStoreNameError`-artige
@@ -955,6 +1194,10 @@
       // (alter Stand wäre "strict": init() würde mit VersionError
       // scheitern bei existing > DB_VERSION).
       dbVersionPolicy: "fail-soft-min-schema",
+      // Härtung „Identitäts-Isolierung" (2026-07-11): Read-Anker für Tests.
+      // "empty-safe" bedeutet: ein abweichender dbSuffix beim Folge-init()
+      // re-pointet, wenn die offene DB identitäts-leer ist (sonst fail-fast).
+      dbSuffixRepointPolicy: "empty-safe",
       // storagePersisted: null vor init bzw. wenn navigator.storage.persist
       // nicht verfügbar / Promise rejected (fail-soft). true|false zeigt
       // den Browser-Entscheid (Chrome auto-bei-PWA, Firefox prompt, Safari
@@ -968,6 +1211,6 @@
   // Self-check: emitted on script load (synchronous, before init()).
   // Format is uniform across all SBKIM modules — see INTERFACES.md.
   if (typeof console !== "undefined" && console.info) {
-    console.info("MODUL 01 STORAGE bereit, Funktionen: init/getStore/get/put/del/all/clear/ensureStore");
+    console.info("MODUL 01 STORAGE bereit, Funktionen: init/getStore/get/put/del/all/clear/ensureStore/migrateIdentityFrom");
   }
 })(typeof window !== "undefined" ? window : globalThis);
