@@ -84,6 +84,91 @@
     };
     try { global.addEventListener("sbkim:handshake", _hsHandler); } catch (_e) {}
   }
+
+  // ── A12 Phase 2: Briefkasten-UI (offene Fragen + Antworten nachlesen) ──
+  // LEHRE aus dem git-Briefkasten (Klaus 2026-07-11): ein Briefkasten scheitert
+  // am LESEN, nicht am Schreiben — weil das Lesen freiwillig/unsichtbar ist.
+  // Darum hier: (1) offene Fragen werden gemerkt, (2) beim Öffnen wird AUTOMATISCH
+  // nachgelesen (kein Knopf-Erinnern), (3) ein sichtbarer 📬-Zähler an der Blase
+  // meldet ungelesene Post von selbst. Speicher app-eigen (dbSuffix-Suffix →
+  // keine Kollision auf geteilter github.io-Adresse). Nur eigene Fragen/Antworten,
+  // kein Fremd-PII. Grenze: Relais-Aufbewahrung (Modul 23 fetchAnswers).
+  var RDV_BUBBLE_BASE = "🌐 Mit dem Netz verbinden";
+  var mailBtn = null;
+  function pendingKey() { return "sbkim_rdv_pending_" + (cfg.dbSuffix || "default"); }
+  function loadPending() {
+    try { var s = global.localStorage.getItem(pendingKey()); var a = s ? JSON.parse(s) : []; return Array.isArray(a) ? a : []; }
+    catch (_e) { return []; }
+  }
+  function savePending(list) {
+    try { global.localStorage.setItem(pendingKey(), JSON.stringify((list || []).slice(0, 20))); } catch (_e) {}
+  }
+  function recordOpenQuestion(res, card, text) {
+    // Nur wenn die Frage wirklich offen blieb (Timeout mit qid). Byte-gleich
+    // no-op, wenn Modul 23 noch kein pending/qid liefert (ältere Fassung).
+    if (!res || res.ok || !res.qid) return;
+    var list = loadPending().filter(function (e) { return e.qid !== res.qid; });
+    list.unshift({ qid: res.qid, toName: (card && card.nodeName) || "Knoten", text: String(text || ""),
+                   ts: Date.now(), status: "offen", seen: true });
+    savePending(list);
+    updateMailBadge();
+  }
+  function mailUnreadCount() {
+    return loadPending().filter(function (e) { return e.status === "offen" || (e.status === "beantwortet" && !e.seen); }).length;
+  }
+  function updateMailBadge() {
+    var n = mailUnreadCount();
+    if (btnEl) btnEl.textContent = RDV_BUBBLE_BASE + (n ? "  📬" + n : "");
+    if (mailBtn) mailBtn.textContent = "📬 Antworten abholen" + (n ? " (" + n + ")" : "");
+  }
+  // Nachlesen über Modul 23 fetchAnswers (Lookback). silent → nur Badge updaten;
+  // sonst zusätzlich die Briefkasten-Ansicht zeigen. Fail-soft.
+  function recheckMail(opts) {
+    opts = opts || {};
+    var r = rdv();
+    if (!r || typeof r.fetchAnswers !== "function") { updateMailBadge(); if (opts.show) renderMail(); return; }
+    var open = loadPending().filter(function (e) { return e.status === "offen"; });
+    if (!open.length) { updateMailBadge(); if (opts.show) renderMail(); return; }
+    r.fetchAnswers(open.map(function (e) { return e.qid; })).then(function (res) {
+      if (res && res.ok && Array.isArray(res.answers) && res.answers.length) {
+        var byQid = {}; res.answers.forEach(function (a) { if (a && a.qid) byQid[a.qid] = a; });
+        var cur = loadPending().map(function (e) {
+          if (e.status === "offen" && byQid[e.qid]) {
+            var a = byQid[e.qid];
+            return { qid: e.qid, toName: e.toName, text: e.text, ts: e.ts, status: "beantwortet", seen: false,
+                     answer: { fromName: a.fromName || e.toName, results: Array.isArray(a.results) ? a.results : [] } };
+          }
+          return e;
+        });
+        savePending(cur);
+      }
+      updateMailBadge();
+      if (opts.show || (opts.surfaceIfNews && mailUnreadCount() > 0)) renderMail();
+    }).catch(function () { updateMailBadge(); if (opts.show) renderMail(); });
+  }
+  // Briefkasten-Ansicht: offene + beantwortete Fragen. Markiert Beantwortetes als
+  // gesehen (seen:true) → der Zähler geht runter, sobald der Nutzer es liest.
+  function renderMail() {
+    if (!outEl) return;
+    var list = loadPending();
+    if (!list.length) { outEl.textContent = "📬 Keine offenen Fragen. Stelle über „❓ Fragen“ eine Frage an einen Knoten — bleibt er stumm (z.B. gerade zu), bleibt die Frage hier offen und ich hole die Antwort automatisch beim nächsten Öffnen."; return; }
+    var lines = ["📬 Dein Briefkasten:"];
+    list.forEach(function (e) {
+      if (e.status === "beantwortet" && e.answer) {
+        var res = (e.answer.results || []).map(function (r) { return r.label; }).filter(Boolean);
+        lines.push("✓ „" + e.text + "“ → " + (e.answer.fromName || e.toName) + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)"));
+      } else {
+        lines.push("⏳ offen: „" + e.text + "“ an " + e.toName + " — warte auf Antwort (hole ich beim Öffnen ab).");
+      }
+    });
+    outEl.textContent = lines.join("\n");
+    // Als gesehen markieren (Zähler runter), Struktur sonst unverändert.
+    var seenList = list.map(function (e) { return (e.status === "beantwortet") ? Object.assign({}, e, { seen: true }) : e; });
+    savePending(seenList);
+    updateMailBadge();
+  }
+  function onMailClick() { recheckMail({ show: true }); }
+
   var askInputEl = null, answerBtn = null;   // Bau 23.B — Frage-Feld + Antwortrecht-Schalter
   var voiceBtnEl = null, activeRecognizer = null;   // 🎤 Spracheingabe (Modul 21)
   var relatedOnly = false;   // „nur verwandte zeigen" (reine Anzeige, Default aus)
@@ -301,7 +386,9 @@
     var connectBtn = el("button", bs, "🌐 Mit dem Netz verbinden"); connectBtn.type = "button";
     var discoverBtn = el("button", bsGhost, "👥 Wer ist im Raum?"); discoverBtn.type = "button";
     var announceBtn = el("button", bsGhost, "📌 Nur neu anmelden"); announceBtn.type = "button";
-    row.appendChild(connectBtn); row.appendChild(discoverBtn); row.appendChild(announceBtn);
+    mailBtn = el("button", bsGhost, "📬 Antworten abholen"); mailBtn.type = "button";
+    mailBtn.title = "Offene Fragen: hier die Antworten abholen. Läuft auch automatisch beim Öffnen — der Zähler an der Blase zeigt ungelesene Post.";
+    row.appendChild(connectBtn); row.appendChild(discoverBtn); row.appendChild(announceBtn); row.appendChild(mailBtn);
     panelEl.appendChild(row);
 
     // „🧬 nur verwandte" — REINE Anzeige: filtert die Karten-Liste auf echte
@@ -422,6 +509,7 @@
     connectBtn.addEventListener("click", function () { onConnect(); });
     discoverBtn.addEventListener("click", function () { onDiscover(); });
     announceBtn.addEventListener("click", function () { onAnnounce(); });
+    mailBtn.addEventListener("click", function () { onMailClick(); });
     relOnlyBtn.addEventListener("click", function () {
       relatedOnly = !relatedOnly;
       relOnlyBtn.textContent = "🧬 nur verwandte: " + (relatedOnly ? "an" : "aus");
@@ -444,6 +532,8 @@
     } catch (_e) { /* kein Fenster-Kontext (Test) */ }
 
     startIncomingWatch();   // eingehende Handshakes ab jetzt sichtbar machen
+    updateMailBadge();      // A12: Zähler aus gespeichertem Briefkasten-Stand
+    recheckMail();          // A12: offene Fragen still nachlesen (Badge aktualisiert sich)
     mounted = true;
   }
 
@@ -836,18 +926,20 @@
           if (fresh && fresh.nodeId !== card.nodeId) {
             askWithRetry(r, fresh, text, false);   // genau EIN Nachschlag mit frischer ID
           } else if (outEl) {
-            outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Keine Antwort.") +
+            recordOpenQuestion(res, card, text);   // A12: Frage bleibt „offen"
+            outEl.textContent = "📭 " + (res && res.reason ? res.reason : "Keine Antwort.") +
               (fresh ? "\n(Auch die frischeste Karte im Raum ist dieselbe — der Gegenknoten ist wohl offline oder sein Tab schläft im Hintergrund.)"
                      : "\n(Keine frische Karte im Raum — der Gegenknoten hat sich noch nicht neu angemeldet.)") +
-              "\nTipp: Gegenknoten-Tab vorn + wach halten und <💬 Antworten: an> geschaltet lassen.";
+              "\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen).";
           }
         }).catch(function () {
           if (outEl) outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Keine Antwort.") + "\n(Raum-Neulesen fehlgeschlagen.)";
         });
         return;
       }
-      outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Keine Antwort.") +
-        "\nTipp: der Gegenknoten muss <💬 Antworten: an> geschaltet haben und den Tab vorn + wach halten.";
+      recordOpenQuestion(res, card, text);   // A12: Frage bleibt „offen", Antwort später abholen
+      outEl.textContent = "📭 " + (res && res.reason ? res.reason : "Keine Antwort.") +
+        "\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen).";
     }).catch(function (e) { if (outEl) outEl.textContent = "✗ Fehler: " + (e && e.message ? e.message : e); });
   }
 
@@ -896,6 +988,8 @@
   function show() {
     if (panelEl) { panelEl.style.display = "block"; var p = loadPos(); if (p) applyPos(panelEl, p); }
     if (btnEl) btnEl.style.display = "none";      // Panel offen → Blase weg (Flying-Widget)
+    // A12: beim Öffnen automatisch nachlesen; sind neue Antworten da, zeigen.
+    recheckMail({ surfaceIfNews: true });
   }
   function hide() {
     if (panelEl) panelEl.style.display = "none";
