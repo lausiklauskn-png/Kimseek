@@ -143,6 +143,12 @@
       aspect:      "Ehrliche Aspekt-Darstellung (protokoll-weit, eingeklappt)",
       description: "Die Aspekte-Historie wird jetzt eingeklappt gezeigt und ausdrücklich als gemeinsame, netzweite SBKIM-Protokoll-Historie beschriftet — NICHT als app-eigenes Zertifizierungsdatum (Klaus-Befund: eine frisch zertifizierte App darf keine fremden Bau-Daten als ihre eigene Historie ausgeben). Die app-eigene, aktuelle Aussage bleibt die Pflicht-Modul-Selbstprüfung oben plus der lokale Start-Zeitpunkt.",
     },
+    {
+      since:       "2026-07-11",
+      module:      "20",
+      aspect:      "Verschlüsselte Geheimnis-Ablage im Safe (putSecret/getSecret)",
+      description: "Der Safe kann jetzt beliebige kleine Geheimnisse (z.B. einen KI-Richter-API-Schlüssel) verschlüsselt ablegen — PBKDF2-SHA256 600k → AES-GCM-256, frisches Salt/IV je Geheimnis, kein Klartext in localStorage/IndexedDB. So überlebt ein Schlüssel Reload/App-Schließen, ohne dass eine andere App auf der geteilten Adresse ihn lesen kann (Fremdnutzer-/Marktplatz-Leitsatz). Falsches Passwort/Manipulation → fail-soft (null).",
+    },
   ];
 
   // ---- Aspekt-4-Anker (Karte 16 § Sub (e) dynamische Render-Variante) ----
