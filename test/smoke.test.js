@@ -34,7 +34,7 @@ const EXPECTED_SHA256 = {
   "05b_nostr_relay.js": "030aa2d260149f5627b84694a0b55e916cc186158009e260117d1e4f60d429bd",
   "07_apoptose.js": "0acdd6ab2d95e131fa6953061cc0e95a2396e05fff091a7dc690b2668a4c035a",
   "15_membran.js": "fbf9f42d8a2720b01d6318b00e84c0eac35a108cb3ee50e87096796e3c72e7cf",
-  "16_siegel.js": "de03320f1d1e4db1432a6fdbf788818bc7febd313590e232d26f2420ccaefdea",
+  "16_siegel.js": "4f0854dfc728d69b2bb0f121e81ce9ee644e1b885d836faf48307b0d4ae1257d",
   "17_floating_widget.js": "f48a95ac357ae212fe80e04e28426c43ae0ad9ab35de1eff42d19b8a3b0116c9",
   "21_spracheingabe.js": "6be3902c67c3ebfb24a845c59bad9147af903c467b7fb7535bc26cc7943b2a49",
   "22_such_widget.js": "d0656ca11dacf8a5fb955385b193999d2b8b7ae4c698dd07781160fd77e721f1",

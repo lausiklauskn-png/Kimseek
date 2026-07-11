@@ -92,8 +92,8 @@
     {
       since:       "2026-05-24",
       module:      "16",
-      aspect:      "Grund-Siegel-Bezeugung",
-      description: "Diese App bestätigt durch Selbst-Prüfung beim Boot, dass die SBKIM-Pflicht-Module 01/02/03/04/05/07/15 geladen sind.",
+      aspect:      "Grund-Siegel-Bezeugung (Protokoll)",
+      description: "Grundlage jedes SBKIM-Siegels: Beim Start prüft die App selbst, ob die Pflicht-Module 01/02/03/04/05/07/15 geladen sind — nur dann entsteht das Siegel. Protokoll-Baustein, kein app-eigenes Datum (was DIESE App gerade lädt, steht oben unter „Pflicht-Module“).",
     },
     {
       since:       "2026-05-25",
@@ -136,6 +136,12 @@
       module:      "15",
       aspect:      "KI-Richter im Cross-Knoten-Antwort-Pfad (opt-in)",
       description: "Der op:\"query\"-Empfänger (Membran Sub b) kann eingehende Fremd-Anfragen optional durch den KI-Richter (Modul 04 queryLocalJudged, BYOK) nach Bedeutung beurteilen und sortieren, statt nur nach rohem Cosinus. Default AUS (roher Vorfilter), Schlüssel RAM-only/nie im Code, fail-soft; der 0.80-Andock-Riegel bleibt unberührt.",
+    },
+    {
+      since:       "2026-07-11",
+      module:      "16",
+      aspect:      "Ehrliche Aspekt-Darstellung (protokoll-weit, eingeklappt)",
+      description: "Die Aspekte-Historie wird jetzt eingeklappt gezeigt und ausdrücklich als gemeinsame, netzweite SBKIM-Protokoll-Historie beschriftet — NICHT als app-eigenes Zertifizierungsdatum (Klaus-Befund: eine frisch zertifizierte App darf keine fremden Bau-Daten als ihre eigene Historie ausgeben). Die app-eigene, aktuelle Aussage bleibt die Pflicht-Modul-Selbstprüfung oben plus der lokale Start-Zeitpunkt.",
     },
   ];
 
@@ -912,19 +918,37 @@
       "font-size:0.86rem",
     ].join(";");
 
-    var aspectsHeader = doc.createElement("h3");
-    aspectsHeader.textContent = "Aspekte (lebendes Dokument)";
-    aspectsHeader.style.cssText = modulesHeader.style.cssText;
+    // Aspekte-Sektion: standardmäßig EINGEKLAPPT (<details> ohne "open") und
+    // ehrlich als PROTOKOLL-weite, gemeinsame Historie gerahmt — NICHT als
+    // app-eigene Zertifizierungs-Daten. Die since-Daten stammen aus der
+    // netzweiten SBKIM-Bau-Historie und sind in jeder App identisch; die
+    // app-eigene, aktuelle Aussage ist die „Pflicht-Module"-Liste oben +
+    // die Bezeugt-seit-Zeile (lokaler Start-Zeitpunkt DIESER App).
+    var aspectsDetails = doc.createElement("details");
+    aspectsDetails.setAttribute("data-siegel-aspects-details", "");
+    aspectsDetails.style.cssText = "margin:0 0 1.2rem;";
+
+    var aspectsSummary = doc.createElement("summary");
+    aspectsSummary.textContent = "SBKIM-Protokoll — Sicherheits-Aspekte (gemeinsam, netzweit)";
+    aspectsSummary.style.cssText = modulesHeader.style.cssText + ";cursor:pointer;";
+
+    var aspectsIntro = doc.createElement("p");
+    aspectsIntro.textContent = "Historie der SBKIM-Sicherheits-Bausteine — für alle Knoten gleich. Das sind Protokoll-Daten, keine app-eigenen Zertifizierungs-Daten dieser App.";
+    aspectsIntro.style.cssText = "margin:0.5rem 0 0.7rem;font-size:0.8rem;color:rgba(245,245,255,0.6);line-height:1.5;";
 
     var aspectsList = doc.createElement("ul");
     aspectsList.setAttribute("data-siegel-aspects", "");
     aspectsList.style.cssText = [
       "list-style:none",
       "padding:0",
-      "margin:0 0 1.2rem",
+      "margin:0",
       "font-family:'Geist', system-ui, sans-serif",
       "font-size:0.86rem",
     ].join(";");
+
+    aspectsDetails.appendChild(aspectsSummary);
+    aspectsDetails.appendChild(aspectsIntro);
+    aspectsDetails.appendChild(aspectsList);
 
     var ausstellerBlock = doc.createElement("div");
     ausstellerBlock.setAttribute("data-siegel-aussteller", "");
@@ -948,8 +972,7 @@
     }
     panel.appendChild(modulesHeader);
     panel.appendChild(modulesList);
-    panel.appendChild(aspectsHeader);
-    panel.appendChild(aspectsList);
+    panel.appendChild(aspectsDetails);
     panel.appendChild(ausstellerBlock);
 
     root.appendChild(backdrop);
