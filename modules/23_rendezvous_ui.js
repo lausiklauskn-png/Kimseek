@@ -94,26 +94,53 @@
   // keine Kollision auf geteilter github.io-Adresse). Nur eigene Fragen/Antworten,
   // kein Fremd-PII. Grenze: Relais-Aufbewahrung (Modul 23 fetchAnswers).
   var RDV_BUBBLE_BASE = "🌐 Mit dem Netz verbinden";
-  var mailBtn = null;
+  var mailBtn = null, reAskBtn = null, clearMailBtn = null;
+  // Lebenszyklus-Regelung (Klaus 2026-07-11) — gegen Überladung, per Browser:
+  //  · RDV_MAILBOX_MAX  : Obergrenze der lokalen Liste (einstellbar via init).
+  //  · OPEN_TTL_MS      : nach dieser Zeit gilt eine unbeantwortete Frage als
+  //    „abgelaufen" (die Relais-Frage ist dann weg — realistisch am Lookback-
+  //    Fenster orientiert, mit Reserve). Abgelaufene nerven nicht (kein Zähler),
+  //    lassen sich aber per „🔄 nochmal fragen" neu stellen.
+  //  · Beantwortete + gesehene werden automatisch entfernt (erledigt → weg).
+  // WICHTIG: die RELAIS-Aufbewahrung regelt das Relais selbst — der Client kann
+  // Relais-Ereignisse nicht zuverlässig löschen. Hier wird nur der LOKALE
+  // Briefkasten gepflegt.
+  var RDV_MAILBOX_MAX = 20;
+  var RDV_MAILBOX_OPEN_TTL_MS = 45 * 60 * 1000; // 45 min (> 30-min-Lookback + Reserve)
   function pendingKey() { return "sbkim_rdv_pending_" + (cfg.dbSuffix || "default"); }
   function loadPending() {
     try { var s = global.localStorage.getItem(pendingKey()); var a = s ? JSON.parse(s) : []; return Array.isArray(a) ? a : []; }
     catch (_e) { return []; }
   }
   function savePending(list) {
-    try { global.localStorage.setItem(pendingKey(), JSON.stringify((list || []).slice(0, 20))); } catch (_e) {}
+    try { global.localStorage.setItem(pendingKey(), JSON.stringify((list || []).slice(0, RDV_MAILBOX_MAX))); } catch (_e) {}
+  }
+  // Lokale Müllabfuhr: beantwortet+gesehen raus; offene > TTL → abgelaufen.
+  function pruneMail() {
+    var now = Date.now();
+    var list = loadPending().map(function (e) {
+      if (e.status === "offen" && typeof e.ts === "number" && (now - e.ts) > RDV_MAILBOX_OPEN_TTL_MS) {
+        var c = {}; for (var k in e) { if (Object.prototype.hasOwnProperty.call(e, k)) c[k] = e[k]; }
+        c.status = "abgelaufen"; return c;
+      }
+      return e;
+    }).filter(function (e) { return !(e.status === "beantwortet" && e.seen === true); });
+    savePending(list);
+    return list;
   }
   function recordOpenQuestion(res, card, text) {
     // Nur wenn die Frage wirklich offen blieb (Timeout mit qid). Byte-gleich
     // no-op, wenn Modul 23 noch kein pending/qid liefert (ältere Fassung).
     if (!res || res.ok || !res.qid) return;
     var list = loadPending().filter(function (e) { return e.qid !== res.qid; });
-    list.unshift({ qid: res.qid, toName: (card && card.nodeName) || "Knoten", text: String(text || ""),
+    list.unshift({ qid: res.qid, toNodeId: (card && card.nodeId) || null,
+                   toName: (card && card.nodeName) || "Knoten", text: String(text || ""),
                    ts: Date.now(), status: "offen", seen: true });
     savePending(list);
     updateMailBadge();
   }
   function mailUnreadCount() {
+    // abgelaufene zählen NICHT (kein Nörgeln); offen + neu-beantwortet schon.
     return loadPending().filter(function (e) { return e.status === "offen" || (e.status === "beantwortet" && !e.seen); }).length;
   }
   function updateMailBadge() {
@@ -125,6 +152,7 @@
   // sonst zusätzlich die Briefkasten-Ansicht zeigen. Fail-soft.
   function recheckMail(opts) {
     opts = opts || {};
+    pruneMail();
     var r = rdv();
     if (!r || typeof r.fetchAnswers !== "function") { updateMailBadge(); if (opts.show) renderMail(); return; }
     var open = loadPending().filter(function (e) { return e.status === "offen"; });
@@ -135,7 +163,7 @@
         var cur = loadPending().map(function (e) {
           if (e.status === "offen" && byQid[e.qid]) {
             var a = byQid[e.qid];
-            return { qid: e.qid, toName: e.toName, text: e.text, ts: e.ts, status: "beantwortet", seen: false,
+            return { qid: e.qid, toNodeId: e.toNodeId || null, toName: e.toName, text: e.text, ts: e.ts, status: "beantwortet", seen: false,
                      answer: { fromName: a.fromName || e.toName, results: Array.isArray(a.results) ? a.results : [] } };
           }
           return e;
@@ -146,25 +174,55 @@
       if (opts.show || (opts.surfaceIfNews && mailUnreadCount() > 0)) renderMail();
     }).catch(function () { updateMailBadge(); if (opts.show) renderMail(); });
   }
-  // Briefkasten-Ansicht: offene + beantwortete Fragen. Markiert Beantwortetes als
-  // gesehen (seen:true) → der Zähler geht runter, sobald der Nutzer es liest.
+  // 🔄 Offene/abgelaufene Fragen ERNEUT stellen (neu aufs Relais) — damit ein
+  // jetzt wacher Antworter sie fängt. Genau das „gespeicherte Suche wieder
+  // aktivieren" (Marktplatz-Muster). Fail-soft; braucht toNodeId je Eintrag.
+  function reAskOpen() {
+    var r = rdv();
+    if (!r || typeof r.askNode !== "function") { setOut("Modul 23 mit Bau 23.B (askNode) nicht geladen."); return; }
+    var toAsk = pruneMail().filter(function (e) { return e.status === "offen" || e.status === "abgelaufen"; });
+    if (!toAsk.length) { renderMail(); return; }
+    if (outEl) outEl.textContent = "🔄 Stelle " + toAsk.length + " offene Frage(n) erneut …";
+    Promise.all(toAsk.map(function (e) {
+      if (!e.toNodeId) return Promise.resolve();
+      return Promise.resolve(r.askNode(e.toNodeId, e.text)).then(function (res) {
+        var cur = loadPending();
+        var upd = (res && res.ok)
+          ? { qid: res.qid || e.qid, toNodeId: e.toNodeId, toName: e.toName, text: e.text, ts: Date.now(), status: "beantwortet", seen: false, answer: { fromName: res.fromNodeId || e.toName, results: Array.isArray(res.results) ? res.results : [] } }
+          : { qid: (res && res.qid) || e.qid, toNodeId: e.toNodeId, toName: e.toName, text: e.text, ts: Date.now(), status: "offen", seen: true };
+        var idx = -1;
+        for (var i = 0; i < cur.length; i++) { if (cur[i].qid === e.qid) { idx = i; break; } }
+        if (idx >= 0) cur[idx] = upd; else cur.unshift(upd);
+        savePending(cur);
+      }).catch(function () {});
+    })).then(function () { updateMailBadge(); renderMail(); });
+  }
+  function clearMail() { savePending([]); updateMailBadge(); renderMail(); }
+  // Briefkasten-Ansicht: offene / abgelaufene / beantwortete Fragen. Markiert
+  // Beantwortetes als gesehen (seen:true) → Zähler runter; beim nächsten
+  // pruneMail werden gesehene Beantwortete automatisch entfernt (erledigt → weg).
   function renderMail() {
     if (!outEl) return;
-    var list = loadPending();
+    var list = pruneMail();
     if (!list.length) { outEl.textContent = "📬 Keine offenen Fragen. Stelle über „❓ Fragen“ eine Frage an einen Knoten — bleibt er stumm (z.B. gerade zu), bleibt die Frage hier offen und ich hole die Antwort automatisch beim nächsten Öffnen."; return; }
     var lines = ["📬 Dein Briefkasten:"];
     list.forEach(function (e) {
       if (e.status === "beantwortet" && e.answer) {
         var res = (e.answer.results || []).map(function (r) { return r.label; }).filter(Boolean);
         lines.push("✓ „" + e.text + "“ → " + (e.answer.fromName || e.toName) + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)"));
+      } else if (e.status === "abgelaufen") {
+        lines.push("🕗 abgelaufen: „" + e.text + "“ an " + e.toName + " — keiner hat rechtzeitig geantwortet. „🔄 nochmal fragen“ stellt sie neu.");
       } else {
         lines.push("⏳ offen: „" + e.text + "“ an " + e.toName + " — warte auf Antwort (hole ich beim Öffnen ab).");
       }
     });
     outEl.textContent = lines.join("\n");
-    // Als gesehen markieren (Zähler runter), Struktur sonst unverändert.
-    var seenList = list.map(function (e) { return (e.status === "beantwortet") ? Object.assign({}, e, { seen: true }) : e; });
-    savePending(seenList);
+    // Beantwortetes als gesehen markieren (Zähler runter).
+    var cur = loadPending().map(function (e) {
+      if (e.status === "beantwortet" && !e.seen) { var c = {}; for (var k in e) { if (Object.prototype.hasOwnProperty.call(e, k)) c[k] = e[k]; } c.seen = true; return c; }
+      return e;
+    });
+    savePending(cur);
     updateMailBadge();
   }
   function onMailClick() { recheckMail({ show: true }); }
@@ -388,7 +446,12 @@
     var announceBtn = el("button", bsGhost, "📌 Nur neu anmelden"); announceBtn.type = "button";
     mailBtn = el("button", bsGhost, "📬 Antworten abholen"); mailBtn.type = "button";
     mailBtn.title = "Offene Fragen: hier die Antworten abholen. Läuft auch automatisch beim Öffnen — der Zähler an der Blase zeigt ungelesene Post.";
+    reAskBtn = el("button", bsGhost + ";font-size:.74rem", "🔄 offene nochmal fragen"); reAskBtn.type = "button";
+    reAskBtn.title = "Alle offenen/abgelaufenen Fragen erneut stellen (neu ins Netz) — für einen jetzt wachen Antworter.";
+    clearMailBtn = el("button", bsGhost + ";font-size:.74rem", "🗑 leeren"); clearMailBtn.type = "button";
+    clearMailBtn.title = "Den lokalen Briefkasten leeren.";
     row.appendChild(connectBtn); row.appendChild(discoverBtn); row.appendChild(announceBtn); row.appendChild(mailBtn);
+    row.appendChild(reAskBtn); row.appendChild(clearMailBtn);
     panelEl.appendChild(row);
 
     // „🧬 nur verwandte" — REINE Anzeige: filtert die Karten-Liste auf echte
@@ -510,6 +573,8 @@
     discoverBtn.addEventListener("click", function () { onDiscover(); });
     announceBtn.addEventListener("click", function () { onAnnounce(); });
     mailBtn.addEventListener("click", function () { onMailClick(); });
+    reAskBtn.addEventListener("click", function () { reAskOpen(); });
+    clearMailBtn.addEventListener("click", function () { clearMail(); });
     relOnlyBtn.addEventListener("click", function () {
       relatedOnly = !relatedOnly;
       relOnlyBtn.textContent = "🧬 nur verwandte: " + (relatedOnly ? "an" : "aus");
@@ -1009,6 +1074,9 @@
     // EU-Politik (Fremdnutzer-klar): euOnly:true → der KI-Richter bietet NUR
     // EU-Anbieter (z.B. Mistral) an. Default false (freie Anbieter-Wahl).
     if (typeof opts.euOnly === "boolean") cfg.euOnly = opts.euOnly;
+    // A12: Briefkasten-Obergrenze per App/Browser einstellbar (Marktplatz-Muster —
+    // jeder entscheidet, wie viel gespeichert wird). Default 20.
+    if (typeof opts.mailboxMax === "number" && isFinite(opts.mailboxMax) && opts.mailboxMax >= 1) RDV_MAILBOX_MAX = Math.floor(opts.mailboxMax);
   }
 
   function init(opts) {
