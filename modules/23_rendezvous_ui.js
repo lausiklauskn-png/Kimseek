@@ -45,7 +45,45 @@
 
   var cfg = { nodeName: "SBKIM-Knoten", createIdentity: null, dbSuffix: null, prepareCorpus: null, corner: "bl", accent: null, euOnly: false };
   var mounted = false;
-  var btnEl = null, panelEl = null, outEl = null, cardsEl = null, relOnlyBtn = null;
+  var btnEl = null, panelEl = null, outEl = null, cardsEl = null, relOnlyBtn = null, incomingEl = null;
+
+  // Empfänger-Hinweis (Klaus 2026-07-11): wenn ein FREMDER Knoten sich mit
+  // diesem hier verbindet, beantwortet Modul 05 den Handshake live und meldet
+  // sbkim:handshake mit direction:"incoming". Ohne diesen Hinweis geschieht das
+  // Andocken beim Antworter unsichtbar (Klaus' Befund: „Handshake gemacht, aber
+  // die Gegenseite hat's nicht registriert"). REINE Anzeige — ändert nichts am
+  // Protokoll oder am 0.80-Andock-Riegel. Fail-soft.
+  var _hsHandler = null;
+  var _incoming = [];   // [{id}] neueste zuerst, dedupe nach nodeId, Cap 5
+  function _shortNodeId(id) {
+    return (typeof id === "string" && id.length > 10) ? id.slice(0, 9) + "…" : (id || "?");
+  }
+  function renderIncoming() {
+    if (!incomingEl) return;
+    if (!_incoming.length) { incomingEl.style.display = "none"; incomingEl.textContent = ""; return; }
+    var title = _incoming.length === 1
+      ? "🤝 Ein Knoten hat sich gerade mit dir verbunden:"
+      : "🤝 " + _incoming.length + " Knoten haben sich mit dir verbunden:";
+    var lines = _incoming.map(function (e) { return "  • " + _shortNodeId(e.id); }).join("\n");
+    incomingEl.textContent = title + "\n" + lines +
+      "\n(Du bist im Raum und erreichbar. „👥 Wer ist im Raum?“ zeigt sie, sobald ihre Karte frisch ist.)";
+    incomingEl.style.display = "block";
+  }
+  function startIncomingWatch() {
+    if (_hsHandler) return;
+    _hsHandler = function (ev) {
+      var dd = ev && ev.detail; if (!dd) return;
+      if (dd.direction !== "incoming" || dd.outcome !== "established") return;
+      var id = (typeof dd.peerNodeId === "string" && dd.peerNodeId) ? dd.peerNodeId : "?";
+      _incoming = _incoming.filter(function (e) { return e.id !== id; });
+      _incoming.unshift({ id: id });
+      if (_incoming.length > 5) _incoming.length = 5;
+      renderIncoming();
+      // Auch minimiert wahrnehmbar: Blasen-Titel als Hinweis.
+      try { if (btnEl) btnEl.title = "🤝 Ein Knoten hat sich mit dir verbunden — öffnen zum Ansehen."; } catch (_e) {}
+    };
+    try { global.addEventListener("sbkim:handshake", _hsHandler); } catch (_e) {}
+  }
   var askInputEl = null, answerBtn = null;   // Bau 23.B — Frage-Feld + Antwortrecht-Schalter
   var voiceBtnEl = null, activeRecognizer = null;   // 🎤 Spracheingabe (Modul 21)
   var relatedOnly = false;   // „nur verwandte zeigen" (reine Anzeige, Default aus)
@@ -247,6 +285,15 @@
     head.appendChild(headBtns);
     panelEl.appendChild(head);
 
+    // Empfänger-Hinweis-Zeile (eingehender Handshake) — unter der Kopfzeile,
+    // getrennt von outEl, damit sie nie Such-/Raum-Ausgaben überschreibt.
+    incomingEl = el("div", "display:none;margin:2px 0 8px;padding:7px 10px;border-radius:8px;" +
+      "border:1px solid " + ac + ";background:rgba(110,231,211,.14);color:#eef2f8;" +
+      "font-size:.76rem;white-space:pre-wrap;word-break:break-word");
+    incomingEl.id = "sbkim-rdv-incoming";
+    panelEl.appendChild(incomingEl);
+    renderIncoming();   // falls schon vor mount ein Handshake ankam
+
     panelEl.appendChild(el("p", "margin:0 0 10px;color:#9aa7b6",
       "Triff andere SBKIM-Knoten im gemeinsamen Raum — server-los, direkt aus deinem Browser. Lass diesen Tab offen, damit du erreichbar bleibst."));
 
@@ -396,6 +443,7 @@
       });
     } catch (_e) { /* kein Fenster-Kontext (Test) */ }
 
+    startIncomingWatch();   // eingehende Handshakes ab jetzt sichtbar machen
     mounted = true;
   }
 
