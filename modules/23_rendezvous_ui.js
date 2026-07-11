@@ -229,6 +229,7 @@
 
   var askInputEl = null, answerBtn = null;   // Bau 23.B — Frage-Feld + Antwortrecht-Schalter
   var voiceBtnEl = null, activeRecognizer = null;   // 🎤 Spracheingabe (Modul 21)
+  var answerFetchBtn = null;   // A11 — „🔎 Antwort holen": bestpassenden Knoten automatisch fragen
   var relatedOnly = false;   // „nur verwandte zeigen" (reine Anzeige, Default aus)
   var lastCards = [];        // letzte gelesene Karten (für Re-Render beim Umschalten)
 
@@ -257,6 +258,10 @@
 
   function doc() { return global.document; }
   function rdv() { return global.SbkimRendezvous || null; }
+  // Modul 03 nur, wenn die Frage-Einbettung (embedQuery) wirklich da ist — A11
+  // Auto-Auswahl; fail-soft: ohne Modul 03 rankt rankCardsByQuery nicht und der
+  // Aufrufer degradiert auf die Recency-Reihenfolge (frischeste Karte).
+  function embedMod() { var e = global.SbkimEmbedding; return (e && typeof e.embedQuery === "function") ? e : null; }
   // Modul 04 nur, wenn der KI-Richter (hybridMatch) wirklich da ist — fail-soft.
   function matchMod() { var m = global.SbkimMatch; return (m && typeof m.hybridMatch === "function") ? m : null; }
   // Anbieter-Liste aus Modul 04 (id/label/region), EU-gefiltert bei cfg.euOnly.
@@ -495,11 +500,22 @@
     answerBtn = el("button", bsGhost + ";font-size:.74rem;padding:5px 10px", "💬 Antworten: aus");
     answerBtn.type = "button";
     answerBtn.title = "Antwortrecht: eingeschaltet beantwortet dein Knoten Fragen anderer Knoten mit den Top-Treffern seiner eigenen Bedeutungs-Suche (nur Titel, keine Inhalte). Gilt nur, solange dieser Tab offen ist.";
+    // A11 — Primär-Knopf „🔎 Antwort holen": rankt alle Raum-Knoten nach Passung
+    // zur getippten Frage und fragt den bestpassenden AUTOMATISCH (Klaus: „ich
+    // weiß nicht, wer von hundert am besten passt"). Solide Akzent-Optik, direkt
+    // neben dem Frage-Feld. Reine Auswahl/Anzeige — der 0.80-Andock-Riegel bleibt
+    // unberührt; das per-Karte „❓ gezielt fragen" bleibt als manueller Override.
+    answerFetchBtn = el("button", "padding:6px 12px;border-radius:8px;border:1px solid " + accent() + ";" +
+      "background:" + accent() + ";color:#0a1018;cursor:pointer;font:inherit;font-size:.78rem;font-weight:600", "🔎 Antwort holen");
+    answerFetchBtn.type = "button";
+    answerFetchBtn.title = "Sucht unter allen Knoten im Raum automatisch den, dessen Wissen am besten zu deiner Frage passt, und fragt ihn. Du musst nicht selbst wählen.";
     askRow.appendChild(askInputEl);
+    askRow.appendChild(answerFetchBtn);
     askRow.appendChild(voiceBtnEl);
     askRow.appendChild(answerBtn);
     panelEl.appendChild(askRow);
     voiceBtnEl.addEventListener("click", function () { onVoiceClick(); });
+    answerFetchBtn.addEventListener("click", function () { onAutoAsk(); });
 
     // KI-Richter-Zeile (A4/B3, opt-in). Fremdnutzer-Perspektive: ohne
     // Schlüssel läuft alles gratis weiter (roher Cosinus); mit Schlüssel
@@ -694,8 +710,49 @@
     }).catch(function (e) { stopModelProgress(); setOut("✗ Raum-Lesen fehlgeschlagen: " + (e && e.message ? e.message : e)); });
   }
 
-  function renderCards(cards) {
+  // A11 — „🔎 Antwort holen": bestpassenden Knoten AUTOMATISCH wählen + fragen.
+  // Klaus 2026-07-11: bei vielen Knoten kann der Nutzer nicht selbst wissen, wer
+  // am besten passt. Ablauf: Frage einbetten (Modul 03, fail-soft) → Raum lesen →
+  // rankCardsByQuery (Modul 23, Passung zur Frage) → Karten sortiert zeigen →
+  // besten Knoten fragen, Rest als Nächstbester-Nachfass. Reine Auswahl/Anzeige;
+  // der 0.80-Andock-Riegel bleibt unberührt.
+  function onAutoAsk() {
+    var r = ensureRdv();
+    if (!r) return;
+    if (typeof r.askNode !== "function") { setOut("Modul 23 mit Bau 23.B (askNode) nicht geladen."); return; }
+    var text = askInputEl ? String(askInputEl.value || "").trim() : "";
+    if (!text) { setOut("🔎 Zuerst oben eine Frage eintippen, dann „🔎 Antwort holen“."); return; }
+    // Fail-soft: älteres Modul 23 ohne A11 → wie „Wer ist im Raum?" (manuell fragen).
+    var canRank = typeof r.rankCardsByQuery === "function";
+    setOut("🔎 Suche im Raum den Knoten, der am besten zu deiner Frage passt …");
+    startModelProgress("🔎 Suche den passenden Knoten …");
+    var emb = embedMod();
+    var qvP = (canRank && emb)
+      ? Promise.resolve().then(function () { return emb.embedQuery(text); }).catch(function () { return null; })
+      : Promise.resolve(null);
+    qvP.then(function (qv) {
+      return r.discover().then(function (res) {
+        stopModelProgress();
+        if (!res || !res.ok) { setOut("✗ Raum-Lesen fehlgeschlagen: " + ((res && res.reason) || "(unbekannt)")); return; }
+        var cards = Array.isArray(res.cards) ? res.cards : [];
+        if (cards.length === 0) { renderCards(cards); return; }   // „niemand im Raum"-Notiz
+        var ranked = canRank ? r.rankCardsByQuery(cards, qv) : cards;
+        renderCards(ranked, { queryRanked: canRank && !!qv });
+        var best = ranked[0];
+        // Ehrliche Grenze: sehr schwache Passung benennen (aber NICHT gaten).
+        if (qv && typeof best.queryFit === "number" && best.queryFit < 0.15) {
+          setOut("🔎 Kein wirklich gut passender Knoten im Raum — ich frage trotzdem den nächstliegenden (" +
+            (best.nodeName || "Knoten") + ") …");
+        }
+        askWithRetry(r, best, text, true, ranked.slice(1));
+      });
+    }).catch(function (e) { stopModelProgress(); setOut("✗ " + (e && e.message ? e.message : e)); });
+  }
+
+  function renderCards(cards, opts) {
     lastCards = Array.isArray(cards) ? cards : [];
+    var o = opts || {};
+    var queryRanked = o.queryRanked === true;   // A11: nach Frage-Passung sortiert
     if (outEl) outEl.textContent = "";
     if (!cardsEl) return;
     clear(cardsEl);
@@ -706,15 +763,20 @@
     var ac = accent();
     var bs = "padding:5px 10px;border-radius:8px;border:1px solid " + ac + ";" +
       "background:rgba(110,231,211,.12);color:#eef2f8;cursor:pointer;font:inherit";
-    var shown = relatedOnly ? lastCards.filter(function (c) { return c.isRelated === true; }) : lastCards;
+    // Der „nur verwandte"-Filter (eigene Domäne) gilt für die „Wer ist im Raum?"-
+    // Ansicht; bei der Frage-Rangfolge (A11) NICHT filtern, sonst versteckt er
+    // womöglich genau den frage-besten Knoten.
+    var shown = (relatedOnly && !queryRanked) ? lastCards.filter(function (c) { return c.isRelated === true; }) : lastCards;
     if (shown.length === 0) {
       cardsEl.appendChild(el("div", "color:#9aa7b6", "Keiner der " + lastCards.length +
         " Knoten im Raum ist (im engen Maß) verwandt. Schalte „🧬 nur verwandte“ wieder auf „aus“, um alle zu sehen."));
       return;
     }
-    var head = relatedOnly
-      ? ("🧬 " + shown.length + " verwandte von " + lastCards.length + " im Raum:")
-      : ("👥 " + lastCards.length + " Knoten im Raum:");
+    var head = queryRanked
+      ? ("🔎 " + shown.length + " Knoten nach Passung zu deiner Frage (bester zuerst):")
+      : (relatedOnly
+        ? ("🧬 " + shown.length + " verwandte von " + lastCards.length + " im Raum:")
+        : ("👥 " + lastCards.length + " Knoten im Raum:"));
     cardsEl.appendChild(el("div", "color:#9ff7df;margin-bottom:6px", head));
     shown.forEach(function (c) {
       var ageTxt = c.ageSec < 60 ? "gerade eben" : (Math.floor(c.ageSec / 60) + " min");
@@ -739,12 +801,20 @@
         badge.title = "Zentrierter Bedeutungs-Score zur eigenen Domäne — reine Anzeige, gatet das Andocken nicht.";
         info.appendChild(badge);
       }
+      // A11 — Passung zur getippten Frage (nur wenn rankCardsByQuery einen Score lieferte).
+      if (typeof c.queryFit === "number" && isFinite(c.queryFit)) {
+        info.appendChild(el("br"));
+        var qBadge = el("span", "display:inline-block;margin-top:3px;padding:1px 7px;border-radius:6px;font-size:.68rem;" +
+          "background:rgba(159,210,255,.16);color:#9fd2ff", "🔎 Frage-Passung " + c.queryFit.toFixed(2));
+        qBadge.title = "Wie gut die Domäne dieses Knotens zu deiner Frage passt — reine Anzeige/Auswahl, gatet das Andocken nicht.";
+        info.appendChild(qBadge);
+      }
       rowEl.appendChild(info);
       var b = el("button", bs, "🤝 Andocken"); b.type = "button";
       b.addEventListener("click", function () { onHandshake(c); });
       rowEl.appendChild(b);
-      var qb = el("button", bs + ";margin-left:6px;opacity:.85", "❓ Fragen"); qb.type = "button";
-      qb.title = "Stellt diesem Knoten die Frage aus dem Feld oben — er antwortet mit den Top-Treffern seiner eigenen Bedeutungs-Suche.";
+      var qb = el("button", bs + ";margin-left:6px;opacity:.72;font-size:.72rem", "❓ gezielt fragen"); qb.type = "button";
+      qb.title = "Optional: stellt GEZIELT diesem Knoten die Frage aus dem Feld oben (Handauswahl). Normalerweise reicht „🔎 Antwort holen“ — das wählt den bestpassenden Knoten automatisch.";
       qb.addEventListener("click", function () { onAsk(c); });
       rowEl.appendChild(qb);
       cardsEl.appendChild(rowEl);
@@ -974,7 +1044,28 @@
   // Antwort aus (Karte evtl. veraltet, Alt-Identität nicht wach), den Raum
   // EINMAL neu lesen, die frischeste Karte desselben Knoten-NAMENS nehmen und
   // nachfragen. Fängt genau den „Visitenkarte veraltet"-Fall ab.
-  function askWithRetry(r, card, text, allowRetry) {
+  // A11: bleibt der (beste) Knoten stumm, versuche EINMAL den nächstbesten Knoten
+  // aus der nach Frage-Passung sortierten Liste (fallbackCards) — bevor die Frage
+  // in den Briefkasten wandert. Findet keinen distinkten Nächsten → A12-Briefkasten.
+  function giveUpOrFallback(r, res, card, text, fallbackCards) {
+    if (!outEl) return;
+    var rest = Array.isArray(fallbackCards) ? fallbackCards : [];
+    var next = null, tail = [];
+    for (var i = 0; i < rest.length; i++) {
+      if (rest[i] && (rest[i].nodeId || "") !== (card.nodeId || "")) { next = rest[i]; tail = rest.slice(i + 1); break; }
+    }
+    if (next) {
+      outEl.textContent = "… " + (card.nodeName || "Knoten") + " hat nicht geantwortet — ich frage den nächstbesten passenden Knoten (" +
+        (next.nodeName || "Knoten") + ") …";
+      askWithRetry(r, next, text, true, tail);
+      return;
+    }
+    recordOpenQuestion(res, card, text);   // A12: Frage bleibt „offen"
+    outEl.textContent = "📭 " + (res && res.reason ? res.reason : "Keine Antwort.") +
+      "\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen).";
+  }
+
+  function askWithRetry(r, card, text, allowRetry, fallbackCards) {
     if (outEl) outEl.textContent = "❓ Frage <" + text + "> an " + (card.nodeName || "Knoten") + " — warte auf Antwort …";
     r.askNode(card, text).then(function (res) {
       if (!outEl) return;
@@ -989,22 +1080,16 @@
             }
           }
           if (fresh && fresh.nodeId !== card.nodeId) {
-            askWithRetry(r, fresh, text, false);   // genau EIN Nachschlag mit frischer ID
-          } else if (outEl) {
-            recordOpenQuestion(res, card, text);   // A12: Frage bleibt „offen"
-            outEl.textContent = "📭 " + (res && res.reason ? res.reason : "Keine Antwort.") +
-              (fresh ? "\n(Auch die frischeste Karte im Raum ist dieselbe — der Gegenknoten ist wohl offline oder sein Tab schläft im Hintergrund.)"
-                     : "\n(Keine frische Karte im Raum — der Gegenknoten hat sich noch nicht neu angemeldet.)") +
-              "\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen).";
+            askWithRetry(r, fresh, text, false, fallbackCards);   // EIN Nachschlag mit frischer ID (Fallbacks weitergereicht)
+          } else {
+            giveUpOrFallback(r, res, card, text, fallbackCards);  // A11: nächstbester Knoten, sonst Briefkasten
           }
         }).catch(function () {
           if (outEl) outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Keine Antwort.") + "\n(Raum-Neulesen fehlgeschlagen.)";
         });
         return;
       }
-      recordOpenQuestion(res, card, text);   // A12: Frage bleibt „offen", Antwort später abholen
-      outEl.textContent = "📭 " + (res && res.reason ? res.reason : "Keine Antwort.") +
-        "\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen).";
+      giveUpOrFallback(r, res, card, text, fallbackCards);   // A11: nächstbester Knoten, sonst A12-Briefkasten
     }).catch(function (e) { if (outEl) outEl.textContent = "✗ Fehler: " + (e && e.message ? e.message : e); });
   }
 

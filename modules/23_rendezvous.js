@@ -214,6 +214,57 @@
     });
   }
 
+  // ---- Raum-Karten nach FRAGE-Passung ranken (A11, REINE ANZEIGE/AUSWAHL) ----
+  // Klaus' Befund 2026-07-11: bei vielen Knoten kann der Nutzer nicht wissen,
+  // wen er fragen soll. `relatednessForCards` vergleicht die EIGENE Spore mit
+  // jeder Karte (Badge) — hier vergleichen wir stattdessen den bereits
+  // eingebetteten QUERY-Vektor (die getippte Frage) mit jedem Karten-
+  // `domainVector`, damit der Aufrufer den bestpassenden Knoten automatisch
+  // anfragen und die Karten nach Passung sortieren kann.
+  //
+  // Reine Tool-Funktion: DOM-frei, headless testbar, Eingabe NICHT mutiert
+  // (neue Liste). Nutzt Modul 04 `relatedness` (zentrierter Cosinus — bessere
+  // Trennung; opts.raw → rohes `match`). GATET NICHTS — der 0.80-Andock-Riegel
+  // (Modul 05) bleibt unberührt; dies wählt/sortiert nur die Anzeige.
+  // Fail-soft: ohne Modul 04 / ohne Query-Vektor / ohne Karten-domainVector →
+  // Karten UNVERÄNDERT in Eingabe-Reihenfolge zurück, jede mit queryFit:null
+  // (der Aufrufer degradiert dann auf die heutige Recency-Reihenfolge).
+  function rankCardsByQuery(cards, queryVec, opts) {
+    var list = Array.isArray(cards) ? cards : [];
+    var o = opts || {};
+    var match = resolveMatch();
+    var qv = toVec(queryVec);
+    var useRaw = o.raw === true && match && typeof match.match === "function";
+    var enriched = list.map(function (c, i) {
+      var copy = {};
+      for (var k in c) { if (Object.prototype.hasOwnProperty.call(c, k)) copy[k] = c[k]; }
+      var fit = null;
+      if (match && qv && c && c.spore) {
+        var cv = toVec(c.spore.domainVector);
+        if (cv) {
+          try {
+            var s = useRaw ? match.match(qv, cv) : match.relatedness(qv, cv);
+            if (typeof s === "number" && isFinite(s)) fit = s;
+          } catch (_e) { fit = null; } // fail-soft, Karte bleibt
+        }
+      }
+      copy.queryFit = fit;
+      copy._idx = i; // stabiler Tie-Break
+      return copy;
+    });
+    // Ohne brauchbaren Query-Vektor NICHT umsortieren (Eingabe-Reihenfolge).
+    if (!qv || !match) {
+      return enriched.map(function (c) { delete c._idx; return c; });
+    }
+    enriched.sort(function (a, b) {
+      var fa = (typeof a.queryFit === "number") ? a.queryFit : -Infinity;
+      var fb = (typeof b.queryFit === "number") ? b.queryFit : -Infinity;
+      if (fb !== fa) return fb - fa;      // beste Passung zuerst
+      return a._idx - b._idx;             // sonst Eingabe-Reihenfolge (stabil)
+    });
+    return enriched.map(function (c) { delete c._idx; return c; });
+  }
+
   // VERKEHR-Lampe (Modul 17 / Status-Widget) ehrlich setzen: aktiv, solange
   // wir lauschen. Fail-soft — Render-Schicht ist optionaler Konsument.
   function signalListening(active) {
@@ -982,6 +1033,7 @@
     askNode: askNode,                   // Bau 23.B — nutzer-ausgelöste Cross-Knoten-Frage
     fetchAnswers: fetchAnswers,         // A12 Briefkasten — späte Antworten nachlesen (Lookback)
     relatednessForCards: relatednessForCards, // pure (cards, ownSpore) → angereicherte Liste; reine Anzeige
+    rankCardsByQuery: rankCardsByQuery,       // A11 — pure (cards, queryVec) → nach Frage-Passung sortiert; reine Anzeige/Auswahl
     ensureIdentity: ensureIdentity,             // Modus A (sanft, automatisch, idempotent)
     cleanupSharedOrigin: cleanupSharedOrigin,   // Modus-B-Reinigung (nur eigene Origin)
     repairAndReconnect: repairAndReconnect,     // Modus B (zerstörend, nutzer-ausgelöst)
@@ -1013,6 +1065,7 @@
         queryKind: RDV_QUERY_KIND,                // Bau 23.B
         queryResKind: RDV_QUERY_RES_KIND,         // Bau 23.B
         queryMaxPerMin: RDV_QUERY_MAX_PER_MIN,    // Bau 23.B
+        rankByQueryNote: "rankCardsByQuery(cards, queryVec, {raw?}) rankt Raum-Karten nach Frage-Passung (Modul 04 relatedness, zentriert; raw→match). REINE Anzeige/Auswahl, gatet nichts, 0.80-Riegel unberührt; fail-soft ohne Vektor → Eingabe-Reihenfolge.", // A11
       };
     },
   };
