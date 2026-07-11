@@ -130,7 +130,29 @@
 (function (global) {
   "use strict";
 
-  var DB_NAME_DEFAULT = "sbkim";
+  // Härtung „Identitäts-Isolierung — Doppel-Laden + globales App-Suffix"
+  // (2026-07-11, Auslöser Klaus' Live-Sichttest): mehrere SBKIM-PWAs teilen sich
+  // EINE GitHub-Pages-Origin (ein DB-Name-Raum). Zwei Wege ließen Apps in den
+  // GETEILTEN Topf `sbkim` schreiben statt in ihre eigene Schublade
+  // `sbkim_<suffix>` — mit der Folge, dass Apps sich gegenseitig die Identität
+  // „klauten" (last-writer-wins):
+  //   (A) Doppel-Laden: lädt eine Seite dieses Modul ein ZWEITES Mal (z.B. ein
+  //       Lampen-/Siegel-Loader, der web/tools/* nachzieht), lief die IIFE erneut
+  //       und SETZTE den State ZURÜCK (dbNameInUse -> Default) — der zuvor
+  //       gesetzte dbSuffix ging verloren. Guard unten: zweites Laden = No-Op.
+  //   (B) Reihenfolge: öffnete irgendein Modul den Storage, BEVOR init({dbSuffix})
+  //       lief, wurde der Default `sbkim` geöffnet. Fix: der Default-DB-Name kommt
+  //       jetzt aus dem globalen App-Suffix `window.SBKIM_DB_SUFFIX` (von der App
+  //       ganz früh gesetzt) — so landet JEDER Storage-Zugriff in der eigenen
+  //       Schublade, unabhängig von der init-Reihenfolge und selbst nach Reset.
+  // Beide Teile sind additiv + rückwärtskompatibel: ohne `SBKIM_DB_SUFFIX` bleibt
+  // der Default `sbkim` (altes Verhalten); explizites init({dbSuffix}) wirkt wie bisher.
+  if (global.SbkimStorage) return; // (A) idempotent: bereits geladen -> nichts zurücksetzen
+
+  // (B) Default-DB-Name aus globalem App-Suffix (überlebt Reset, reihenfolge-unabhängig).
+  var _appSuffix = (global && typeof global.SBKIM_DB_SUFFIX === "string" &&
+                    /^[a-z0-9_-]+$/.test(global.SBKIM_DB_SUFFIX)) ? global.SBKIM_DB_SUFFIX : null;
+  var DB_NAME_DEFAULT = _appSuffix ? ("sbkim_" + _appSuffix) : "sbkim";
   var DB_VERSION = 4;
   var SBKIM_STORE_PREFIX = "sbkim_";
   var DB_SUFFIX_PATTERN = /^[a-z0-9_-]+$/;

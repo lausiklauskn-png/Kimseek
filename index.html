@@ -135,6 +135,10 @@
   <script>try { if (window.eruda) window.eruda.init(); } catch (e) {}</script>
 
   <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ── -->
+  <!-- Identitäts-Isolierung (2026-07-11): App-Suffix GLOBAL + FRÜH setzen, damit
+       Modul 01 die eigene Schublade `sbkim_kimseek` reihenfolge-unabhängig als
+       Default nimmt (schließt die Race, wenn ein Modul vor storage-init öffnet). -->
+  <script>window.SBKIM_DB_SUFFIX="kimseek";</script>
   <script src="./modules/01_storage.js"></script>
   <!-- Modus A / eigene Schublade: MUSS direkt nach dem Storage-Kern laufen -->
   <script src="./assets/storage-init.js"></script>
