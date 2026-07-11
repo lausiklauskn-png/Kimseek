@@ -33,6 +33,19 @@
   var TRANSFORMERS_CDN =
     "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
+  // Selbst-gehostetes Modell (offline-first): liegt das Modell unter
+  // <origin>/models/<EMBEDDING_MODEL>/…, laden wir es vom eigenen Server statt
+  // von HuggingFace. transformers.js schaut per Default ZUERST lokal nach —
+  // auf einem SPA-Server (try_files … /index.html) antwortet ein fehlender
+  // Pfad aber mit der Startseite (HTTP 200 + <!doctype html>), nicht mit 404.
+  // transformers.js liest die HTML-Seite dann als JSON und wirft
+  // „Unexpected token '<'“. Deshalb entscheiden wir die Quelle selbst über
+  // eine Body-Probe (Status allein genügt nicht) statt der eingebauten
+  // Lokal-Erkennung zu vertrauen.
+  var LOCAL_MODEL_ROOT = "/models/"; // = transformers.js env.localModelPath
+  var LOCAL_MODEL_PROBE = LOCAL_MODEL_ROOT + EMBEDDING_MODEL + "/config.json";
+  var modelSource = null; // "local" | "remote" | null (noch nicht bestimmt)
+
   function makeError(name, message, cause) {
     var e = new Error(message);
     e.name = name;
@@ -47,6 +60,10 @@
 
   function isReady() {
     return pipe !== null;
+  }
+
+  function getModelSource() {
+    return modelSource; // "local" | "remote" | null (vor dem ersten init)
   }
 
   function warnTruncateOnce() {
@@ -68,7 +85,8 @@
       console.info(
         "MODUL 03 EMBEDDING bereit, Funktionen: " +
         "init/isReady/embedQuery/embedPassage/embedQueryBatch/embedPassageBatch/embedContentVector, " +
-        "Modell: " + EMBEDDING_MODEL + ", Dim: " + EMBEDDING_DIM,
+        "Modell: " + EMBEDDING_MODEL + ", Dim: " + EMBEDDING_DIM +
+        ", Quelle: " + (modelSource === "local" ? "lokal (eigener Server)" : "HuggingFace"),
       );
     }
   }
@@ -104,10 +122,47 @@
     } catch (_e) { /* nb — Render-Hinweis, nie kritisch */ }
   }
 
+  // Body-Probe: liegt das Modell lokal auf dem eigenen Server? Ein SPA-Server
+  // liefert für fehlende Dateien die index.html (200, text/html) aus — daher
+  // reicht der HTTP-Status nicht, wir müssen in den Inhalt schauen. Nur wenn
+  // wirklich JSON zurückkommt (`{`…), ist das Modell selbst-gehostet.
+  // Fail-soft: jeder Fehler (offline, Netz, kein Modell) → "remote".
+  async function detectModelSource() {
+    try {
+      if (!global || typeof global.fetch !== "function") return "remote";
+      var res = await global.fetch(LOCAL_MODEL_PROBE, { cache: "no-store" });
+      if (!res || !res.ok) return "remote";
+      var ct = (res.headers && res.headers.get("content-type")) || "";
+      if (ct.indexOf("html") !== -1) return "remote";
+      var txt = await res.text();
+      return txt.trim().charAt(0) === "{" ? "local" : "remote";
+    } catch (_e) {
+      return "remote";
+    }
+  }
+
+  function configureModelSource(env, source) {
+    if (!env) return;
+    if (source === "local") {
+      // Modell liegt im Repo (models/…): nur lokal laden, echtes Offline.
+      env.allowLocalModels = true;
+      env.localModelPath = LOCAL_MODEL_ROOT;
+      env.allowRemoteModels = false;
+    } else {
+      // Kein lokales Modell: die eingebaute Lokal-Erkennung überspringen
+      // (sonst tappt sie in die SPA-index.html-Falle) und direkt von
+      // HuggingFace laden.
+      env.allowLocalModels = false;
+      env.allowRemoteModels = true;
+    }
+  }
+
   function init() {
     if (pipePromise) return pipePromise.then(function () { /* void */ });
     pipePromise = (async function () {
       var transformers = await loadTransformers();
+      modelSource = await detectModelSource();
+      configureModelSource(transformers.env, modelSource);
       var pipeline = transformers.pipeline;
       try {
         var p = await pipeline("feature-extraction", EMBEDDING_MODEL, {
@@ -346,11 +401,15 @@
   var SbkimEmbedding = {
     init: init,
     isReady: isReady,
+    getModelSource: getModelSource,
     embedQuery: embedQuery,
     embedPassage: embedPassage,
     embedQueryBatch: embedQueryBatch,
     embedPassageBatch: embedPassageBatch,
     embedContentVector: embedContentVector,
+    // Test-Brücke: Modell-Quellen-Erkennung (Body-Probe) headless prüfbar —
+    // unterscheidet echtes JSON (selbst-gehostet) von der SPA-index.html-Falle.
+    _detectModelSource: detectModelSource,
     // Test-Brücke (A3): reine, deterministische Text-Assemblierung VOR dem
     // Embedding — beweist die Contextual-Chunking-Logik headless.
     _assembleContentTexts: function (samples, opts) {
@@ -367,6 +426,8 @@
       queryPrefix: EMBEDDING_QUERY_PREFIX,
       passagePrefix: EMBEDDING_PASSAGE_PREFIX,
       transformersCdn: TRANSFORMERS_CDN,
+      localModelRoot: LOCAL_MODEL_ROOT,
+      localModelProbe: LOCAL_MODEL_PROBE,
       contentSampleMax: CONTENT_SAMPLE_MAX,
       contentContextSep: CONTENT_CONTEXT_SEP,
     },
