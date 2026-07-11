@@ -522,6 +522,29 @@
           // Quirk).
           closeConnectionAndWait(probedDb).then(function () {
             if (missing.length > 0) {
+              // Härtung „Selbst-Heilung identitäts-leerer Schrott-DB"
+              // (2026-07-11): Fehlt der Identitäts-Store sbkim_keys unter den
+              // Pflicht-Stores, kann diese DB KEINE Identität tragen (die liegt
+              // genau dort). Eine solche versioniert-aber-store-lose DB entsteht
+              // als Rest eines abgebrochenen Aufbaus bzw. eines openProbe-Bump-
+              // Race auf der geteilten GitHub-Pages-Origin (mehrere PWAs, ein
+              // DB-Name). Sie ist GEFAHRLOS neu aufbaubar — es geht nichts
+              // verloren, weil nichts Persistentes drin ist. Genau dieser Fall
+              // ließ bisher die „Aufräumen & neu anmelden"-Rettung (Modus B) mit
+              // „Pflicht-Stores fehlen (v=…)" abbrechen. Wir heilen ihn jetzt:
+              // DB löschen, frisch unter DB_VERSION mit Pflicht-Stores öffnen.
+              //
+              // NUR wenn der Identitäts-Store fehlt (nachweislich keine
+              // Identität). Ist sbkim_keys vorhanden und nur ein ANDERER
+              // Pflicht-Store fehlt, könnte eine Identität existieren → dann
+              // bleibt es beim fail-fast (kein stiller Datenverlust, Klaus'
+              // ausdrückliche „ich repariere nicht"-Regel gilt weiter).
+              if (missing.indexOf(IDENTITY_KEYS_STORE) !== -1) {
+                deleteDb(dbNameInUse).then(function () {
+                  openFreshAtDbVersion(resolve, reject);
+                });
+                return;
+              }
               reject(makeError(
                 "StorageOpenError",
                 "Pflicht-Stores fehlen in existing DB (v=" + existingVersion + "): " +
@@ -566,60 +589,70 @@
         var preInitial = wasCreated ? deleteDb(dbNameInUse) : Promise.resolve();
 
         preInitial.then(function () {
-          var req;
-          try {
-            req = indexedDB.open(dbNameInUse, DB_VERSION);
-          } catch (err) {
-            reject(makeError(
-              "StorageOpenError",
-              "IndexedDB.open() warf synchron: " + (err && err.message),
-              err,
-            ));
-            return;
-          }
-          req.onupgradeneeded = function (ev) {
-            var db = req.result;
-            var oldV = ev.oldVersion || 0;
-            var newV = ev.newVersion || DB_VERSION;
-            for (var v = oldV + 1; v <= newV; v++) {
-              applyMigration(db, v);
-            }
-          };
-          req.onsuccess = function () {
-            var db = req.result;
-            currentDb = db;
-            // Bau 01.Y (2026-05-19): fail-soft onversionchange-Handler
-            // installieren, damit ein späterer ensureStore-Bump (oder ein
-            // Bump aus einem anderen Tab) unsere Verbindung sauber schließen
-            // kann statt in onblocked zu hängen.
-            attachVersionChangeHandler(db);
-            // Pflege Storage-Persist (2026-05-16): persist()-Bitte nach
-            // erfolgreichem DB-Open, fail-soft. requestStoragePersist
-            // resolved IMMER (kein Throw, kein Reject) — Knoten bleibt
-            // lauffähig auch bei Verweigerung oder fehlender API.
-            requestStoragePersist().then(function () {
-              resolve(db);
-            });
-          };
-          req.onerror = function () {
-            var err = req.error;
-            reject(makeError(
-              "StorageOpenError",
-              "IndexedDB-Open scheiterte: " + (err && err.message),
-              err,
-            ));
-          };
-          req.onblocked = function () {
-            reject(makeError(
-              "StorageOpenError",
-              "IndexedDB-Open blockiert (andere Tabs der App offen?).",
-            ));
-          };
+          openFreshAtDbVersion(resolve, reject);
         }, reject);
         });
       }, reject);
     });
     return dbPromise;
+  }
+
+  // Öffnet die DB frisch unter DB_VERSION; onupgradeneeded legt die
+  // Pflicht-Stores via applyMigration an (oldVersion=0 → newVersion=DB_VERSION).
+  // Ausgegliedert (Härtung „Selbst-Heilung", 2026-07-11), damit der reguläre
+  // Initial-Pfad UND der Selbst-Heilungs-Pfad (identitäts-leere Schrott-DB)
+  // denselben Open-Körper teilen. `resolve`/`reject` sind die der
+  // init()-dbPromise. Verhalten des Initial-Pfads UNVERÄNDERT.
+  function openFreshAtDbVersion(resolve, reject) {
+    var req;
+    try {
+      req = indexedDB.open(dbNameInUse, DB_VERSION);
+    } catch (err) {
+      reject(makeError(
+        "StorageOpenError",
+        "IndexedDB.open() warf synchron: " + (err && err.message),
+        err,
+      ));
+      return;
+    }
+    req.onupgradeneeded = function (ev) {
+      var db = req.result;
+      var oldV = ev.oldVersion || 0;
+      var newV = ev.newVersion || DB_VERSION;
+      for (var v = oldV + 1; v <= newV; v++) {
+        applyMigration(db, v);
+      }
+    };
+    req.onsuccess = function () {
+      var db = req.result;
+      currentDb = db;
+      // Bau 01.Y (2026-05-19): fail-soft onversionchange-Handler
+      // installieren, damit ein späterer ensureStore-Bump (oder ein
+      // Bump aus einem anderen Tab) unsere Verbindung sauber schließen
+      // kann statt in onblocked zu hängen.
+      attachVersionChangeHandler(db);
+      // Pflege Storage-Persist (2026-05-16): persist()-Bitte nach
+      // erfolgreichem DB-Open, fail-soft. requestStoragePersist
+      // resolved IMMER (kein Throw, kein Reject) — Knoten bleibt
+      // lauffähig auch bei Verweigerung oder fehlender API.
+      requestStoragePersist().then(function () {
+        resolve(db);
+      });
+    };
+    req.onerror = function () {
+      var err = req.error;
+      reject(makeError(
+        "StorageOpenError",
+        "IndexedDB-Open scheiterte: " + (err && err.message),
+        err,
+      ));
+    };
+    req.onblocked = function () {
+      reject(makeError(
+        "StorageOpenError",
+        "IndexedDB-Open blockiert (andere Tabs der App offen?).",
+      ));
+    };
   }
 
   // Pflege „init() versions-fail-soft" (2026-05-19): Probe-Open ohne
