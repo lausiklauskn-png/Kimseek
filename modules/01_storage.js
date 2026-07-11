@@ -288,6 +288,19 @@
   // zurückgesetzt. Trägt _meta.dbVersion als Live-Zustand (statt der
   // Build-Konstante DB_VERSION).
   var currentDb = null;
+  // A14-Härtung „ensureStore-Race" (2026-07-11): serieller Anker für die
+  // Versions-Bump-Kette. Zwei GLEICHZEITIGE ensureStore-Aufrufe (z.B. Modul
+  // 05 `ensureSlotStores` neben Modul 07 Apoptose im selben Tick) lasen
+  // beide dasselbe `db.version` und errechneten beide `db.version + 1` →
+  // beide `indexedDB.open(name, N)`. Der zweite Open trifft die schon auf N
+  // gehobene DB, feuert KEIN `onupgradeneeded`, resolved aber trotzdem —
+  // sein Store wird nie angelegt, KNOWN_STORES behauptet ihn dennoch, und
+  // der nächste Zugriff wirft „NotFoundError: One of the specified object
+  // stores was not found". `ensureChain` reiht jeden Bump strikt hinter den
+  // vorigen, sodass jeder Aufruf ein FRISCHES `db.version` sieht (Idempotenz-
+  // Check + korrekter nächster Bump). Rein interne Serialisierung — die
+  // öffentliche `ensureStore`-Signatur (Promise<void>) bleibt unberührt.
+  var ensureChain = Promise.resolve();
   // navigator.storage.persist()-Status nach init. Werte:
   //   null  — vor init / API nicht verfügbar / persist() rejected (fail-soft)
   //   true  — Browser hat den Speicher als persistent markiert
@@ -966,6 +979,19 @@
           "'. Erlaubt sind nur Kleinbuchstaben, Ziffern und '_' nach dem 'sbkim_'-Praefix (Pattern ^sbkim_[a-z0-9_]+$).",
       );
     }
+    // A14-Härtung (2026-07-11): den ganzen ensureStore-Lauf hinter den
+    // vorigen reihen. So sieht jeder Aufruf ein frisches `db.version` und
+    // errechnet den korrekten nächsten Versions-Bump — statt dass zwei
+    // parallele Aufrufe kollidieren (siehe `ensureChain`-Kommentar oben).
+    // Der Fehlerpfad eines Laufs vergiftet die Kette NICHT: `ensureChain`
+    // fängt Rejections ab, damit der nächste ensureStore trotzdem startet;
+    // der Aufrufer bekommt seine eigene Rejection über `run` weitergereicht.
+    var run = ensureChain.then(function () { return ensureStoreInner(storeName); });
+    ensureChain = run.then(function () {}, function () {});
+    return run;
+  }
+
+  function ensureStoreInner(storeName) {
     return init().then(function (db) {
       // Idempotenz: existierender Store → no-op-Promise. Kein Versions-
       // Bump, keine Resource-Leakage. Falls der Store schon in der DB
