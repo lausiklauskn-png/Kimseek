@@ -43,15 +43,35 @@
 
   var VERSION = "0.1";
 
-  var cfg = { nodeName: "SBKIM-Knoten", createIdentity: null, dbSuffix: null, prepareCorpus: null, corner: "bl", accent: null };
+  var cfg = { nodeName: "SBKIM-Knoten", createIdentity: null, dbSuffix: null, prepareCorpus: null, corner: "bl", accent: null, euOnly: false };
   var mounted = false;
   var btnEl = null, panelEl = null, outEl = null, cardsEl = null, relOnlyBtn = null;
   var askInputEl = null, answerBtn = null;   // Bau 23.B — Frage-Feld + Antwortrecht-Schalter
+  var voiceBtnEl = null, activeRecognizer = null;   // 🎤 Spracheingabe (Modul 21)
   var relatedOnly = false;   // „nur verwandte zeigen" (reine Anzeige, Default aus)
   var lastCards = [];        // letzte gelesene Karten (für Re-Render beim Umschalten)
 
+  // KI-Richter (A4/B3, opt-in): die Antworten eines anderen Knoten nach
+  // BEDEUTUNG neu beurteilen/sortieren (Modul 04 hybridMatch, BYOK) statt nur
+  // nach rohem Cosinus. Default AUS (gratis). Der Schlüssel bleibt NUR im
+  // Speicher (nie persistiert, nie ins Repo). Fail-soft: ohne Modul 04 / ohne
+  // Schlüssel / bei Fehler bleibt die rohe Cosinus-Reihenfolge. Der
+  // 0.80-Andock-Riegel (Modul 05) ist davon UNBERÜHRT — reine Anzeige.
+  var kiOn = false, kiProvider = "", kiKey = "";
+  var kiToggleEl = null, kiProvSelEl = null, kiKeyEl = null;
+  var lastAnswer = null;     // { card, text, res } — für Re-Judge beim Umschalten
+  var answerSeq = 0;         // Race-Schutz: nur die neueste Antwort rendern
+
   function doc() { return global.document; }
   function rdv() { return global.SbkimRendezvous || null; }
+  // Modul 04 nur, wenn der KI-Richter (hybridMatch) wirklich da ist — fail-soft.
+  function matchMod() { var m = global.SbkimMatch; return (m && typeof m.hybridMatch === "function") ? m : null; }
+  // Anbieter-Liste aus Modul 04 (id/label/region), EU-gefiltert bei cfg.euOnly.
+  function kiProviders() {
+    var m = matchMod();
+    var list = (m && m._meta && Array.isArray(m._meta.hybridProviders)) ? m._meta.hybridProviders : [];
+    return list.filter(function (p) { return cfg.euOnly ? (p.region === "eu") : true; });
+  }
   function accent() { return cfg.accent || "var(--accent,#6ee7d3)"; }
 
   function el(tag, css, text) {
@@ -258,12 +278,45 @@
     askInputEl.id = "sbkim-rdv-q";
     askInputEl.type = "text";
     askInputEl.placeholder = "Frage nach Bedeutung, z.B. kuchen …";
+    // 🎤 Spracheingabe (Modul 21). Fremdnutzer-sicher: ohne Modul 21 bleibt das
+    // Textfeld voll nutzbar (der Knopf gibt dann nur eine ehrliche Notiz).
+    voiceBtnEl = el("button", bsGhost + ";font-size:.9rem;padding:5px 8px", "🎤");
+    voiceBtnEl.type = "button";
+    voiceBtnEl.title = "Frage einsprechen (Spracheingabe, Modul 21). Ohne Mikrofon/Modul einfach tippen.";
     answerBtn = el("button", bsGhost + ";font-size:.74rem;padding:5px 10px", "💬 Antworten: aus");
     answerBtn.type = "button";
     answerBtn.title = "Antwortrecht: eingeschaltet beantwortet dein Knoten Fragen anderer Knoten mit den Top-Treffern seiner eigenen Bedeutungs-Suche (nur Titel, keine Inhalte). Gilt nur, solange dieser Tab offen ist.";
     askRow.appendChild(askInputEl);
+    askRow.appendChild(voiceBtnEl);
     askRow.appendChild(answerBtn);
     panelEl.appendChild(askRow);
+    voiceBtnEl.addEventListener("click", function () { onVoiceClick(); });
+
+    // KI-Richter-Zeile (A4/B3, opt-in). Fremdnutzer-Perspektive: ohne
+    // Schlüssel läuft alles gratis weiter (roher Cosinus); mit Schlüssel
+    // beurteilt der KI-Richter nach BEDEUTUNG. Klar benannt, was passiert:
+    // kostet (eigener Schlüssel), Schlüssel bleibt NUR im Browser, und die
+    // Antwort-TITEL gehen an den gewählten KI-Anbieter (Daten-Abfluss benannt).
+    var kiRow = el("div", "margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center");
+    kiToggleEl = el("button", bsGhost + ";font-size:.72rem;padding:4px 9px", "🧠 KI-Richter: aus");
+    kiToggleEl.type = "button";
+    kiToggleEl.title = "Optional. AUS = gratis: die Antworten werden nach rohem Bedeutungs-Cosinus sortiert. " +
+      "AN = ein KI-Anbieter beurteilt die Antworten zusätzlich nach Bedeutung — das braucht deinen EIGENEN Schlüssel und kostet dort ggf. etwas. " +
+      "Dein Schlüssel bleibt NUR in diesem Browser (nie gespeichert, nie ins Netz). Nur die Treffer-TITEL (keine Inhalte) gehen an den gewählten Anbieter.";
+    kiProvSelEl = doc().createElement("select");
+    kiProvSelEl.style.cssText = "display:none;font-size:.72rem;padding:4px 6px;border-radius:8px;border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#e8eef6";
+    kiProvSelEl.title = "KI-Anbieter für den Richter (dein eigener Schlüssel).";
+    kiKeyEl = el("input", "display:none;flex:1;min-width:120px;padding:4px 8px;border-radius:8px;border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#e8eef6;font-size:.72rem");
+    kiKeyEl.type = "password";
+    kiKeyEl.autocomplete = "off";
+    kiKeyEl.placeholder = "dein KI-Schlüssel — bleibt nur im Browser";
+    kiRow.appendChild(kiToggleEl);
+    kiRow.appendChild(kiProvSelEl);
+    kiRow.appendChild(kiKeyEl);
+    panelEl.appendChild(kiRow);
+    kiToggleEl.addEventListener("click", function () { onToggleKiRichter(); });
+    kiProvSelEl.addEventListener("change", function () { kiProvider = kiProvSelEl.value; renderAnswer(); });
+    kiKeyEl.addEventListener("input", function () { kiKey = kiKeyEl.value; });
 
     cardsEl = el("div", "margin-top:10px");
     cardsEl.id = "sbkim-rdv-cards";
@@ -468,18 +521,135 @@
     askWithRetry(r, card, text, true);
   }
 
-  function renderAskSuccess(card, res) {
-    if (!outEl) return;
-    var lines = ["✓ Antwort von " + (card.nodeName || "Knoten") + " (" + Math.round((res.tookMs || 0) / 100) / 10 + " s):"];
-    if (res.results && res.results.length) {
+  // Provider-Auswahl mit der (EU-gefilterten) Modul-04-Liste füllen. Fremd-
+  // nutzer-sicher: ist Modul 04 nicht da / Liste leer, bleibt der KI-Richter
+  // schlicht ohne Anbieter (Knopf tut dann nichts als eine ehrliche Notiz).
+  function populateKiProviders() {
+    if (!kiProvSelEl) return;
+    var list = kiProviders();
+    kiProvSelEl.innerHTML = "";
+    list.forEach(function (p) {
+      var o = doc().createElement("option");
+      o.value = p.id; o.textContent = p.label || p.id;
+      kiProvSelEl.appendChild(o);
+    });
+    if (list.length && !kiProvider) kiProvider = list[0].id;
+    if (kiProvider) kiProvSelEl.value = kiProvider;
+  }
+
+  function onToggleKiRichter() {
+    kiOn = !kiOn;
+    if (kiOn) populateKiProviders();
+    var show = kiOn ? "" : "none";
+    if (kiProvSelEl) kiProvSelEl.style.display = show;
+    if (kiKeyEl) kiKeyEl.style.display = show;
+    if (kiToggleEl) kiToggleEl.textContent = "🧠 KI-Richter: " + (kiOn ? "an" : "aus");
+    renderAnswer();   // vorhandene Antwort sofort neu beurteilen/zurückstufen
+  }
+
+  // Zeigt die letzte Antwort an. Default: rohe Cosinus-Reihenfolge (gratis).
+  // Ist der KI-Richter an UND ein Schlüssel gesetzt UND Modul 04 da, wird die
+  // Trefferliste zusätzlich vom KI-Richter (hybridMatch) nach Bedeutung neu
+  // sortiert (mit Begründung). Alles fail-soft: jeder Fehler → Cosinus bleibt.
+  function renderAnswer() {
+    if (!outEl || !lastAnswer) return;
+    var card = lastAnswer.card, res = lastAnswer.res, text = lastAnswer.text;
+    var head = "✓ Antwort von " + (card.nodeName || "Knoten") + " (" + Math.round((res.tookMs || 0) / 100) / 10 + " s):";
+    if (!res.results || !res.results.length) {
+      outEl.textContent = head + "\n  (keine Treffer in seinem Buch — ehrlich leer)";
+      return;
+    }
+    function cosineLines() {
+      var lines = [head];
       res.results.forEach(function (h, i) {
         lines.push("  " + (i + 1) + ". " + h.label + (typeof h.score === "number" ? "  (" + h.score.toFixed(2) + ")" : ""));
       });
-      lines.push("— Das ist die bidirektionale Bedeutungs-Suche: sein Knoten hat in SEINEM Buch nach deinem Sinn gesucht.");
-    } else {
-      lines.push("  (keine Treffer in seinem Buch — ehrlich leer)");
+      lines.push("— Bedeutungs-Suche: sein Knoten hat in SEINEM Buch nach deinem Sinn gesucht.");
+      return lines.join("\n");
     }
-    outEl.textContent = lines.join("\n");
+    var m = matchMod();
+    if (!(kiOn && kiKey && kiKey.length && m)) {
+      outEl.textContent = cosineLines();
+      return;
+    }
+    // KI-Richter-Pfad (opt-in, BYOK). Erst Cosinus zeigen + „urteilt …", dann
+    // ersetzen, wenn das Urteil da ist. Race-Schutz über answerSeq.
+    var seq = ++answerSeq;
+    outEl.textContent = cosineLines() + "\n\n🧠 KI-Richter beurteilt nach Bedeutung …";
+    var candidates = res.results.map(function (h) {
+      return { label: h.label, cosine: (typeof h.score === "number") ? h.score : null };
+    });
+    var opts = { apiKey: kiKey, euOnly: !!cfg.euOnly };
+    if (kiProvider) opts.provider = kiProvider;
+    Promise.resolve()
+      .then(function () { return m.hybridMatch(text, candidates, opts); })
+      .then(function (v) {
+        if (seq !== answerSeq) return;            // veraltet — neue Frage/Antwort
+        if (!v || v.available === false || !Array.isArray(v.verdicts)) {
+          var why = (v && v.reason) ? " (" + v.reason + ")" : "";
+          outEl.textContent = cosineLines() + "\n\n🧠 KI-Richter: kein Urteil" + why + " — rohe Reihenfolge bleibt.";
+          return;
+        }
+        // Nach KI-Score absteigend sortieren (Bedeutungs-Urteil), stabil.
+        var judged = v.verdicts.slice().sort(function (a, b) {
+          return (Number(b.score) || 0) - (Number(a.score) || 0);
+        });
+        var lines = [head + "   🧠 KI-Richter (" + (v.provider || "?") + (v.region ? ", " + v.region : "") + ")"];
+        judged.forEach(function (r, i) {
+          var sc = (typeof r.score === "number") ? "  (" + r.score.toFixed(2) + ")" : "";
+          var mark = (r.passt === false) ? " ·" : " ✓";
+          lines.push("  " + (i + 1) + "." + mark + " " + (r.label != null ? r.label : "?") + sc);
+          if (r.begruendung) lines.push("      – " + r.begruendung);
+        });
+        lines.push("— Beurteilt nach Bedeutung (✓ = passt). Nur die Titel gingen an den KI-Anbieter; dein Schlüssel blieb im Browser.");
+        outEl.textContent = lines.join("\n");
+      })
+      .catch(function (e) {
+        if (seq !== answerSeq) return;
+        outEl.textContent = cosineLines() + "\n\n🧠 KI-Richter-Fehler: " + (e && e.message ? e.message : e) + " — rohe Reihenfolge bleibt.";
+      });
+  }
+
+  // Kurze, transiente Notiz im Ausgabe-Bereich (Spracheingabe-Status/Fehler).
+  function setVoiceHint(t) { if (outEl) outEl.textContent = t; }
+
+  // 🎤 Spracheingabe (Modul 21) — Frage einsprechen. Spiegelt Modul 22
+  // onVoiceClick, fail-soft. Fremdnutzer-sicher: ohne Modul 21 / ohne
+  // Browser-Unterstützung bleibt das Textfeld voll nutzbar.
+  function onVoiceClick() {
+    var speech = global.SbkimSpeech;
+    if (!speech || typeof speech.pickEngine !== "function") {
+      setVoiceHint("🎤 Spracheingabe (Modul 21) nicht geladen — bitte tippen.");
+      return;
+    }
+    var engine;
+    try { engine = speech.pickEngine(cfg.euOnly ? "bindend" : "frei"); }
+    catch (e) { setVoiceHint(speech.speechErrorHint ? speech.speechErrorHint(e) : "🎤 nicht möglich — bitte tippen."); return; }
+    if (engine === "browser" && typeof speech.isBrowserSupported === "function" && speech.isBrowserSupported()) {
+      var langs = (typeof speech.getLanguages === "function") ? speech.getLanguages() : [];
+      var lang = (langs[0] || ["de-DE"])[0];
+      try {
+        activeRecognizer = speech.makeBrowserRecognizer({
+          lang: lang,
+          onResult: function (t) { if (askInputEl) { askInputEl.value = t; } setVoiceHint("Erkannt: " + t + "  — jetzt einen Knoten <❓ Fragen>."); },
+          onError: function (h) { setVoiceHint("🎤 " + h); },
+          onEnd: function () { activeRecognizer = null; },
+        });
+        activeRecognizer.start();
+        setVoiceHint("🎤 Sprich jetzt deine Frage …");
+      } catch (e) {
+        setVoiceHint(speech.speechErrorHint ? speech.speechErrorHint(e) : "🎤 nicht möglich — bitte tippen.");
+      }
+      return;
+    }
+    setVoiceHint("🎤 Sprach-Engine braucht einen EU-Schlüssel — bitte tippen.");
+  }
+
+  function renderAskSuccess(card, res, text) {
+    var q = (typeof text === "string" && text.length) ? text
+          : ((askInputEl && askInputEl.value) ? String(askInputEl.value).trim() : "");
+    lastAnswer = { card: card, res: res, text: q };
+    renderAnswer();
   }
 
   // Fragen mit EINEM automatischen Nachschlag (Klaus 2026-07-10): bleibt die
@@ -490,7 +660,7 @@
     if (outEl) outEl.textContent = "❓ Frage <" + text + "> an " + (card.nodeName || "Knoten") + " — warte auf Antwort …";
     r.askNode(card, text).then(function (res) {
       if (!outEl) return;
-      if (res && res.ok) { renderAskSuccess(card, res); return; }
+      if (res && res.ok) { renderAskSuccess(card, res, text); return; }
       if (allowRetry && typeof r.discover === "function") {
         outEl.textContent = "… keine Antwort — Karte evtl. veraltet. Ich lese den Raum neu und frage die frischeste Karte …";
         r.discover().then(function (d) {
@@ -579,6 +749,9 @@
     if (typeof opts.dbSuffix === "string" && opts.dbSuffix.length > 0) cfg.dbSuffix = opts.dbSuffix;
     if (typeof opts.corner === "string") cfg.corner = opts.corner;
     if (typeof opts.accent === "string") cfg.accent = opts.accent;
+    // EU-Politik (Fremdnutzer-klar): euOnly:true → der KI-Richter bietet NUR
+    // EU-Anbieter (z.B. Mistral) an. Default false (freie Anbieter-Wahl).
+    if (typeof opts.euOnly === "boolean") cfg.euOnly = opts.euOnly;
   }
 
   function init(opts) {
@@ -597,7 +770,22 @@
     hide: hide,
     isOpen: isOpen,
     get _meta() {
-      return { version: VERSION, mounted: mounted, open: isOpen(), nodeName: cfg.nodeName, hasRendezvous: rdv() !== null, relatedOnly: relatedOnly };
+      return {
+        version: VERSION, mounted: mounted, open: isOpen(), nodeName: cfg.nodeName,
+        hasRendezvous: rdv() !== null, relatedOnly: relatedOnly, euOnly: cfg.euOnly,
+        kiRichter: { on: kiOn, provider: kiProvider, hasKey: !!(kiKey && kiKey.length) },
+      };
+    },
+    // Test-Brücke (headless): KI-Richter-Zustand setzen + eine Antwort rendern.
+    // Kein Produktiv-Use (Konvention analog Modul 08 _clearOutbox). renderAnswer
+    // ist bei KI-an async — der Test wartet einen Tick nach dem hybridMatch-Stub.
+    _test: {
+      setKi: function (o) { o = o || {}; kiOn = !!o.on; if ("key" in o) kiKey = o.key || ""; if ("provider" in o) kiProvider = o.provider || ""; },
+      renderAnswer: function (card, res, text) { renderAskSuccess(card, res, text); return outEl ? outEl.textContent : null; },
+      outText: function () { return outEl ? outEl.textContent : null; },
+      providers: function () { return kiProviders(); },
+      voiceClick: function () { onVoiceClick(); return outEl ? outEl.textContent : null; },
+      askValue: function () { return askInputEl ? askInputEl.value : null; },
     },
   };
 
