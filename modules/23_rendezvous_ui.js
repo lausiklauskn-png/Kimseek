@@ -58,7 +58,18 @@
   // Schlüssel / bei Fehler bleibt die rohe Cosinus-Reihenfolge. Der
   // 0.80-Andock-Riegel (Modul 05) ist davon UNBERÜHRT — reine Anzeige.
   var kiOn = false, kiProvider = "", kiKey = "";
-  var kiToggleEl = null, kiProvSelEl = null, kiKeyEl = null;
+  var kiToggleEl = null, kiProvSelEl = null, kiKeyEl = null, kiKeyLinkEl = null;
+  // Anbieter → Seite, auf der man seinen EIGENEN Schlüssel holt. Fremdnutzer-
+  // Hilfe (Klaus 2026-07-11): wählt jemand den KI-Richter und hat noch keinen
+  // Schlüssel, verlinken wir direkt dorthin — statt „irgendwo in einem anderen
+  // Tab suchen". Unbekannter Anbieter → kein Link (fail-soft).
+  var KI_KEY_URLS = {
+    claude: "https://console.anthropic.com/settings/keys",
+    mistral: "https://console.mistral.ai/api-keys/",
+    openai: "https://platform.openai.com/api-keys",
+    gemini: "https://aistudio.google.com/app/apikey",
+    openrouter: "https://openrouter.ai/keys",
+  };
   var lastAnswer = null;     // { card, text, res } — für Re-Judge beim Umschalten
   var answerSeq = 0;         // Race-Schutz: nur die neueste Antwort rendern
 
@@ -310,13 +321,22 @@
     kiKeyEl.type = "password";
     kiKeyEl.autocomplete = "off";
     kiKeyEl.placeholder = "dein KI-Schlüssel — bleibt nur im Browser";
+    // „🔑 Schlüssel holen ↗" — Direktlink zur Schlüsselseite des gewählten
+    // Anbieters. Sichtbar nur, wenn KI-Richter an ist UND noch KEIN Schlüssel
+    // eingegeben wurde (dann braucht man ihn ja gerade). Neuer Tab, fail-soft.
+    kiKeyLinkEl = doc().createElement("a");
+    kiKeyLinkEl.textContent = "🔑 Schlüssel holen ↗";
+    kiKeyLinkEl.target = "_blank"; kiKeyLinkEl.rel = "noopener noreferrer";
+    kiKeyLinkEl.title = "Öffnet die Seite des gewählten KI-Anbieters, wo du deinen eigenen Schlüssel erstellst (kostenlos anlegbar; Nutzung kann dort etwas kosten).";
+    kiKeyLinkEl.style.cssText = "display:none;font-size:.72rem;padding:4px 8px;border-radius:8px;border:1px solid rgba(154,167,182,.35);color:#9fd2ff;text-decoration:none;white-space:nowrap";
     kiRow.appendChild(kiToggleEl);
     kiRow.appendChild(kiProvSelEl);
     kiRow.appendChild(kiKeyEl);
+    kiRow.appendChild(kiKeyLinkEl);
     panelEl.appendChild(kiRow);
     kiToggleEl.addEventListener("click", function () { onToggleKiRichter(); });
-    kiProvSelEl.addEventListener("change", function () { kiProvider = kiProvSelEl.value; renderAnswer(); });
-    kiKeyEl.addEventListener("input", function () { kiKey = kiKeyEl.value; });
+    kiProvSelEl.addEventListener("change", function () { kiProvider = kiProvSelEl.value; updateKiKeyLink(); renderAnswer(); });
+    kiKeyEl.addEventListener("input", function () { kiKey = kiKeyEl.value; updateKiKeyLink(); });
 
     cardsEl = el("div", "margin-top:10px");
     cardsEl.id = "sbkim-rdv-cards";
@@ -537,6 +557,16 @@
     if (kiProvider) kiProvSelEl.value = kiProvider;
   }
 
+  // „🔑 Schlüssel holen"-Link nur zeigen, wenn KI-Richter an ist, noch KEIN
+  // Schlüssel getippt ist und wir für den Anbieter eine Seite kennen.
+  function updateKiKeyLink() {
+    if (!kiKeyLinkEl) return;
+    var url = KI_KEY_URLS[kiProvider];
+    var need = kiOn && !(kiKey && kiKey.length) && !!url;
+    kiKeyLinkEl.style.display = need ? "" : "none";
+    if (url) kiKeyLinkEl.href = url;
+  }
+
   function onToggleKiRichter() {
     kiOn = !kiOn;
     if (kiOn) populateKiProviders();
@@ -544,6 +574,7 @@
     if (kiProvSelEl) kiProvSelEl.style.display = show;
     if (kiKeyEl) kiKeyEl.style.display = show;
     if (kiToggleEl) kiToggleEl.textContent = "🧠 KI-Richter: " + (kiOn ? "an" : "aus");
+    updateKiKeyLink();
     renderAnswer();   // vorhandene Antwort sofort neu beurteilen/zurückstufen
   }
 
@@ -786,6 +817,9 @@
       providers: function () { return kiProviders(); },
       voiceClick: function () { onVoiceClick(); return outEl ? outEl.textContent : null; },
       askValue: function () { return askInputEl ? askInputEl.value : null; },
+      setKeyInput: function (v) { kiKey = v || ""; updateKiKeyLink(); },
+      keyLink: function () { return kiKeyLinkEl ? { visible: kiKeyLinkEl.style.display !== "none", href: kiKeyLinkEl.href } : null; },
+      toggleKi: function () { onToggleKiRichter(); },
     },
   };
 
