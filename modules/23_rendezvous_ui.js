@@ -964,9 +964,16 @@
     // ersetzen, wenn das Urteil da ist. Race-Schutz über answerSeq.
     var seq = ++answerSeq;
     outEl.textContent = cosineLines() + "\n\n🧠 KI-Richter beurteilt nach Bedeutung …";
+    // Cross-Knoten-Antworten tragen nur TITEL (keine Inhalte, Datenschutz) — der
+    // Richter (Modul 04 hybridMatch) verlangt aber pro Kandidat einen nicht-leeren
+    // `text`. Also den Titel als Bedeutungs-Text durchreichen; leere überspringen.
     var candidates = res.results.map(function (h) {
-      return { label: h.label, cosine: (typeof h.score === "number") ? h.score : null };
-    });
+      var label = (typeof h.label === "string") ? h.label : "";
+      var t = (typeof h.text === "string" && h.text.length) ? h.text : label;
+      return { label: label, text: t, cosine: (typeof h.score === "number") ? h.score : null };
+    }).filter(function (c) { return c.label && c.text; });
+    // Nichts Beurteilbares → ehrlich beim Cosinus bleiben (kein Richter-Fehler).
+    if (candidates.length === 0) { outEl.textContent = cosineLines(); return; }
     var opts = { apiKey: kiKey, euOnly: !!cfg.euOnly };
     if (kiProvider) opts.provider = kiProvider;
     Promise.resolve()
