@@ -392,6 +392,65 @@
     return e;
   }
 
+  // ---- Eigener Tooltip statt nativem `title` (Klaus 2026-07-12) ----
+  // Native title-Tooltips landen im Split-Screen/DeX oft halb hinter dem Panel
+  // (der Browser platziert sie selbst). Wir übernehmen die Platzierung: `title`
+  // → `data-sbtip`, nativen Tooltip AUS; eigener Tooltip am <body> (position:fixed,
+  // entkommt jedem overflow/z-index), unter dem Element, in den Viewport geklemmt,
+  // über allem (z-index max). DOM-only, fail-soft.
+  var _tipEl = null;
+  function ensureTipEl() {
+    if (_tipEl && _tipEl.parentNode) return _tipEl;
+    var d = doc();
+    if (!d || !d.body) return null;
+    _tipEl = d.createElement("div");
+    _tipEl.setAttribute("role", "tooltip");
+    _tipEl.style.cssText = "position:fixed;z-index:2147483647;max-width:min(320px,80vw);" +
+      "background:rgba(15,18,28,.97);color:#eef2f8;font:500 .72rem/1.4 var(--mono,system-ui,sans-serif);" +
+      "padding:6px 9px;border:1px solid rgba(255,255,255,.18);border-radius:8px;" +
+      "box-shadow:0 6px 22px rgba(0,0,0,.55);pointer-events:none;opacity:0;transition:opacity .12s;display:none";
+    d.body.appendChild(_tipEl);
+    return _tipEl;
+  }
+  function showTip(target, text) {
+    var t = ensureTipEl();
+    if (!t || !text || !target || typeof target.getBoundingClientRect !== "function") return;
+    t.textContent = text;
+    t.style.display = "block";
+    var r = target.getBoundingClientRect();
+    var vw = global.innerWidth || 1024, vh = global.innerHeight || 768;
+    var tw = t.offsetWidth, th = t.offsetHeight;
+    var left = Math.max(6, Math.min(r.left, vw - tw - 6));
+    var top = r.bottom + 6;
+    if (top + th > vh - 6) top = Math.max(6, r.top - th - 6); // kein Platz unten → oben
+    t.style.left = left + "px";
+    t.style.top = top + "px";
+    t.style.opacity = "1";
+  }
+  function hideTip() { if (_tipEl) { _tipEl.style.opacity = "0"; _tipEl.style.display = "none"; } }
+  // Alle nativen `title` unter root (inkl. root selbst) auf den eigenen Tooltip
+  // umstellen: Text nach data-sbtip, title entfernen, Hover/Focus-Listener setzen.
+  function adoptTips(root) {
+    try {
+      if (!root || typeof root.querySelectorAll !== "function") return;
+      var list = [];
+      if (root.getAttribute && root.getAttribute("title")) list.push(root);
+      var nodes = root.querySelectorAll("[title]");
+      for (var i = 0; i < nodes.length; i++) list.push(nodes[i]);
+      list.forEach(function (elm) {
+        var txt = elm.getAttribute("title");
+        if (txt == null) return;
+        elm.setAttribute("data-sbtip", txt);
+        elm.removeAttribute("title"); // nativen Browser-Tooltip abschalten
+        elm.addEventListener("mouseenter", function () { showTip(elm, elm.getAttribute("data-sbtip")); });
+        elm.addEventListener("mouseleave", hideTip);
+        elm.addEventListener("focus", function () { showTip(elm, elm.getAttribute("data-sbtip")); });
+        elm.addEventListener("blur", hideTip);
+        elm.addEventListener("pointerdown", hideTip);
+      });
+    } catch (_e) { /* fail-soft — dann bleibt es beim Label ohne Tooltip */ }
+  }
+
   function cornerCss(corner, panel) {
     var off = panel ? "64px" : "14px";
     switch (corner) {
@@ -693,6 +752,11 @@
 
     d.body.appendChild(btnEl);
     d.body.appendChild(panelEl);
+
+    // Native title-Tooltips durch den eigenen, sauber platzierten Tooltip ersetzen
+    // (Klaus 2026-07-12: nativ landete er im Split-Screen halb hinter dem Panel).
+    adoptTips(panelEl);
+    adoptTips(btnEl);
 
     btnEl.addEventListener("click", function () { toggle(); });
     closeBtn.addEventListener("click", function () { hide(); });
