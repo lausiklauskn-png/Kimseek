@@ -1343,7 +1343,7 @@
         if (lastRenderRes) renderResults(lastRenderRes);
       });
     viewModeCheckboxEl.setAttribute("title",
-      "Aus: verbunden (grob) — alle erreichbaren Treffer. An: verwandt (genau) — eine Rangfolge nach Themen-Bezug (gratis zentrierter Cosinus). Mit „· KI“ urteilt der KI-Richter über die Bedeutung.");
+      "Nach Themen-Bezug sortieren");
     viewRowEl.appendChild(viewModeCheckboxEl);
 
     viewRelatedOnlyCheckboxEl = makeCheckbox(doc, "sbkim-sw-view-onlyrelated", "nur verwandte",
@@ -1353,7 +1353,7 @@
         if (lastRenderRes) renderResults(lastRenderRes);
       });
     viewRelatedOnlyCheckboxEl.setAttribute("title",
-      "Nur im verwandt-Modus: blendet fremde Domänen (nicht wirklich verwandt) ganz aus.");
+      "Nur verwandte Treffer zeigen");
 
     // „· KI" — verwandt-Maß vom KI-Richter beurteilen lassen (opt-in, BYOK).
     // Nutzt das vorhandene Richter-Anbieter-Dropdown + Schlüsselfeld (unten).
@@ -1368,7 +1368,7 @@
         if (lastRenderRes) renderResults(lastRenderRes);
       });
     viewKiCheckboxEl.setAttribute("title",
-      "Nur im verwandt-Modus: das echte Verwandtschafts-Maß vom KI-Richter (über die Bedeutung) beurteilen lassen. Braucht einen Schlüssel; ohne Schlüssel bleibt der gratis zentrierte Cosinus.");
+      "Verwandtschaft von der KI beurteilen lassen");
     viewRowEl.appendChild(viewRelatedOnlyCheckboxEl);
     viewRowEl.appendChild(viewKiCheckboxEl);
     panelEl.appendChild(viewRowEl);
@@ -1379,7 +1379,7 @@
     optRow.className = "sbkim-sw-optrow";
     richterToggleEl = makeCheckbox(doc, "sbkim-sw-richter", "KI-Richter", richterOn,
       function (checked) { richterOn = checked; });
-    richterToggleEl.setAttribute("title", "KI-Richter an: urteilt zusätzlich (braucht Schlüssel, kostet). Aus: gratis, rein semantisch.");
+    richterToggleEl.setAttribute("title", "KI bewertet die Treffer (eigener Schlüssel)");
     optRow.appendChild(richterToggleEl);
 
     euChipEl = doc.createElement("button");
@@ -1552,7 +1552,7 @@
       resizeHandleEl = doc.createElement("div");
       resizeHandleEl.className = "sbkim-sw-resize";
       resizeHandleEl.setAttribute("aria-label", "Größe ziehen — Breite und Lesefeld-Höhe");
-      resizeHandleEl.setAttribute("title", "Ziehen, um das Such-Panel breiter/höher zu machen");
+      resizeHandleEl.setAttribute("title", "Größer ziehen");
       attachResizeHandlers(resizeHandleEl);
       panelEl.appendChild(resizeHandleEl);
     }
@@ -3228,7 +3228,7 @@
       sayBtn.type = "button";
       sayBtn.className = "sbkim-sw-saybtn";
       sayBtn.textContent = "🔊 Vorlesen";
-      sayBtn.setAttribute("title", "Zusammenfassung vorlesen (nochmal tippen stoppt)");
+      sayBtn.setAttribute("title", "Vorlesen");
       sayBtn.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
       (function (txt) {
         sayBtn.addEventListener("click", function (ev) {
@@ -3382,7 +3382,7 @@
       webCopyBtn.type = "button";
       webCopyBtn.className = "sbkim-sw-more sbkim-sw-webcopy";
       webCopyBtn.textContent = "📋 Frage kopieren";
-      webCopyBtn.setAttribute("title", "Frage kopieren; Suchmaschine selbst öffnen (Splitscreen) und einfügen — App bleibt offen");
+      webCopyBtn.setAttribute("title", "Frage kopieren");
       webCopyBtn.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
       (function (q) {
         webCopyBtn.addEventListener("click", function (ev) {
@@ -3400,7 +3400,7 @@
       webOpenBtn.type = "button";
       webOpenBtn.className = "sbkim-sw-more sbkim-sw-webopen";
       webOpenBtn.textContent = "↗ Im Browser öffnen";
-      webOpenBtn.setAttribute("title", "Suchmaschine direkt öffnen — kann die App neu laden, Frage/Treffer sind aber gesichert");
+      webOpenBtn.setAttribute("title", "Im Browser öffnen");
       webOpenBtn.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
       (function (url) {
         webOpenBtn.addEventListener("click", function (ev) {
@@ -3840,7 +3840,7 @@
     var item = merkItemOf(t);
     var wrap = doc.createElement("label");
     wrap.className = "sbkim-sw-check sbkim-sw-merkbox";
-    wrap.setAttribute("title", "Merken — in die Merkliste legen");
+    wrap.setAttribute("title", "Merken");
     var input = doc.createElement("input");
     input.type = "checkbox";
     input.checked = isMerkt(groupKey, item);
@@ -3904,7 +3904,7 @@
       b.type = "button";
       b.className = "sbkim-sw-feedback-btn sbkim-sw-fb-" + s.rating;
       b.textContent = s.txt;
-      b.setAttribute("title", "Treffer-Qualität: " + s.txt + " — die App lernt daraus");
+      b.setAttribute("title", "Bewerten — die App lernt daraus");
       b.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
       b.addEventListener("click", function (ev) {
         if (ev && ev.preventDefault) ev.preventDefault();
@@ -3923,7 +3923,7 @@
     var n = merkCount();
     merkBtnEl.textContent = "📌";
     merkBtnEl.setAttribute("aria-label", "Merkliste" + (n ? " (" + n + " gemerkt)" : " (leer)"));
-    merkBtnEl.setAttribute("title", "Merkliste — Gemerktes, gruppiert nach Suchfrage" + (n ? " (" + n + ")" : ""));
+    merkBtnEl.setAttribute("title", "Merkliste" + (n ? " (" + n + ")" : ""));
     if (merkBtnEl.classList) {
       if (n) merkBtnEl.classList.add("sbkim-sw-has-merk");
       else merkBtnEl.classList.remove("sbkim-sw-has-merk");
