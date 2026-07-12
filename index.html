@@ -182,10 +182,47 @@
       });
     }
 
-    // Such-Widget mounten. Standalone-Default: Internet-Bereich (KI-Brücke) an,
-    // App/Knoten aus (kein Host-Korpus); Richter aus (gratis, semantisch);
-    // EU-Politik frei; startet aufgeklappt, damit es sofort da ist.
+    // Such-Widget mounten. Kimseek ist ein NETZ-FINDER (keine eigene Domäne):
+    //   • „App" ausgeblendet (Kimseek hat keinen eigenen Inhalt)
+    //   • „Knoten" LIVE ans gemeinsame Netz verdrahtet (Rendezvous-Raum + Relais)
+    //   • „Internet" (KI-Brücke) an. Richter aus (gratis, semantisch); EU frei.
+    // Klaus 2026-07-12: „wenn ich Knoten anhake, will ich wirklich Knoten finden".
     (function () {
+      // Knoten-Korpus = die Karten aus dem gemeinsamen Rendezvous-Raum (wer sich
+      // angemeldet hat). Jede Karte trägt die Domänen-Sporen mit domainVector →
+      // direkt rankbar. Fail-soft: kein Rendezvous/leerer Raum → leere Liste.
+      async function kimseekBuildKnotenKorpus() {
+        if (!window.SbkimRendezvous || typeof window.SbkimRendezvous.discover !== "function") return [];
+        try {
+          var res = await window.SbkimRendezvous.discover({});
+          var cards = (res && Array.isArray(res.cards)) ? res.cards : [];
+          return cards.map(function (c) {
+            var sp = c && c.spore ? c.spore : null;
+            var dv = sp && Array.isArray(sp.domainVector) ? sp.domainVector : null;
+            var text = (sp && (sp.domainText || sp.description)) || c.nodeName || "";
+            return {
+              label: c.nodeName || c.nodeId || "Knoten",
+              text: text,
+              anchorId: (sp && sp.endpoint) || null,
+              nodeId: c.nodeId || null,
+              passageVec: dv ? new Float32Array(dv) : null,
+            };
+          }).filter(function (e) { return e.passageVec && e.nodeId; });
+        } catch (e) {
+          console.warn("[Kimseek] Knoten-Raum lesen fehlgeschlagen:", e);
+          return [];
+        }
+      }
+      // Live-Cross-Knoten-Frage übers Relais (wie Sage): den top-rangierten Nachbarn
+      // live fragen und seine echten Treffer nachreichen. Fail-soft → leere Liste.
+      async function kimseekQueryNode(nodeId, text) {
+        try {
+          if (!window.SbkimAnastomose || typeof window.SbkimAnastomose.queryNostr !== "function") return [];
+          var res = await window.SbkimAnastomose.queryNostr(nodeId, text, { timeoutMs: 300000 });
+          if (res && res.outcome === "answered" && Array.isArray(res.results)) return res.results;
+          return [];
+        } catch (e) { return []; }
+      }
       function start() {
         if (!window.SbkimSearchWidget) {
           console.warn("[Kimseek] Modul 22 (Such-Widget) nicht geladen.");
@@ -194,7 +231,10 @@
         window.SbkimSearchWidget.init({
           euPolicy: "frei",
           queryLabel: "Kimseek",
-          areas: { app: false, knoten: false, internet: true },
+          areas: { app: false, knoten: true, internet: true },
+          areasHidden: { app: true },
+          prepareNodeCorpus: kimseekBuildKnotenKorpus,
+          queryNode: kimseekQueryNode,
           richter: false,
           startExpanded: true,
           reloadButton: true,
