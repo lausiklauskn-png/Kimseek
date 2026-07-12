@@ -132,7 +132,26 @@
        Klaus' akzeptiertes Tablet-Debug-Werkzeug (kein Terminal am Tablet).
        Fail-soft: fehlt das CDN, läuft die Seite normal weiter. -->
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>try { if (window.eruda) window.eruda.init(); } catch (e) {}</script>
+  <script>
+  // Eruda standardmäßig VERBORGEN — kein schwebender Konsolen-Knopf auf der
+  // App-Oberfläche (Klaus 2026-07-12). Das SBKIM-Floating-Widget (Lampen/Siegel)
+  // bleibt UNBERÜHRT und sichtbar. Eruda nur auf ausdrücklichen Wunsch: URL-Hash
+  // #eruda ODER 5×-Tipp in die obere linke Ecke (60px). Fail-soft (kein CDN → App läuft).
+  (function () {
+    var on = false;
+    function enable() { if (on || !window.eruda) return; try { eruda.init(); on = true; } catch (e) {} }
+    function disable() { if (!on || !window.eruda) return; try { eruda.destroy(); on = false; } catch (e) {} }
+    function toggle() { on ? disable() : enable(); }
+    try { if (location.hash.indexOf('eruda') > -1) enable(); } catch (e) {}
+    var taps = [], ZONE = 60;
+    document.addEventListener('pointerdown', function (ev) {
+      if (ev.clientX > ZONE || ev.clientY > ZONE) return;
+      var now = Date.now(); taps.push(now);
+      taps = taps.filter(function (t) { return now - t < 2000; });
+      if (taps.length >= 5) { taps = []; toggle(); }
+    }, true);
+  })();
+  </script>
 
   <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ── -->
   <!-- Identitäts-Isolierung (2026-07-11): App-Suffix GLOBAL + FRÜH setzen, damit
