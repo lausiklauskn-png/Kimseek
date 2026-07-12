@@ -6,7 +6,7 @@
  * Tool" / wie Modul 22), **öffentlich** sichtbar (kein ?dev-Gate). Self-mountet
  * einen dezenten 🌐-Knopf, der ein Mini-Panel mit den drei Rendezvous-Gesten
  * öffnet:
- *   🌐 Mit dem Netz verbinden   → SbkimRendezvous.connectAndAnnounce({createIdentity})
+ *   🌐 Mit dem Knotennetz verbinden   → SbkimRendezvous.connectAndAnnounce({createIdentity})
  *   👥 Wer ist im Raum?         → SbkimRendezvous.discover() → Karten + 🤝 Andocken
  *   📌 Nur neu anmelden         → SbkimRendezvous.announce()
  *   🧬 nur verwandte: aus/an    → REINE Anzeige-Filter über die Karten-Liste
@@ -93,7 +93,7 @@
   // meldet ungelesene Post von selbst. Speicher app-eigen (dbSuffix-Suffix →
   // keine Kollision auf geteilter github.io-Adresse). Nur eigene Fragen/Antworten,
   // kein Fremd-PII. Grenze: Relais-Aufbewahrung (Modul 23 fetchAnswers).
-  var RDV_BUBBLE_BASE = "🌐 Mit dem Netz verbinden";
+  var RDV_BUBBLE_BASE = "🌐 Mit dem Knotennetz verbinden";
   var mailBtn = null, reAskBtn = null, clearMailBtn = null;
   // Lebenszyklus-Regelung (Klaus 2026-07-11) — gegen Überladung, per Browser:
   //  · RDV_MAILBOX_MAX  : Obergrenze der lokalen Liste (einstellbar via init).
@@ -437,7 +437,7 @@
   }
 
   // ---- Flying-Widget: frei verschiebbar + minimierbar (Klaus 2026-07-10) ----
-  // Das „Mit dem Netz verbinden"-Panel klebte in einer Ecke und verdeckte die
+  // Das „Mit dem Knotennetz verbinden"-Panel klebte in einer Ecke und verdeckte die
   // Seite. Jetzt: an der Kopfzeile frei ziehbar, per „–" zur Blase minimierbar,
   // Position in localStorage gemerkt. Bubble ⇄ Panel teilen sich EINE Position.
   var POS_KEY = "sbkim_rdv_ui_pos";
@@ -518,7 +518,7 @@
     btnEl = el("button", "position:fixed;" + cornerCss(cfg.corner, false) + ";z-index:2147483600;" +
       "font:600 .8rem var(--mono,system-ui,sans-serif);padding:8px 12px;border-radius:10px;" +
       "border:1px solid " + ac + ";background:rgba(10,12,20,.7);color:" + ac + ";cursor:pointer;" +
-      "backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,.35)", "🌐 Mit dem Netz verbinden");
+      "backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,.35)", "🌐 Mit dem Knotennetz verbinden");
     btnEl.type = "button";
     btnEl.id = "sbkim-rdv-btn";
     btnEl.title = "SBKIM-Rendezvous: dich im gemeinsamen Raum anmelden + andere Knoten finden.";
@@ -532,7 +532,7 @@
 
     var head = el("div", "display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;cursor:move");
     head.title = "Ziehen zum Verschieben";
-    head.appendChild(el("strong", "color:" + ac, "🌐 Mit dem Netz verbinden"));
+    head.appendChild(el("strong", "color:" + ac, "🌐 Mit dem Knotennetz verbinden"));
     var headBtns = el("div", "display:flex;align-items:center;gap:2px");
     var minBtn = el("button", "background:none;border:none;color:#9aa7b6;font-size:1.4rem;line-height:.6;cursor:pointer;padding:0 6px", "–");
     minBtn.type = "button";
@@ -558,7 +558,7 @@
       "Triff andere SBKIM-Knoten im gemeinsamen Raum — server-los, direkt aus deinem Browser. Lass diesen Tab offen, damit du erreichbar bleibst."));
 
     var row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
-    var connectBtn = el("button", bs, "🌐 Mit dem Netz verbinden"); connectBtn.type = "button";
+    var connectBtn = el("button", bs, "🌐 Mit dem Knotennetz verbinden"); connectBtn.type = "button";
     var discoverBtn = el("button", bsGhost, "👥 Wer ist im Raum?"); discoverBtn.type = "button";
     var announceBtn = el("button", bsGhost, "📌 Nur neu anmelden"); announceBtn.type = "button";
     mailBtn = el("button", bsGhost, "📬 Antworten abholen"); mailBtn.type = "button";
@@ -879,7 +879,7 @@
     if (!cardsEl) return;
     clear(cardsEl);
     if (lastCards.length === 0) {
-      if (outEl) outEl.textContent = "Niemand (Fremdes) im Raum. Lass den Gegenknoten zuerst „🌐 Mit dem Netz verbinden“ drücken — dann hier nochmal „👥 Wer ist im Raum?“.";
+      if (outEl) outEl.textContent = "Niemand (Fremdes) im Raum. Lass den Gegenknoten zuerst „🌐 Mit dem Knotennetz verbinden“ drücken — dann hier nochmal „👥 Wer ist im Raum?“.";
       return;
     }
     var ac = accent();
