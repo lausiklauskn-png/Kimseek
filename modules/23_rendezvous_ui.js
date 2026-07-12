@@ -399,6 +399,15 @@
   // entkommt jedem overflow/z-index), unter dem Element, in den Viewport geklemmt,
   // über allem (z-index max). DOM-only, fail-soft.
   var _tipEl = null;
+  // An/Aus-Schalter für Tooltips (Klaus 2026-07-12). Zustand in localStorage,
+  // übersteht Reload; generischer Schlüssel, damit weitere Module ihn ehren können.
+  var TIPS_OFF_KEY = "sbkim_tips_off";
+  function tipsEnabled() {
+    try { return global.localStorage.getItem(TIPS_OFF_KEY) !== "1"; } catch (_e) { return true; }
+  }
+  function setTipsOff(off) {
+    try { global.localStorage.setItem(TIPS_OFF_KEY, off ? "1" : "0"); } catch (_e) { /* fail-soft */ }
+  }
   function ensureTipEl() {
     if (_tipEl && _tipEl.parentNode) return _tipEl;
     var d = doc();
@@ -413,6 +422,7 @@
     return _tipEl;
   }
   function showTip(target, text) {
+    if (!tipsEnabled()) return;   // Tooltips per Schalter aus
     var t = ensureTipEl();
     if (!t || !text || !target || typeof target.getBoundingClientRect !== "function") return;
     t.textContent = text;
@@ -593,6 +603,21 @@
     head.title = "Ziehen zum Verschieben";
     head.appendChild(el("strong", "color:" + ac, "🌐 Mit dem Knotennetz verbinden"));
     var headBtns = el("div", "display:flex;align-items:center;gap:2px");
+    var tipBtn = el("button", "background:none;border:none;color:#9aa7b6;font-size:1rem;cursor:pointer;padding:0 5px", "💬");
+    tipBtn.type = "button";
+    function refreshTipBtn() {
+      var on = tipsEnabled();
+      tipBtn.style.opacity = on ? "1" : ".38";
+      tipBtn.setAttribute("data-sbtip", on ? "Tipps ausschalten" : "Tipps einschalten");
+    }
+    tipBtn.title = tipsEnabled() ? "Tipps ausschalten" : "Tipps einschalten";  // adoptTips verdrahtet den Hover
+    tipBtn.style.opacity = tipsEnabled() ? "1" : ".38";
+    tipBtn.addEventListener("click", function () {
+      setTipsOff(tipsEnabled());   // an → aus, aus → an
+      refreshTipBtn();
+      hideTip();
+    });
+    headBtns.appendChild(tipBtn);
     var minBtn = el("button", "background:none;border:none;color:#9aa7b6;font-size:1.4rem;line-height:.6;cursor:pointer;padding:0 6px", "–");
     minBtn.type = "button";
     minBtn.title = "Minimieren";
@@ -614,7 +639,7 @@
     renderIncoming();   // falls schon vor mount ein Handshake ankam
 
     panelEl.appendChild(el("p", "margin:0 0 10px;color:#9aa7b6",
-      "Triff andere SBKIM-Knoten im gemeinsamen Raum — server-los, direkt aus deinem Browser. Lass diesen Tab offen, damit du erreichbar bleibst."));
+      "Triff andere SBKIM-Knoten im gemeinsamen Raum — server-los, direkt aus deinem Browser. Du kannst dieses Fenster schließen und normal weiterarbeiten; nur die App-Seite selbst offen lassen, damit du erreichbar bleibst."));
 
     var row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
     var connectBtn = el("button", bs, "🌐 Mit dem Knotennetz verbinden"); connectBtn.type = "button";
@@ -851,7 +876,7 @@
         if (res.created) appendOut("✓ Identität erzeugt: " + res.nodeId + "\n");
         else appendOut("Identität vorhanden: " + res.nodeId + "\n");
         appendOut("✓ Du bist im Raum — deine Visitenkarte hängt, du lauschst.\n");
-        appendOut("  Lass diesen Tab offen — eine geschlossene Seite ist nicht erreichbar.");
+        appendOut("  Dieses Fenster darfst du schließen und weiterarbeiten — nur die App-Seite offen lassen (eine ganz geschlossene Seite ist nicht erreichbar).");
       } else {
         appendOut("✗ " + (res.reason || "Verbinden fehlgeschlagen.") +
           (cfg.createIdentity ? "\n(Bei Netz-/Modell-Fehler: Verbindung prüfen und nochmal.)" : ""));
@@ -866,7 +891,7 @@
     startModelProgress("→ Hefte deine Visitenkarte in den gemeinsamen Raum …");
     r.announce().then(function (res) {
       stopModelProgress(); if (outEl) outEl.textContent = "";
-      if (res.ok) appendOut("✓ Du bist im Raum (nodeId " + res.nodeId + "). Lass den Tab offen.");
+      if (res.ok) appendOut("✓ Du bist im Raum (nodeId " + res.nodeId + "). Fenster darf zu — nur die App-Seite offen lassen.");
       else appendOut("✗ " + (res.reason || "Anmelden fehlgeschlagen."));
     }).catch(function (e) { stopModelProgress(); setOut("✗ Anmelden fehlgeschlagen: " + (e && e.message ? e.message : e)); });
   }
@@ -1310,7 +1335,7 @@
     r.enableAnswering().then(function (res) {
       if (res && res.ok) {
         if (answerBtn) answerBtn.textContent = "💬 Antworten: an";
-        if (outEl) outEl.textContent = "💬 Antworten AN — dein Knoten beantwortet jetzt Fragen anderer Knoten mit den Top-Treffern seiner Bedeutungs-Suche (nur Titel). Tab offen lassen.";
+        if (outEl) outEl.textContent = "💬 Antworten AN — dein Knoten beantwortet jetzt Fragen anderer Knoten mit den Top-Treffern seiner Bedeutungs-Suche (nur Titel). App-Seite offen lassen (Fenster darf zu).";
       } else {
         if (outEl) outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Antworten konnte nicht eingeschaltet werden.");
       }
