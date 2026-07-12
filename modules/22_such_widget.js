@@ -64,6 +64,8 @@
   var LS_KEY_LAST = "sbkim_search_widget_lastsearch"; // letzte Suche (Frage+Treffer), Reload-Schutz
   var LS_KEY_VIEW = "sbkim_search_widget_view"; // Anzeige-Sicht {mode,relatedOnly,kiRelated} (verbunden/verwandt)
   var LS_KEY_RERANK = "sbkim_search_widget_reranker"; // A16: gelerntes Sortier-Modell (Token/Source→Gewicht), aus 📌-Merkliste
+  var LS_KEY_FEEDBACK = "sbkim_search_widget_feedback"; // A16 Phase B: Treffer-Bewertungen (key→{rating gut/okay/nein})
+  var LS_KEY_PENDING = "sbkim_search_widget_feedback_pending"; // A16 Phase B: geöffnete, noch nicht bewertete Treffer
 
   // Frei wählbare Web-Suchmaschinen für den Internet-Neuer-Tab-Weg (Klaus
   // 2026-06-21: DuckDuckGo ODER eine andere). Query wird angehängt (URL-encoded).
@@ -531,12 +533,25 @@
 
   function onViewportChange() { clampPositionIntoView(); }
 
+  // A16 Phase B: kommt der Nutzer nach dem Seiten-Besuch in den Tab zurück und es gibt
+  // noch offene (geöffnete, unbewertete) Treffer → die Bewertungs-Zeilen frisch zeichnen.
+  function onTabReturn() {
+    try { if (pendingCount() > 0) refreshFeedbackViews(); } catch (_e) { /* fail-soft */ }
+  }
+
   function attachViewportListener() {
     if (viewportListenerAttached) return;
     if (!global || typeof global.addEventListener !== "function") return;
     try {
       global.addEventListener("resize", onViewportChange);
       global.addEventListener("orientationchange", onViewportChange);
+      global.addEventListener("focus", onTabReturn);
+      var doc = global.document;
+      if (doc && typeof doc.addEventListener === "function") {
+        doc.addEventListener("visibilitychange", function () {
+          if (!doc.hidden) onTabReturn();
+        });
+      }
       viewportListenerAttached = true;
     } catch (_e) { /* fail-soft — ohne Listener bleibt nur die statische Position */ }
   }
@@ -924,6 +939,32 @@
       "  line-height: 1.3;",
       "  margin-top: 0.12rem;",
       "}",
+      // A16 Phase B — Bewertungs-Zeile am Treffer („Hat's getroffen? 👍 🙂 👎").
+      "#" + WIDGET_ID + " .sbkim-sw-feedback {",
+      "  display: flex;",
+      "  flex-wrap: wrap;",
+      "  align-items: center;",
+      "  gap: 0.3rem;",
+      "  margin-top: 0.3rem;",
+      "}",
+      "#" + WIDGET_ID + " .sbkim-sw-feedback-q {",
+      "  font-size: 0.68rem;",
+      "  color: rgba(245, 245, 255, 0.7);",
+      "  margin-right: 0.15rem;",
+      "}",
+      "#" + WIDGET_ID + " .sbkim-sw-feedback-btn {",
+      "  cursor: pointer;",
+      "  font-size: 0.68rem;",
+      "  padding: 0.12rem 0.4rem;",
+      "  background: rgba(255, 255, 255, 0.06);",
+      "  border: 1px solid rgba(255, 255, 255, 0.16);",
+      "  border-radius: 7px;",
+      "  color: rgba(245, 245, 255, 0.88);",
+      "}",
+      "#" + WIDGET_ID + " .sbkim-sw-feedback-btn:hover { background: rgba(255, 255, 255, 0.14); }",
+      "#" + WIDGET_ID + " .sbkim-sw-fb-gut:hover { border-color: rgba(120, 220, 140, 0.7); }",
+      "#" + WIDGET_ID + " .sbkim-sw-fb-nein:hover { border-color: rgba(230, 120, 120, 0.7); }",
+      "#" + WIDGET_ID + " .sbkim-sw-feedback-change { opacity: 0.75; }",
       "#" + WIDGET_ID + " .sbkim-sw-more {",
       "  width: 100%;",
       "  box-sizing: border-box;",
@@ -3243,6 +3284,11 @@
         reasonEl.textContent = t.begruendung;
         el.appendChild(reasonEl);
       }
+      // A16 Phase B: hat der Nutzer diese Seite geöffnet (oder schon bewertet)? →
+      // Bewertungs-Zeile direkt an der Trefferzeile (ohne Detail-Karte öffnen zu müssen).
+      if (isPending(detailItemForRow) || feedbackRatingOf(detailItemForRow)) {
+        el.appendChild(makeFeedbackRow(doc, detailItemForRow));
+      }
       resultsEl.appendChild(el);
     }
 
@@ -3485,25 +3531,52 @@
     return out;
   }
 
-  // REIN: aus der Merkliste ein Modell {tokens, sources, n} lernen. Jeder gemerkte
-  // Treffer erhöht die Gewichte seiner (distinkten) Tokens + seiner Quelle um 1.
-  function computeRerankerModel(merkliste) {
+  // Ein gewichtetes Beispiel (Titel/Text/Quelle) ins Modell verrechnen. Positives
+  // Gewicht zieht später hoch, negatives runter (Phase B: „passt nicht").
+  function accumulateExample(model, titel, text, source, weight) {
+    if (!isFinite(weight) || weight === 0) return;
+    model.n++;
+    var toks = rerankTokenize((titel || "") + " " + (text || ""));
+    for (var t = 0; t < toks.length; t++) {
+      model.tokens[toks[t]] = (model.tokens[toks[t]] || 0) + weight;
+    }
+    var src = source || "app";
+    model.sources[src] = (model.sources[src] || 0) + weight;
+  }
+
+  // Note-Stufe → Gewicht (Phase B, Klaus 2026-07-12): „sehr gut" zieht stärker als
+  // „okay"; „nein" ist das Negativ-Signal (zieht runter).
+  function feedbackWeight(rating) {
+    if (rating === "gut") return 2;
+    if (rating === "okay") return 1;
+    if (rating === "nein") return -2;
+    return 0;
+  }
+
+  // REIN: aus Merkliste (+ optional Bewertungen) ein Modell {tokens, sources, n} lernen.
+  // Merkliste: jeder gemerkte Treffer = positives Beispiel (Gewicht +1). Bewertungen
+  // (feedback, Map key→{rating,titel,text,source}): gestuftes Gewicht via feedbackWeight.
+  // Gewichte dürfen negativ werden (Phase B). Backward-kompatibel: feedback optional.
+  function computeRerankerModel(merkliste, feedback) {
     var model = { v: RERANK_MODEL_VERSION, tokens: {}, sources: {}, n: 0 };
-    if (!merkliste || typeof merkliste !== "object") return model;
-    for (var q in merkliste) {
-      if (!Object.prototype.hasOwnProperty.call(merkliste, q)) continue;
-      var arr = merkliste[q];
-      if (!Array.isArray(arr)) continue;
-      for (var i = 0; i < arr.length; i++) {
-        var it = arr[i];
-        if (!it || typeof it !== "object") continue;
-        model.n++;
-        var toks = rerankTokenize((it.titel || "") + " " + (it.text || ""));
-        for (var t = 0; t < toks.length; t++) {
-          model.tokens[toks[t]] = (model.tokens[toks[t]] || 0) + 1;
+    if (merkliste && typeof merkliste === "object") {
+      for (var q in merkliste) {
+        if (!Object.prototype.hasOwnProperty.call(merkliste, q)) continue;
+        var arr = merkliste[q];
+        if (!Array.isArray(arr)) continue;
+        for (var i = 0; i < arr.length; i++) {
+          var it = arr[i];
+          if (it && typeof it === "object") accumulateExample(model, it.titel, it.text, it.source, 1);
         }
-        var src = it.source || "app";
-        model.sources[src] = (model.sources[src] || 0) + 1;
+      }
+    }
+    if (feedback && typeof feedback === "object") {
+      for (var k in feedback) {
+        if (!Object.prototype.hasOwnProperty.call(feedback, k)) continue;
+        var fb = feedback[k];
+        if (fb && typeof fb === "object") {
+          accumulateExample(model, fb.titel, fb.text, fb.source, feedbackWeight(fb.rating));
+        }
       }
     }
     return model;
@@ -3523,9 +3596,108 @@
     try { lsSet(LS_KEY_RERANK, JSON.stringify(model || {})); } catch (_e) { /* fail-soft */ }
   }
 
-  // Nach JEDER Merkliste-Änderung neu lernen (add/remove/clear). Fail-soft.
+  // ---- A16 Phase B: Treffer-Bewertung (👍 sehr gut · 🙂 okay · 👎 nein) ----
+  // Klaus 2026-07-12: nach der Gegenprüfung (Seite geöffnet, angeschaut) bewertet der
+  // Nutzer an GENAU diesem Treffer, wie gut er war. „nein" ist das Negativ-Signal.
+  // Nur Text/Link/Note (KEIN PII, kein Protokoll) — wie die Merkliste.
+
+  function loadFeedback() {
+    var raw = lsGet(LS_KEY_FEEDBACK);
+    if (!raw) return {};
+    try {
+      var o = JSON.parse(raw);
+      return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+    } catch (_e) { return {}; }
+  }
+
+  function saveFeedback(obj) {
+    try { lsSet(LS_KEY_FEEDBACK, JSON.stringify(obj || {})); } catch (_e) { /* fail-soft */ }
+  }
+
+  function feedbackKeyOf(item) {
+    return String((item && (item.url || item.titel || item.label)) || "");
+  }
+
+  function feedbackRatingOf(item) {
+    var fb = loadFeedback()[feedbackKeyOf(item)];
+    return (fb && fb.rating) ? fb.rating : null;
+  }
+
+  function feedbackCount() {
+    var f = loadFeedback(), n = 0;
+    for (var k in f) { if (Object.prototype.hasOwnProperty.call(f, k)) n++; }
+    return n;
+  }
+
+  // Bewertung ablegen (rating: "gut" | "okay" | "nein"), aus der Warteliste nehmen,
+  // Modell neu lernen. Fail-soft.
+  function recordFeedback(item, rating) {
+    if (!item || (rating !== "gut" && rating !== "okay" && rating !== "nein")) return;
+    var key = feedbackKeyOf(item);
+    if (!key) return;
+    var f = loadFeedback();
+    f[key] = {
+      rating: rating,
+      titel: String(item.titel || item.label || item.url || "").slice(0, 300),
+      text: item.text ? String(item.text).slice(0, 600) : null,
+      source: item.source || "app",
+      at: Date.now(),
+    };
+    saveFeedback(f);
+    clearPending(key);
+    retrainReranker();
+  }
+
+  // Warteliste: Treffer, deren Seite geöffnet wurde und die noch keine Note haben.
+  // Persistiert, damit die Bewertungs-Zeile den Tab-Wechsel/Reload übersteht.
+  function loadPending() {
+    var raw = lsGet(LS_KEY_PENDING);
+    if (!raw) return {};
+    try {
+      var o = JSON.parse(raw);
+      return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+    } catch (_e) { return {}; }
+  }
+
+  function savePending(obj) {
+    try { lsSet(LS_KEY_PENDING, JSON.stringify(obj || {})); } catch (_e) { /* fail-soft */ }
+  }
+
+  function markPending(item) {
+    if (!item) return;
+    var key = feedbackKeyOf(item);
+    if (!key) return;
+    if (feedbackRatingOf(item)) return; // schon bewertet → keine Rückfrage mehr
+    var p = loadPending();
+    p[key] = {
+      titel: String(item.titel || item.label || item.url || "").slice(0, 300),
+      text: item.text ? String(item.text).slice(0, 600) : null,
+      source: item.source || "app",
+      url: item.url ? String(item.url) : null,
+      at: Date.now(),
+    };
+    savePending(p);
+  }
+
+  function clearPending(key) {
+    var p = loadPending();
+    if (p[key]) { delete p[key]; savePending(p); }
+  }
+
+  function isPending(item) {
+    var p = loadPending();
+    return !!p[feedbackKeyOf(item)];
+  }
+
+  function pendingCount() {
+    var p = loadPending(), n = 0;
+    for (var k in p) { if (Object.prototype.hasOwnProperty.call(p, k)) n++; }
+    return n;
+  }
+
+  // Nach JEDER Änderung an Merkliste ODER Bewertungen neu lernen. Fail-soft.
   function retrainReranker() {
-    var model = computeRerankerModel(loadMerkliste());
+    var model = computeRerankerModel(loadMerkliste(), loadFeedback());
     saveRerankerModel(model);
     return model;
   }
@@ -3537,41 +3709,44 @@
     return !(hasTok || hasSrc);
   }
 
-  function maxWeight(map) {
+  // Größtes |Gewicht| einer Map (Modell kann jetzt negative Gewichte tragen).
+  function maxAbsWeight(map) {
     var mx = 0;
     if (!map || typeof map !== "object") return 0;
     for (var k in map) {
       if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
       var w = map[k];
-      if (typeof w === "number" && isFinite(w) && w > mx) mx = w;
+      if (typeof w === "number" && isFinite(w) && Math.abs(w) > mx) mx = Math.abs(w);
     }
     return mx;
   }
 
-  // Boost b ∈ [0,1] für EINEN Treffer aus dem gelernten Modell. Token-Anteil
-  // saturierend (ein paar starke Tokens genügen, nichts explodiert), Quell-Anteil
-  // normiert. Fail-soft: kaputte Gewichte / fehlende Felder → 0.
-  function rerankBoostFor(t, model, tokMax, srcMax) {
+  // Boost b ∈ [−1,1] für EINEN Treffer aus dem gelernten Modell. Vorzeichen-tragend:
+  // positiv zieht hoch (Merken/„sehr gut"), negativ zieht runter („nein"). Token- und
+  // Quell-Anteil je saturierend normiert (nichts explodiert). Fail-soft: kaputte
+  // Gewichte / fehlende Felder → 0.
+  function rerankBoostFor(t, model, tokScale, srcScale) {
     var bTok = 0;
-    if (tokMax > 0) {
+    if (tokScale > 0) {
       var toks = rerankTokenize(
         (t && (t.label || t.titel) || "") + " " + (t && (t.snippet || t.text) || ""));
       var sum = 0;
       for (var i = 0; i < toks.length; i++) {
         var w = model.tokens[toks[i]];
-        if (typeof w === "number" && isFinite(w) && w > 0) sum += w;
+        if (typeof w === "number" && isFinite(w)) sum += w;
       }
-      // saturierend: sum == tokMax → 0.5; sum ≫ tokMax → gegen 1.
-      bTok = sum > 0 ? (sum / (sum + tokMax)) : 0;
+      // saturierend & vorzeichen-tragend: |sum| == tokScale → ±0.5; |sum| ≫ scale → ±1.
+      bTok = sum !== 0 ? (sum / (Math.abs(sum) + tokScale)) : 0;
     }
     var bSrc = 0;
-    if (srcMax > 0 && t) {
+    if (srcScale > 0 && t) {
       var sw = model.sources[t.source || "app"];
-      if (typeof sw === "number" && isFinite(sw) && sw > 0) bSrc = sw / srcMax;
+      if (typeof sw === "number" && isFinite(sw) && sw !== 0) bSrc = sw / (Math.abs(sw) + srcScale);
     }
     var b = RERANK_TOKEN_WEIGHT * bTok + RERANK_SOURCE_WEIGHT * bSrc;
-    if (!isFinite(b) || b < 0) b = 0;
+    if (!isFinite(b)) b = 0;
     if (b > 1) b = 1;
+    if (b < -1) b = -1;
     return b;
   }
 
@@ -3586,11 +3761,11 @@
     if (list.length < 2) return list;
     var model = (opts.model !== undefined) ? opts.model : loadRerankerModel();
     if (rerankerIsEmpty(model)) return list;
-    var tokMax = maxWeight(model.tokens || {});
-    var srcMax = maxWeight(model.sources || {});
+    var tokScale = maxAbsWeight(model.tokens || {});
+    var srcScale = maxAbsWeight(model.sources || {});
     var decorated = list.map(function (t, i) {
       var b = 0;
-      try { b = rerankBoostFor(t, model, tokMax, srcMax); }
+      try { b = rerankBoostFor(t, model, tokScale, srcScale); }
       catch (_e) { b = 0; } // fail-soft je Treffer
       return { t: t, i: i, key: i - b * RERANK_NUDGE_STRENGTH, b: b };
     });
@@ -3628,6 +3803,69 @@
     wrap.appendChild(pin);
     wrap._input = input;
     return wrap;
+  }
+
+  // A16 Phase B — nach dem Re-Render die Bewertungs-Zeilen frisch zeichnen (Detail-
+  // Karte offen? Trefferliste?). Wird nach einer Note UND bei Rückkehr zum Tab gerufen.
+  function refreshFeedbackViews() {
+    if (detailOverlayOpen) renderDetailOverlay();
+    if (lastRenderRes) renderResults(lastRenderRes);
+  }
+
+  // Bewertungs-Zeile für EINEN Treffer (Klaus 2026-07-12, „nach dem Seiten-Öffnen"):
+  // „Hat's getroffen? 👍 sehr gut · 🙂 okay · 👎 nein". Schon bewertet → Note + „ändern".
+  // Reine Anzeige/Lern-Eingabe; stopPropagation, damit Drag/Detail nicht mitspringen.
+  function makeFeedbackRow(doc, item) {
+    var row = doc.createElement("div");
+    row.className = "sbkim-sw-feedback";
+    row.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
+    row.addEventListener("click", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
+    var rated = feedbackRatingOf(item);
+    var label = doc.createElement("span");
+    label.className = "sbkim-sw-feedback-q";
+    var STUFEN = [
+      { rating: "gut", txt: "👍 sehr gut" },
+      { rating: "okay", txt: "🙂 okay" },
+      { rating: "nein", txt: "👎 nein" },
+    ];
+    if (rated) {
+      var noteTxt = { gut: "👍 sehr gut", okay: "🙂 okay", nein: "👎 nein" }[rated] || rated;
+      label.textContent = "Bewertet: " + noteTxt;
+      row.appendChild(label);
+      var changeBtn = doc.createElement("button");
+      changeBtn.type = "button";
+      changeBtn.className = "sbkim-sw-feedback-btn sbkim-sw-feedback-change";
+      changeBtn.textContent = "ändern";
+      changeBtn.setAttribute("title", "Bewertung ändern");
+      changeBtn.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
+      changeBtn.addEventListener("click", function (ev) {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        markPending(item);          // wieder offen für eine neue Note
+        refreshFeedbackViews();
+      });
+      row.appendChild(changeBtn);
+      return row;
+    }
+    label.textContent = "Hat's getroffen?";
+    row.appendChild(label);
+    STUFEN.forEach(function (s) {
+      var b = doc.createElement("button");
+      b.type = "button";
+      b.className = "sbkim-sw-feedback-btn sbkim-sw-fb-" + s.rating;
+      b.textContent = s.txt;
+      b.setAttribute("title", "Treffer-Qualität: " + s.txt + " — die App lernt daraus");
+      b.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
+      b.addEventListener("click", function (ev) {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        recordFeedback(item, s.rating);
+        setHint("Danke — die App lernt aus deiner Bewertung.");
+        refreshFeedbackViews();
+      });
+      row.appendChild(b);
+    });
+    return row;
   }
 
   function updateMerkBtn() {
@@ -3750,8 +3988,19 @@
         if (ev && ev.preventDefault) ev.preventDefault();
         if (ev && ev.stopPropagation) ev.stopPropagation();
         openUrl(item.url);
+        // A16 Phase B: Seite geöffnet → nach der Gegenprüfung soll HIER an diesem
+        // Treffer die Bewertungs-Zeile stehen (Klaus 2026-07-12). Sofort einblenden,
+        // damit sie beim Zurückkommen schon da ist.
+        markPending(item);
+        renderDetailOverlay();
       });
       detailOverlayEl.appendChild(openBtn);
+    }
+
+    // A16 Phase B: Bewertungs-Zeile — erscheint, sobald die Seite geöffnet wurde
+    // (oder schon bewertet ist). „Hat's getroffen? 👍 🙂 👎".
+    if (isPending(item) || feedbackRatingOf(item)) {
+      detailOverlayEl.appendChild(makeFeedbackRow(doc, item));
     }
   }
 
@@ -4569,8 +4818,12 @@
     // A16 — Lernender Sortierer (display-only, on-device, fail-soft).
     learnedRerank: learnedRerank,           // reine Funktion (treffer, {model?}) — headless testbar
     computeRerankerModel: computeRerankerModel, // rein: Merkliste → Modell
-    trainReranker: retrainReranker,         // aus der 📌-Merkliste neu lernen (+ speichern)
+    trainReranker: retrainReranker,         // aus Merkliste + Bewertungen neu lernen (+ speichern)
     getRerankerModel: loadRerankerModel,    // aktuelles gelerntes Modell (oder null)
+    // A16 Phase B — Treffer-Bewertung (👍 gut · 🙂 okay · 👎 nein), on-device.
+    recordFeedback: recordFeedback,         // (item, "gut"|"okay"|"nein") → lernen
+    getFeedback: function () { try { return JSON.parse(JSON.stringify(loadFeedback())); } catch (_e) { return {}; } },
+    feedbackWeight: feedbackWeight,         // reine Note→Gewicht-Abbildung (headless testbar)
     buildPrompt: buildAiPrompt,
     parseAiAnswer: parseAiAnswer,
     parseAiSummary: extractAiSummary,
@@ -4609,6 +4862,8 @@
       get rerankerReady() { return !rerankerIsEmpty(loadRerankerModel()); },
       get rerankerTrained() { var m = loadRerankerModel(); return m ? (m.n || 0) : 0; },
       get rerankerTokens() { var m = loadRerankerModel(); return (m && m.tokens) ? Object.keys(m.tokens).length : 0; },
+      get feedbackCount() { return feedbackCount(); },
+      get pendingFeedbackCount() { return pendingCount(); },
       get hasSearxng() { return !!searxngUrl; },
       get webEngine() { return optWebEngine; },
       get aiProvider() { return optAiProvider; },
