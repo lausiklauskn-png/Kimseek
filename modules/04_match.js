@@ -1360,6 +1360,19 @@
   // vorher zu — der Richter urteilt über eine kleine Spitzenmenge.
   var HYBRID_MAX_CANDIDATES = 20;
   var MAX_VERDICT_BEGRUENDUNG_LEN = 200;
+  // Bau 04.H / B3 (Klaus „A4 Teil 2", 2026-07-11): der Richter wägt zusätzlich
+  // SICHERHEIT/KONSEQUENZ. Optionale, additive Marke pro Urteil — fail-soft:
+  // fehlt sie oder ist sie unbekannt, wird sie zu null (alte Richter/Kopien
+  // liefern sie nicht → nie ein Grund, das Urteil zu verwerfen).
+  //   "gefahr"   = thematisch nah, aber Befolgung wäre schädlich → herabstufen
+  //   "unsicher" = relevant, aber mit ernstem Vorbehalt/Risiko → markieren
+  //   "sicher"   = unbedenklich passend
+  var SICHERHEIT_WERTE = ["sicher", "unsicher", "gefahr"];
+  function normalizeSicherheit(x) {
+    if (typeof x !== "string") return null;
+    var s = x.trim().toLowerCase();
+    return SICHERHEIT_WERTE.indexOf(s) >= 0 ? s : null;
+  }
   // Klaus-Festlegung 2026-06-20 (Bau 04.D): Default-Bidirektional-Regel
   // ist STRENG — ein Paar-Match gilt erst als etabliert, wenn BEIDE
   // Seiten zustimmen. Per Parameter auf "one" (großzügig) stellbar.
@@ -1636,6 +1649,18 @@
     lines.push("unsauberem Text. Urteile streng nach inhaltlicher Passung, nicht nach Sprach-");
     lines.push("Oberfläche.");
     lines.push("");
+    lines.push("WICHTIG — Sicherheit und Konsequenz zählen mit: beurteile nicht nur, ob ein");
+    lines.push("Kandidat thematisch zur Suche passt, sondern auch, was es für den Suchenden");
+    lines.push("BEDEUTET, ihn zu befolgen. Ein Kandidat, der thematisch ähnlich ist, dessen");
+    lines.push("Befolgung aber Schaden anrichten würde (z. B. ein für Katzen giftiges Mittel");
+    lines.push("als Antwort auf die Frage nach einem Zecken-/Flohmittel für Hund UND Katze),");
+    lines.push("ist KEIN guter Treffer: setze passt=false und begründe die Gefahr kurz.");
+    lines.push("Vergib zusätzlich das Feld sicherheit:");
+    lines.push("  \"gefahr\"   = thematisch nah, aber die Befolgung wäre schädlich/gefährlich,");
+    lines.push("  \"unsicher\" = relevant, aber mit ernstem Vorbehalt/Risiko (Hinweis nötig),");
+    lines.push("  \"sicher\"   = unbedenklich passend.");
+    lines.push("Erfinde keine Gefahr, wo keine ist — kennzeichne nur echte Konsequenzen.");
+    lines.push("");
     lines.push("Suchender Knoten" + (queryLabel ? " (" + queryLabel + ")" : "") + " sucht:");
     lines.push(queryText);
     lines.push("");
@@ -1653,7 +1678,7 @@
     lines.push("Reihenfolge wie die Kandidaten oben:");
     lines.push("{");
     lines.push("  \"verdicts\": [");
-    lines.push("    { \"passt\": true|false, \"score\": <number in [0,1]>, \"begruendung\": <string, max " + MAX_VERDICT_BEGRUENDUNG_LEN + " Zeichen> }");
+    lines.push("    { \"passt\": true|false, \"score\": <number in [0,1]>, \"sicherheit\": \"sicher\"|\"unsicher\"|\"gefahr\", \"begruendung\": <string, max " + MAX_VERDICT_BEGRUENDUNG_LEN + " Zeichen> }");
     lines.push("  ]");
     lines.push("}");
     return lines.join("\n");
@@ -1696,12 +1721,17 @@
       if (begruendung.length > MAX_VERDICT_BEGRUENDUNG_LEN) {
         return { result: null, reason: "verdicts[" + i + "].begruendung > " + MAX_VERDICT_BEGRUENDUNG_LEN + " Zeichen" };
       }
+      // Optional (Bau 04.H / B3): Sicherheits-Marke. Fail-soft — fehlt sie
+      // oder ist sie unbekannt, wird sie zu null; NIE ein Grund, das Urteil
+      // zu verwerfen (Rückwärts-Kompatibilität: alte Richter liefern sie nicht).
+      var sicherheit = normalizeSicherheit(v.sicherheit);
       var c = candidates[i];
       out.push({
         label: c.label,
         anchorId: (typeof c.anchorId === "string") ? c.anchorId : null,
         passt: v.passt,
         score: score,
+        sicherheit: sicherheit,
         begruendung: begruendung,
         cosine: (typeof c.cosine === "number" && isFinite(c.cosine)) ? c.cosine : null,
       });
@@ -1872,6 +1902,7 @@
           anchorId: v.anchorId,
           passt: v.passt,
           score: Number(v.score.toFixed(4)),
+          sicherheit: v.sicherheit,
           begruendung: v.begruendung,
         };
       }),
@@ -2012,6 +2043,7 @@
         anchorId: r.anchorId,
         passt: (typeof v.passt === "boolean") ? v.passt : null,
         judgeScore: (typeof v.score === "number") ? v.score : null,
+        sicherheit: (typeof v.sicherheit === "string") ? v.sicherheit : null,
         begruendung: (typeof v.begruendung === "string") ? v.begruendung : null,
       };
       if (typeof r.bm25 === "number") merged.bm25 = r.bm25;
@@ -2089,6 +2121,9 @@
       hybridQueryLocalNote: "queryLocal(text,k,{hybrid:true}) fusioniert BM25+Vektor via RRF; Default (ohne hybrid) unverändert Cosinus. PROVIDER_MIN_MATCH + Andock-Riegel unberührt.",
       // Bau 04.G queryLocalJudged (Strang A2) Read-Anker.
       queryLocalJudgedNote: "queryLocalJudged(text,k,{hybrid?,apiKey?,provider?,euOnly?}) = Vorfilter (queryLocal) + Richter (hybridMatch, opt-in/BYOK, fail-soft). Sortiert Finalisten um (passt zuerst), gatet nichts, Modul 05 unberührt.",
+      // Bau 04.H / B3 (A4 Teil 2) Sicherheits-/Konsequenz-Marke Read-Anker.
+      sicherheitWerte: SICHERHEIT_WERTE.slice(),
+      sicherheitNote: "Richter (hybridMatch/queryLocalJudged) wägt Sicherheit/Konsequenz mit: thematisch nah aber schädlich -> passt=false + sicherheit='gefahr' (herabstufen); relevant mit Vorbehalt -> sicherheit='unsicher' (markieren); sonst 'sicher'/null. Optional+fail-soft (fehlt->null), REINE Anzeige/Urteil, PROVIDER_MIN_MATCH + Andock-Riegel unberührt. Nur Such-Flächen.",
       // Bau 04.H Query-Expansion / Multi-Query (Strang A4) Read-Anker.
       multiMaxVariants: MULTI_MAX_VARIANTS,
       queryLocalMultiNote: "expandQuerySimple(text,{synonyms?,maxVariants?}) erzeugt gratis/offline Varianten (Original zuerst); queryLocalMulti(queries,k,{hybrid?,...}) sucht mit jeder + verschmilzt via RRF. Rein additiv, PROVIDER_MIN_MATCH + Andock-Riegel unberührt; LLM-Varianten-Generator wäre späterer opt-in-Aufsatz.",
