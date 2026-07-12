@@ -143,6 +143,7 @@
   var aiAutoBtnEl = null;      // „⚡ Automatisch"-Knopf (B2-Probe, Claude)
   var aiProgressEl = null;     // Fortschrittsbalken während des Web-Such-Aufrufs
   var internetCheckboxEl = null; // Referenz auf die Internet-Bereichs-Checkbox
+  var internetHintEl = null;   // Klartext-Hinweis am Internet-Bereich (Web ≠ Knotennetz)
   var vaultSectionEl = null;   // Tresor-Bedien-Sektion (🔐)
   var vaultSectionOpen = false;// Tresor-Sektion ein-/ausgeklappt
   var fullscreenBtnEl = null;  // ⛶ Vollbild-Umschalter
@@ -260,7 +261,7 @@
   var areas = {
     app:      { enabled: true,  label: "App" },
     knoten:   { enabled: true,  label: "Knoten" },
-    internet: { enabled: false, label: "Netz" },
+    internet: { enabled: false, label: "Internet" },
   };
   // KI-Richter an/aus. DEFAULT AUS (gratis: reine semantische Cosinus-Suche „über
   // die Bedeutung"). AN nur sinnvoll mit BYOK-Schlüssel — dann urteilt die KI
@@ -706,6 +707,13 @@
       "  padding: 0.1rem 0.45rem;",
       "}",
       "#" + WIDGET_ID + " .sbkim-sw-check input { margin: 0; cursor: pointer; accent-color: #6EE7D3; }",
+      "#" + WIDGET_ID + " .sbkim-sw-internet-hint {",
+      "  display: none;",
+      "  margin-top: 0.35rem;",
+      "  font-size: 0.64rem;",
+      "  line-height: 1.35;",
+      "  color: rgba(245, 245, 255, 0.62);",
+      "}",
       "#" + WIDGET_ID + " .sbkim-sw-searxng {",
       "  width: 100%;",
       "  box-sizing: border-box;",
@@ -1169,6 +1177,7 @@
 
   function updateSearxngFieldVisibility() {
     var show = areas.internet.enabled ? "block" : "none";
+    if (internetHintEl) internetHintEl.style.display = show;
     if (searxngFieldEl) searxngFieldEl.style.display = show;
     if (engineSelectEl) engineSelectEl.style.display = show;
     if (aiSelectEl) aiSelectEl.style.display = show;
@@ -1308,6 +1317,17 @@
       })(areaIds[ai]);
     }
     panelEl.appendChild(areaRowEl);
+
+    // Klartext-Hinweis zum Internet-Bereich (nur sichtbar, wenn er angekreuzt ist).
+    // Klaus 2026-07-12: klar benennen, dass „Internet" die Web-Suche meint (NICHT das
+    // Knotennetz — das ist der 🌐-Knopf „Mit dem Knotennetz verbinden"), und was mit
+    // bzw. ohne SearXNG-URL passiert.
+    internetHintEl = doc.createElement("div");
+    internetHintEl.className = "sbkim-sw-internet-hint";
+    internetHintEl.textContent =
+      "Internet = Suche im Web (nicht das Knotennetz). Mit SearXNG-URL: Web-Treffer direkt hier. " +
+      "Ohne: die gewählte Suchmaschine öffnet in einem neuen Tab.";
+    panelEl.appendChild(internetHintEl);
 
     // Anzeige-Sicht-Zeile (Brief „Wählen"-UI): „verbunden" (grob, alle erreichbaren)
     // ↔ „verwandt" (genau, nach zentriertem Cosinus sortiert). REINE ANZEIGE — der
@@ -2957,7 +2977,7 @@
     });
   }
 
-  var SOURCE_LABELS = { app: "App", knoten: "Knoten", internet: "Netz" };
+  var SOURCE_LABELS = { app: "App", knoten: "Knoten", internet: "Internet" };
 
   // Neuen Tab öffnen — explizit, weil ein <a target="_blank"> auf Touch durch
   // setPointerCapture verschluckt werden kann. window.open im click-Handler
@@ -3047,7 +3067,7 @@
       if (r.begruendung) lines.push("    → " + r.begruendung);
       lines.push("");
     }
-    if (res && res.webLink && res.webLink.url) lines.push("↗ Im Netz weitersuchen: " + res.webLink.url);
+    if (res && res.webLink && res.webLink.url) lines.push("↗ Im Internet weitersuchen: " + res.webLink.url);
     return lines.join("\n").replace(/\n+$/, "\n");
   }
 
@@ -3151,7 +3171,7 @@
       "leer": res.reason || "Keine Treffer.",
       "semantisch": treffer.length
         ? "Semantische Suche" + (richterOn && !optApiKey ? " (Richter aus — kein Schlüssel)." : ".")
-        : (res.webLink ? "Im Netz weitersuchen:" : "Keine Treffer."),
+        : (res.webLink ? "Im Internet weitersuchen:" : "Keine Treffer."),
       "richter": "KI-Richter-Urteil." + (res.reason ? " (Hinweis: " + res.reason + ")" : ""),
     };
     setHint(modeHint[res.mode] || "");
