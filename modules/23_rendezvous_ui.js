@@ -128,14 +128,44 @@
     savePending(list);
     return list;
   }
+  // Entdoppeln (Klaus 2026-07-12, Screenshot: dieselbe Frage x-fach im Kasten):
+  // Der Briefkasten-Eintrag wird nach (Frage-Text, Ziel-Name) zusammengefasst —
+  // nicht nach der jedes Mal neuen qid. Normalisiert (trim + lowercase). So wird
+  // aus 13 identischen „offen: Erfrischungsgetränk … an Mixarium“ EIN Eintrag mit
+  // Zähler. Reiner Anzeige-/Speicher-Fix — kein Protokoll, kein PII.
+  function normQ(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
+  function dedupeKey(text, toName) { return normQ(text) + "→" + normQ(toName); }
   function recordOpenQuestion(res, card, text) {
     // Nur wenn die Frage wirklich offen blieb (Timeout mit qid). Byte-gleich
     // no-op, wenn Modul 23 noch kein pending/qid liefert (ältere Fassung).
     if (!res || res.ok || !res.qid) return;
-    var list = loadPending().filter(function (e) { return e.qid !== res.qid; });
-    list.unshift({ qid: res.qid, toNodeId: (card && card.nodeId) || null,
-                   toName: (card && card.nodeName) || "Knoten", text: String(text || ""),
-                   ts: Date.now(), status: "offen", seen: true });
+    var toName = (card && card.nodeName) || "Knoten";
+    var toNodeId = (card && card.nodeId) || null;
+    // Partner-Link je Eintrag (Klaus 2026-07-12): Adresse beim Schreiben mit
+    // ablegen, damit der Briefkasten später „↗ App öffnen“ zeigen kann.
+    var endpoint = (card && card.spore && typeof card.spore.endpoint === "string") ? card.spore.endpoint : null;
+    var key = dedupeKey(text, toName);
+    var list = loadPending();
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].status !== "beantwortet" && dedupeKey(list[i].text, list[i].toName) === key) { idx = i; break; }
+    }
+    var now = Date.now();
+    if (idx >= 0) {
+      // Bestehende offene Gruppe aktualisieren: neueste qid gilt, Zähler +1,
+      // lastTs frisch, wieder ganz nach oben. Endpoint nur ergänzen, nie leeren.
+      var e = list[idx];
+      e.qid = res.qid;
+      e.toNodeId = toNodeId || e.toNodeId;
+      e.endpoint = endpoint || e.endpoint || null;
+      e.tries = (typeof e.tries === "number" ? e.tries : 1) + 1;
+      e.ts = now;
+      e.status = "offen"; e.seen = true;
+      list.splice(idx, 1); list.unshift(e);
+    } else {
+      list.unshift({ qid: res.qid, toNodeId: toNodeId, toName: toName, endpoint: endpoint,
+                     text: String(text || ""), ts: now, tries: 1, status: "offen", seen: true });
+    }
     savePending(list);
     updateMailBadge();
   }
@@ -188,8 +218,8 @@
       return Promise.resolve(r.askNode(e.toNodeId, e.text)).then(function (res) {
         var cur = loadPending();
         var upd = (res && res.ok)
-          ? { qid: res.qid || e.qid, toNodeId: e.toNodeId, toName: e.toName, text: e.text, ts: Date.now(), status: "beantwortet", seen: false, answer: { fromName: res.fromNodeId || e.toName, results: Array.isArray(res.results) ? res.results : [] } }
-          : { qid: (res && res.qid) || e.qid, toNodeId: e.toNodeId, toName: e.toName, text: e.text, ts: Date.now(), status: "offen", seen: true };
+          ? { qid: res.qid || e.qid, toNodeId: e.toNodeId, toName: e.toName, endpoint: e.endpoint || null, tries: e.tries || 1, text: e.text, ts: Date.now(), status: "beantwortet", seen: false, answer: { fromName: res.fromNodeId || e.toName, results: Array.isArray(res.results) ? res.results : [] } }
+          : { qid: (res && res.qid) || e.qid, toNodeId: e.toNodeId, toName: e.toName, endpoint: e.endpoint || null, tries: (typeof e.tries === "number" ? e.tries : 1) + 1, text: e.text, ts: Date.now(), status: "offen", seen: true };
         var idx = -1;
         for (var i = 0; i < cur.length; i++) { if (cur[i].qid === e.qid) { idx = i; break; } }
         if (idx >= 0) cur[idx] = upd; else cur.unshift(upd);
@@ -198,26 +228,103 @@
     })).then(function () { updateMailBadge(); renderMail(); });
   }
   function clearMail() { savePending([]); updateMailBadge(); renderMail(); }
-  // Briefkasten-Ansicht: offene / abgelaufene / beantwortete Fragen. Markiert
-  // Beantwortetes als gesehen (seen:true) → Zähler runter; beim nächsten
-  // pruneMail werden gesehene Beantwortete automatisch entfernt (erledigt → weg).
-  function renderMail() {
-    if (!outEl) return;
-    var list = pruneMail();
-    if (!list.length) { outEl.textContent = "📬 Keine offenen Fragen. Stelle über „❓ Fragen“ eine Frage an einen Knoten — bleibt er stumm (z.B. gerade zu), bleibt die Frage hier offen und ich hole die Antwort automatisch beim nächsten Öffnen."; return; }
+  // „vor N min“ aus einem Zeitstempel (lastTs). Fail-soft ohne Stempel.
+  function timeAgo(ts) {
+    if (typeof ts !== "number" || !isFinite(ts)) return "";
+    var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (s < 60) return "gerade eben";
+    var m = Math.floor(s / 60);
+    if (m < 60) return "vor " + m + " min";
+    var h = Math.floor(m / 60);
+    if (h < 24) return "vor " + h + " h";
+    return "vor " + Math.floor(h / 24) + " d";
+  }
+  // 🗑 je Eintrag (Klaus 2026-07-12): genau diese Gruppe (qid) aus dem lokalen
+  // Briefkasten entfernen — nicht nur „alles leeren“. Reine Speicher-/Anzeige.
+  function deleteMailEntry(qid) {
+    savePending(loadPending().filter(function (e) { return e.qid !== qid; }));
+    updateMailBadge();
+    renderMail();
+  }
+  // Text-Fassung (fail-soft, wenn kein cardsEl da ist — z.B. sehr alter Mount).
+  function mailLines(list) {
     var lines = ["📬 Dein Briefkasten:"];
     list.forEach(function (e) {
+      var meta = (e.tries > 1 ? "×" + e.tries + " · " : "") + (timeAgo(e.ts) ? "zuletzt " + timeAgo(e.ts) : "");
       if (e.status === "beantwortet" && e.answer) {
         var res = (e.answer.results || []).map(function (r) { return r.label; }).filter(Boolean);
-        lines.push("✓ „" + e.text + "“ → " + (e.answer.fromName || e.toName) + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)"));
+        lines.push("✓ „" + e.text + "“ → " + (e.answer.fromName || e.toName) + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)") + (meta ? "  (" + meta + ")" : ""));
       } else if (e.status === "abgelaufen") {
-        lines.push("🕗 abgelaufen: „" + e.text + "“ an " + e.toName + " — keiner hat rechtzeitig geantwortet. „🔄 nochmal fragen“ stellt sie neu.");
+        lines.push("🕗 abgelaufen: „" + e.text + "“ an " + e.toName + (meta ? "  (" + meta + ")" : "") + " — „🔄 nochmal fragen“ stellt sie neu.");
       } else {
-        lines.push("⏳ offen: „" + e.text + "“ an " + e.toName + " — warte auf Antwort (hole ich beim Öffnen ab).");
+        lines.push("⏳ offen: „" + e.text + "“ an " + e.toName + (meta ? "  (" + meta + ")" : "") + " — warte auf Antwort (hole ich beim Öffnen ab).");
       }
     });
-    outEl.textContent = lines.join("\n");
-    // Beantwortetes als gesehen markieren (Zähler runter).
+    return lines.join("\n");
+  }
+  // Briefkasten-Ansicht: offene / abgelaufene / beantwortete Fragen — je Gruppe
+  // EINE Karte mit „×N · zuletzt vor …“, einem 🗑-Knopf (nur diese Gruppe) und —
+  // falls die Adresse bekannt ist — „↗ App öffnen“ (Selbst-Suche ohne Warten).
+  // Markiert Beantwortetes als gesehen (seen:true) → Zähler runter; beim nächsten
+  // pruneMail werden gesehene Beantwortete automatisch entfernt (erledigt → weg).
+  function renderMail() {
+    var list = pruneMail();
+    if (cardsEl) clear(cardsEl);
+    if (!list.length) {
+      if (outEl) outEl.textContent = "📬 Keine offenen Fragen. Stelle über „🔎 Antwort holen“ eine Frage an einen Knoten — bleibt er stumm (z.B. gerade zu), bleibt die Frage hier offen und ich hole die Antwort automatisch beim nächsten Öffnen.";
+      return;
+    }
+    // Fail-soft ohne cardsEl: Text-Fassung in outEl (wie zuvor).
+    if (!cardsEl) { if (outEl) outEl.textContent = mailLines(list); markMailSeen(); return; }
+    if (outEl) outEl.textContent = "";
+    var ac = accent();
+    var bs = "padding:4px 9px;border-radius:8px;border:1px solid " + ac + ";" +
+      "background:rgba(110,231,211,.12);color:#eef2f8;cursor:pointer;font:inherit;font-size:.72rem";
+    cardsEl.appendChild(el("div", "color:#9ff7df;margin-bottom:6px", "📬 Dein Briefkasten (" + list.length + "):"));
+    list.forEach(function (e) {
+      var rowEl = el("div", "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0;padding:6px 8px;" +
+        "border:1px solid var(--line,#2a3340);border-radius:8px");
+      var info = el("span", "flex:1;min-width:150px");
+      if (e.status === "beantwortet" && e.answer) {
+        var res = (e.answer.results || []).map(function (r) { return r.label; }).filter(Boolean);
+        info.appendChild(el("b", null, "✓ „" + e.text + "“"));
+        info.appendChild(el("br"));
+        info.appendChild(el("span", "font-size:.72rem;color:#cfe0ff",
+          (e.answer.fromName || e.toName) + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)")));
+      } else if (e.status === "abgelaufen") {
+        info.appendChild(el("b", null, "🕗 „" + e.text + "“"));
+        info.appendChild(el("br"));
+        info.appendChild(el("span", "font-size:.72rem;color:#9aa7b6",
+          "an " + e.toName + " — keiner hat rechtzeitig geantwortet. „🔄 nochmal fragen“ stellt sie neu."));
+      } else {
+        info.appendChild(el("b", null, "⏳ „" + e.text + "“"));
+        info.appendChild(el("br"));
+        info.appendChild(el("span", "font-size:.72rem;color:#9aa7b6",
+          "an " + e.toName + " — warte auf Antwort (hole ich beim Öffnen ab)."));
+      }
+      // Zähler + Zeit: „×N · zuletzt vor …“ (nur was da ist).
+      var metaTxt = (e.tries > 1 ? "×" + e.tries + " · " : "") + (timeAgo(e.ts) ? "zuletzt " + timeAgo(e.ts) : "");
+      if (metaTxt) { info.appendChild(el("br")); info.appendChild(el("span", "font-size:.68rem;color:#9aa7b6", metaTxt)); }
+      rowEl.appendChild(info);
+      // ↗ App öffnen (falls Adresse bekannt) — Selbst-Suche ohne Warten.
+      var ep = (typeof e.endpoint === "string") ? e.endpoint.trim() : "";
+      if (/^https?:\/\//i.test(ep)) {
+        var link = el("a", bs + ";text-decoration:none;display:inline-block", "↗ App öffnen");
+        link.href = ep; link.target = "_blank"; link.rel = "noopener noreferrer";
+        link.title = "Öffnet die App/PWA von " + e.toName + " in einem neuen Tab — dort selbst suchen, ohne auf eine Antwort zu warten.";
+        rowEl.appendChild(link);
+      }
+      // 🗑 nur diese Gruppe entfernen.
+      var del = el("button", bs, "🗑"); del.type = "button";
+      del.title = "Diesen Eintrag aus deinem Briefkasten entfernen.";
+      (function (qid) { del.addEventListener("click", function () { deleteMailEntry(qid); }); })(e.qid);
+      rowEl.appendChild(del);
+      cardsEl.appendChild(rowEl);
+    });
+    markMailSeen();
+  }
+  // Beantwortetes als gesehen markieren (Zähler runter).
+  function markMailSeen() {
     var cur = loadPending().map(function (e) {
       if (e.status === "beantwortet" && !e.seen) { var c = {}; for (var k in e) { if (Object.prototype.hasOwnProperty.call(e, k)) c[k] = e[k]; } c.seen = true; return c; }
       return e;
