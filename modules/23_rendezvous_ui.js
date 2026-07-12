@@ -230,6 +230,11 @@
   var askInputEl = null, answerBtn = null;   // Bau 23.B — Frage-Feld + Antwortrecht-Schalter
   var voiceBtnEl = null, activeRecognizer = null;   // 🎤 Spracheingabe (Modul 21)
   var answerFetchBtn = null;   // A11 — „🔎 Antwort holen": bestpassenden Knoten automatisch fragen
+  // A11-Last-Schoner (Klaus 2026-07-11, Tablet friert bei Mehrfach-Klick ein):
+  // eine laufende Auto-Suche sperrt weitere Klicks, und dieselbe Frage wird nicht
+  // sofort erneut eingebettet (Embedding ist teuer). Rein lokal, fail-soft.
+  var autoAskBusy = false, lastAutoAskText = null, lastAutoAskTs = 0;
+  var AUTOASK_COOLDOWN_MS = 4000;
   var relatedOnly = false;   // „nur verwandte zeigen" (reine Anzeige, Default aus)
   var lastCards = [];        // letzte gelesene Karten (für Re-Render beim Umschalten)
 
@@ -722,6 +727,16 @@
     if (typeof r.askNode !== "function") { setOut("Modul 23 mit Bau 23.B (askNode) nicht geladen."); return; }
     var text = askInputEl ? String(askInputEl.value || "").trim() : "";
     if (!text) { setOut("🔎 Zuerst oben eine Frage eintippen, dann „🔎 Antwort holen“."); return; }
+    // Last-Schoner: laufende Suche sperrt weitere Klicks (kein Stapeln auf dem
+    // einkernigen Browser-Tab); identische Frage im Cooldown nicht neu einbetten.
+    if (autoAskBusy) { setOut("🔎 Suche läuft schon — einen Moment …"); return; }
+    var nowMs = Date.now();
+    if (text === lastAutoAskText && (nowMs - lastAutoAskTs) < AUTOASK_COOLDOWN_MS) {
+      setOut("🔎 Diese Frage lief gerade — kurz warten, dann erneut."); return;
+    }
+    autoAskBusy = true; lastAutoAskText = text; lastAutoAskTs = nowMs;
+    if (answerFetchBtn) answerFetchBtn.disabled = true;
+    function autoAskDone() { autoAskBusy = false; if (answerFetchBtn) answerFetchBtn.disabled = false; }
     // Fail-soft: älteres Modul 23 ohne A11 → wie „Wer ist im Raum?" (manuell fragen).
     var canRank = typeof r.rankCardsByQuery === "function";
     setOut("🔎 Suche im Raum den Knoten, der am besten zu deiner Frage passt …");
@@ -746,7 +761,7 @@
         }
         askWithRetry(r, best, text, true, ranked.slice(1));
       });
-    }).catch(function (e) { stopModelProgress(); setOut("✗ " + (e && e.message ? e.message : e)); });
+    }).then(autoAskDone, function (e) { autoAskDone(); stopModelProgress(); setOut("✗ " + (e && e.message ? e.message : e)); });
   }
 
   function renderCards(cards, opts) {
@@ -817,6 +832,17 @@
       qb.title = "Optional: stellt GEZIELT diesem Knoten die Frage aus dem Feld oben (Handauswahl). Normalerweise reicht „🔎 Antwort holen“ — das wählt den bestpassenden Knoten automatisch.";
       qb.addEventListener("click", function () { onAsk(c); });
       rowEl.appendChild(qb);
+      // Partner-Link (Klaus 2026-07-12): direkt die App/PWA des Knotens öffnen,
+      // um selbst dort zu suchen — ohne auf die Cross-Knoten-Antwort zu warten
+      // (die server-los nur kommt, wenn der andere Tab offen+wach ist). Adresse
+      // aus der Spore (endpoint). Fail-soft: ohne endpoint kein Link.
+      var ep = (c.spore && typeof c.spore.endpoint === "string") ? c.spore.endpoint.trim() : "";
+      if (/^https?:\/\//i.test(ep)) {
+        var link = el("a", bs + ";margin-left:6px;font-size:.72rem;text-decoration:none;display:inline-block", "↗ App öffnen");
+        link.href = ep; link.target = "_blank"; link.rel = "noopener noreferrer";
+        link.title = "Öffnet die App/PWA dieses Knotens in einem neuen Tab — dort kannst du selbst suchen, ohne auf eine Antwort zu warten.";
+        rowEl.appendChild(link);
+      }
       cardsEl.appendChild(rowEl);
     });
   }
@@ -1068,8 +1094,11 @@
       return;
     }
     recordOpenQuestion(res, card, text);   // A12: Frage bleibt „offen"
-    outEl.textContent = "📭 " + (res && res.reason ? res.reason : "Keine Antwort.") +
-      "\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen).";
+    var epHint = (card && card.spore && typeof card.spore.endpoint === "string" && /^https?:\/\//i.test(card.spore.endpoint))
+      ? "\nOder hol dir die Antwort selbst: „↗ App öffnen“ in der Karte oben öffnet " + (card.nodeName || "den Knoten") + " direkt — dort suchen, ohne zu warten."
+      : "";
+    outEl.textContent = "📭 " + (res && res.reason ? res.reason : "Keine Antwort — der Knoten ist gerade nicht offen/wach.") +
+      "\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen)." + epHint;
   }
 
   function askWithRetry(r, card, text, allowRetry, fallbackCards) {
