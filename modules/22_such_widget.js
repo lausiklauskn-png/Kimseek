@@ -63,6 +63,7 @@
   var LS_KEY_MERK = "sbkim_search_widget_merkliste"; // Merkliste (Text+Link, gruppiert)
   var LS_KEY_LAST = "sbkim_search_widget_lastsearch"; // letzte Suche (Frage+Treffer), Reload-Schutz
   var LS_KEY_VIEW = "sbkim_search_widget_view"; // Anzeige-Sicht {mode,relatedOnly,kiRelated} (verbunden/verwandt)
+  var LS_KEY_RERANK = "sbkim_search_widget_reranker"; // A16: gelerntes Sortier-Modell (Token/Source→Gewicht), aus 📌-Merkliste
 
   // Frei wählbare Web-Suchmaschinen für den Internet-Neuer-Tab-Weg (Klaus
   // 2026-06-21: DuckDuckGo ODER eine andere). Query wird angehängt (URL-encoded).
@@ -3085,8 +3086,12 @@
   // sortiert sind.
   function displayTreffer(res) {
     var kiByKey = kiRelatedActive() ? kiRelatedState.byKey : null;
-    return rankView((res && res.treffer) || [], lastQueryVec,
+    var ranked = rankView((res && res.treffer) || [], lastQueryVec,
       { mode: viewMode, relatedOnly: viewRelatedOnly, kiByKey: kiByKey });
+    // A16: die explizite Verwandt-/KI-Sortierung bleibt unberührt; nur die grobe
+    // „verbunden"-Standardsicht bekommt den gelernten Nudge (reine Anzeige, fail-soft).
+    if (viewMode === "verwandt") return ranked;
+    return learnedRerank(ranked, {});
   }
 
   function renderResults(res) {
@@ -3412,6 +3417,7 @@
     });
     saveMerkliste(m);
     updateMerkBtn();
+    retrainReranker(); // A16: aus dem neuen positiven Beispiel lernen (fail-soft)
   }
 
   function removeMerk(groupKey, key) {
@@ -3421,6 +3427,7 @@
     if (m[groupKey].length === 0) delete m[groupKey];
     saveMerkliste(m);
     updateMerkBtn();
+    retrainReranker(); // A16: Modell nach Entfernen neu berechnen (fail-soft)
   }
 
   function toggleMerk(groupKey, item) {
@@ -3431,11 +3438,175 @@
   function clearMerkliste() {
     lsRemove(LS_KEY_MERK);
     updateMerkBtn();
+    retrainReranker(); // A16: leere Merkliste → leeres Modell (Nudge zurück auf Identität)
     if (merkOverlayOpen) renderMerkOverlay();
   }
 
   function getMerkliste() {
     try { return JSON.parse(JSON.stringify(loadMerkliste())); } catch (_e) { return {}; }
+  }
+
+  // ---- A16: Lernender Sortierer (display-only Re-Ranker) ----
+  // Klaus 2026-07-11: das mitgelieferte Sortierprogramm soll mit jedem 📌-Merken
+  // BESSER werden (Geist der BLP-„selbstlernenden Kalkulation", aber auf die SUCHE).
+  // Ein kleiner, gelernter Nudge auf die grobe „verbunden"-Sicht — REINE ANZEIGE:
+  //   • kreuzt NIE den 0.80-Andock-Riegel (Modul 05), ändert NIE die Mitgliedschaft
+  //   • entfernt NICHTS, fügt NICHTS hinzu — nur eine stabile, BEGRENZTE Umsortierung
+  //   • Kalt-Start (kein Modell / keine Gewichte) = Identität (Eingabe-Reihenfolge)
+  //   • on-device, KEIN PII (nur Token/Source/Gewicht, wie die Merkliste selbst)
+  // Lern-Signal (positiv): die 📌-Merkliste. Ein gemerkter Treffer {titel/text/source}
+  // ist ein positives Beispiel. Modul 04 bleibt UNBERÜHRT (kein PROTOCOL_VERSION-Bump).
+
+  var RERANK_MODEL_VERSION = 1;
+  var RERANK_NUDGE_STRENGTH = 3;   // max. Positionen, die ein Volltreffer aufsteigt
+  var RERANK_TOKEN_WEIGHT = 0.7;   // Anteil Token-Übereinstimmung am Boost
+  var RERANK_SOURCE_WEIGHT = 0.3;  // Anteil Quelle-Übereinstimmung am Boost
+  var RERANK_MAX_TOKENS = 24;      // pro Treffer/Merk-Item betrachtete Tokens
+  var RERANK_STOPWORDS = {
+    und: 1, oder: 1, der: 1, die: 1, das: 1, ein: 1, eine: 1, mit: 1, für: 1,
+    von: 1, aus: 1, den: 1, dem: 1, the: 1, and: 1, for: 1, with: 1, from: 1,
+  };
+
+  // Einfacher Wortzerleger (klein, ohne PII): kleinschreiben, an Nicht-Buchstaben
+  // trennen, Kurz-/Stoppwörter raus, deduplizieren, deckeln.
+  function rerankTokenize(text) {
+    var out = [];
+    if (!text) return out;
+    var raw = String(text).toLowerCase().split(/[^0-9a-zà-ÿäöüß]+/);
+    var seen = {};
+    for (var i = 0; i < raw.length && out.length < RERANK_MAX_TOKENS; i++) {
+      var tok = raw[i];
+      if (!tok || tok.length < 3) continue;
+      if (RERANK_STOPWORDS[tok]) continue;
+      if (seen[tok]) continue;
+      seen[tok] = 1;
+      out.push(tok);
+    }
+    return out;
+  }
+
+  // REIN: aus der Merkliste ein Modell {tokens, sources, n} lernen. Jeder gemerkte
+  // Treffer erhöht die Gewichte seiner (distinkten) Tokens + seiner Quelle um 1.
+  function computeRerankerModel(merkliste) {
+    var model = { v: RERANK_MODEL_VERSION, tokens: {}, sources: {}, n: 0 };
+    if (!merkliste || typeof merkliste !== "object") return model;
+    for (var q in merkliste) {
+      if (!Object.prototype.hasOwnProperty.call(merkliste, q)) continue;
+      var arr = merkliste[q];
+      if (!Array.isArray(arr)) continue;
+      for (var i = 0; i < arr.length; i++) {
+        var it = arr[i];
+        if (!it || typeof it !== "object") continue;
+        model.n++;
+        var toks = rerankTokenize((it.titel || "") + " " + (it.text || ""));
+        for (var t = 0; t < toks.length; t++) {
+          model.tokens[toks[t]] = (model.tokens[toks[t]] || 0) + 1;
+        }
+        var src = it.source || "app";
+        model.sources[src] = (model.sources[src] || 0) + 1;
+      }
+    }
+    return model;
+  }
+
+  function loadRerankerModel() {
+    var raw = lsGet(LS_KEY_RERANK);
+    if (!raw) return null;
+    try {
+      var m = JSON.parse(raw);
+      if (!m || typeof m !== "object" || !m.tokens || !m.sources) return null;
+      return m;
+    } catch (_e) { return null; }
+  }
+
+  function saveRerankerModel(model) {
+    try { lsSet(LS_KEY_RERANK, JSON.stringify(model || {})); } catch (_e) { /* fail-soft */ }
+  }
+
+  // Nach JEDER Merkliste-Änderung neu lernen (add/remove/clear). Fail-soft.
+  function retrainReranker() {
+    var model = computeRerankerModel(loadMerkliste());
+    saveRerankerModel(model);
+    return model;
+  }
+
+  function rerankerIsEmpty(model) {
+    if (!model || typeof model !== "object") return true;
+    var hasTok = model.tokens && typeof model.tokens === "object" && Object.keys(model.tokens).length > 0;
+    var hasSrc = model.sources && typeof model.sources === "object" && Object.keys(model.sources).length > 0;
+    return !(hasTok || hasSrc);
+  }
+
+  function maxWeight(map) {
+    var mx = 0;
+    if (!map || typeof map !== "object") return 0;
+    for (var k in map) {
+      if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+      var w = map[k];
+      if (typeof w === "number" && isFinite(w) && w > mx) mx = w;
+    }
+    return mx;
+  }
+
+  // Boost b ∈ [0,1] für EINEN Treffer aus dem gelernten Modell. Token-Anteil
+  // saturierend (ein paar starke Tokens genügen, nichts explodiert), Quell-Anteil
+  // normiert. Fail-soft: kaputte Gewichte / fehlende Felder → 0.
+  function rerankBoostFor(t, model, tokMax, srcMax) {
+    var bTok = 0;
+    if (tokMax > 0) {
+      var toks = rerankTokenize(
+        (t && (t.label || t.titel) || "") + " " + (t && (t.snippet || t.text) || ""));
+      var sum = 0;
+      for (var i = 0; i < toks.length; i++) {
+        var w = model.tokens[toks[i]];
+        if (typeof w === "number" && isFinite(w) && w > 0) sum += w;
+      }
+      // saturierend: sum == tokMax → 0.5; sum ≫ tokMax → gegen 1.
+      bTok = sum > 0 ? (sum / (sum + tokMax)) : 0;
+    }
+    var bSrc = 0;
+    if (srcMax > 0 && t) {
+      var sw = model.sources[t.source || "app"];
+      if (typeof sw === "number" && isFinite(sw) && sw > 0) bSrc = sw / srcMax;
+    }
+    var b = RERANK_TOKEN_WEIGHT * bTok + RERANK_SOURCE_WEIGHT * bSrc;
+    if (!isFinite(b) || b < 0) b = 0;
+    if (b > 1) b = 1;
+    return b;
+  }
+
+  // REINE Funktion (headless testbar): stabile, BEGRENZTE Umsortierung nach gelerntem
+  // Modell. opts.model optional (Default: aus localStorage). Kalt-Start / leeres /
+  // kaputtes Modell → Eingabeliste UNVERÄNDERT (gleiche Reihenfolge, gleiche Objekte).
+  // Ein Volltreffer steigt höchstens RERANK_NUDGE_STRENGTH Plätze — Nudge, kein Umbruch.
+  // Entfernt NIE etwas, kreuzt NIE den 0.80-Riegel (reine Anzeige).
+  function learnedRerank(treffer, opts) {
+    opts = opts || {};
+    var list = Array.isArray(treffer) ? treffer.slice() : [];
+    if (list.length < 2) return list;
+    var model = (opts.model !== undefined) ? opts.model : loadRerankerModel();
+    if (rerankerIsEmpty(model)) return list;
+    var tokMax = maxWeight(model.tokens || {});
+    var srcMax = maxWeight(model.sources || {});
+    var decorated = list.map(function (t, i) {
+      var b = 0;
+      try { b = rerankBoostFor(t, model, tokMax, srcMax); }
+      catch (_e) { b = 0; } // fail-soft je Treffer
+      return { t: t, i: i, key: i - b * RERANK_NUDGE_STRENGTH, b: b };
+    });
+    decorated.sort(function (a, b) {
+      if (a.key !== b.key) return a.key - b.key;
+      return a.i - b.i; // stabil bei Gleichstand
+    });
+    var moved = false;
+    var out = decorated.map(function (d, pos) {
+      if (d.i !== pos) moved = true;
+      if (d.b <= 0) return d.t; // unveränderter Treffer → Objekt-Identität erhalten
+      var copy = shallowCopyTreffer(d.t);
+      copy.rerankBoost = d.b;   // Diagnose (reine Anzeige)
+      return copy;
+    });
+    return moved ? out : list; // nichts bewegt → Original-Liste (Identität)
   }
 
   // Kleiner Haken pro Treffer-Zeile (📌). Klick togglet Merken; stopPropagation,
@@ -4395,6 +4566,11 @@
     },
     getKiRelated: function () { return viewKiRelated; },
     rankView: rankView,   // reine Funktion (treffer, queryVec, {mode,relatedOnly,kiByKey}) — headless testbar
+    // A16 — Lernender Sortierer (display-only, on-device, fail-soft).
+    learnedRerank: learnedRerank,           // reine Funktion (treffer, {model?}) — headless testbar
+    computeRerankerModel: computeRerankerModel, // rein: Merkliste → Modell
+    trainReranker: retrainReranker,         // aus der 📌-Merkliste neu lernen (+ speichern)
+    getRerankerModel: loadRerankerModel,    // aktuelles gelerntes Modell (oder null)
     buildPrompt: buildAiPrompt,
     parseAiAnswer: parseAiAnswer,
     parseAiSummary: extractAiSummary,
@@ -4429,6 +4605,10 @@
       get kiRelated() { return viewKiRelated; },
       get kiRelatedActive() { return kiRelatedActive(); },
       get hasQueryVec() { return !!lastQueryVec; },
+      // A16 — Diagnose des gelernten Sortierers (reine Anzeige).
+      get rerankerReady() { return !rerankerIsEmpty(loadRerankerModel()); },
+      get rerankerTrained() { var m = loadRerankerModel(); return m ? (m.n || 0) : 0; },
+      get rerankerTokens() { var m = loadRerankerModel(); return (m && m.tokens) ? Object.keys(m.tokens).length : 0; },
       get hasSearxng() { return !!searxngUrl; },
       get webEngine() { return optWebEngine; },
       get aiProvider() { return optAiProvider; },
