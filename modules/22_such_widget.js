@@ -259,9 +259,9 @@
   //              nutzer-ausgelöste Eigen-Anfrage ins Netz, daher KEIN Widerspruch
   //              zum Empfangsmodus (CLAUDE.md § Vier-Schichten-Lesart Schicht 2).
   var areas = {
-    app:      { enabled: true,  label: "App" },
-    knoten:   { enabled: true,  label: "Knoten" },
-    internet: { enabled: false, label: "Internet" },
+    app:      { enabled: true,  label: "App",      hidden: false },
+    knoten:   { enabled: true,  label: "Knoten",   hidden: false },
+    internet: { enabled: false, label: "Internet", hidden: false },
   };
   // KI-Richter an/aus. DEFAULT AUS (gratis: reine semantische Cosinus-Suche „über
   // die Bedeutung"). AN nur sinnvoll mit BYOK-Schlüssel — dann urteilt die KI
@@ -1307,6 +1307,7 @@
     var areaIds = ["app", "knoten", "internet"];
     for (var ai = 0; ai < areaIds.length; ai++) {
       (function (id) {
+        if (areas[id].hidden) return; // ausgeblendeter Bereich → keine Checkbox
         var box = makeCheckbox(doc, "sbkim-sw-area-" + id, areas[id].label, areas[id].enabled,
           function (checked) {
             areas[id].enabled = checked;
@@ -1812,6 +1813,33 @@
     if (areas.knoten.enabled) out.push("knoten");
     if (areas.internet.enabled) out.push("internet");
     return out;
+  }
+
+  // Hat ein Bereich hier überhaupt eine Quelle? (Klaus 2026-07-12: „Knoten findet
+  // nichts" — der Bereich war angehakt, aber die App hatte ihn nicht bestückt.)
+  //   app     = eigener Korpus (localCorpus) oder ein Korpus-Builder gesetzt
+  //   knoten  = Knoten-Korpus, ein Builder ODER der Live-Pfad (queryNode)
+  //   internet= immer (Web-Fallback / neuer Tab)
+  function areaHasSource(id) {
+    if (id === "app") {
+      return (Array.isArray(localCorpus) && localCorpus.length > 0) || typeof corpusPreparer === "function";
+    }
+    if (id === "knoten") {
+      return (Array.isArray(nodeCorpus) && nodeCorpus.length > 0) ||
+        typeof nodeCorpusPreparer === "function" || typeof queryNodeFn === "function";
+    }
+    return true; // internet
+  }
+
+  // Ehrlicher Hinweis: welche ANGEHAKTEN Bereiche sind hier gar nicht bestückt?
+  // Gibt einen deutschen Satz zurück (oder null), damit ein leeres Ergebnis nicht
+  // fälschlich als „nichts gefunden" erscheint (fail-soft, reine Anzeige).
+  function unpopulatedAreaNote() {
+    var reasons = [];
+    if (areas.app.enabled && !areaHasSource("app")) reasons.push("„" + areas.app.label + "“ hat hier keinen eigenen Inhalt");
+    if (areas.knoten.enabled && !areaHasSource("knoten")) reasons.push("„" + areas.knoten.label + "“ ist hier nicht mit dem Netz verbunden");
+    if (!reasons.length) return null;
+    return "Hier nicht bestückt: " + reasons.join("; ") + ". (Dieser Bereich findet in dieser App nichts — kein Fehler.)";
   }
 
   function engineById(id) {
@@ -2916,7 +2944,9 @@
 
       if (top.length === 0) {
         lastSearchMode = webLink ? "semantisch" : "leer";
-        return { mode: lastSearchMode, treffer: [], webLink: webLink };
+        // Ehrlicher Hinweis, wenn ein angehakter Bereich hier gar nicht bestückt ist
+        // (statt stumm „Keine Treffer.") — Klaus 2026-07-12.
+        return { mode: lastSearchMode, treffer: [], webLink: webLink, reason: unpopulatedAreaNote() || undefined };
       }
       if (richterOn && optApiKey && match && typeof match.hybridMatch === "function") {
         return richterRerank(query, top).then(function (judged) {
@@ -4742,6 +4772,14 @@
     if (options.areas && typeof options.areas === "object") {
       ["app", "knoten", "internet"].forEach(function (id) {
         if (typeof options.areas[id] === "boolean") areas[id].enabled = options.areas[id];
+      });
+    }
+    // Bereiche ganz ausblenden (Klaus 2026-07-12): eine App ohne eigenen Inhalt
+    // (z.B. Kimseek) blendet „App" aus, statt einen leeren Bereich anzubieten.
+    // Ausgeblendete Bereiche werden auch zwangs-deaktiviert (keine Suche darüber).
+    if (options.areasHidden && typeof options.areasHidden === "object") {
+      ["app", "knoten", "internet"].forEach(function (id) {
+        if (options.areasHidden[id]) { areas[id].hidden = true; areas[id].enabled = false; }
       });
     }
 

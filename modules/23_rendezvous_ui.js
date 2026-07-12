@@ -8,7 +8,7 @@
  * öffnet:
  *   🌐 Mit dem Knotennetz verbinden   → SbkimRendezvous.connectAndAnnounce({createIdentity})
  *   👥 Wer ist im Raum?         → SbkimRendezvous.discover() → Karten + 🤝 Andocken
- *   📌 Nur neu anmelden         → SbkimRendezvous.announce()
+ *   🙋 Nur neu anmelden         → SbkimRendezvous.announce()
  *   🧬 nur verwandte: aus/an    → REINE Anzeige-Filter über die Karten-Liste
  *                                 (zentrierter Verwandtschafts-Score aus Modul 23,
  *                                 gatet NICHTS; Default aus). Pro Karte zeigt ein
@@ -100,7 +100,7 @@
   //  · OPEN_TTL_MS      : nach dieser Zeit gilt eine unbeantwortete Frage als
   //    „abgelaufen" (die Relais-Frage ist dann weg — realistisch am Lookback-
   //    Fenster orientiert, mit Reserve). Abgelaufene nerven nicht (kein Zähler),
-  //    lassen sich aber per „🔄 nochmal fragen" neu stellen.
+  //    lassen sich aber per „🔁 nochmal fragen" neu stellen.
   //  · Beantwortete + gesehene werden automatisch entfernt (erledigt → weg).
   // WICHTIG: die RELAIS-Aufbewahrung regelt das Relais selbst — der Client kann
   // Relais-Ereignisse nicht zuverlässig löschen. Hier wird nur der LOKALE
@@ -212,7 +212,7 @@
     if (!r || typeof r.askNode !== "function") { setOut("Modul 23 mit Bau 23.B (askNode) nicht geladen."); return; }
     var toAsk = pruneMail().filter(function (e) { return e.status === "offen" || e.status === "abgelaufen"; });
     if (!toAsk.length) { renderMail(); return; }
-    if (outEl) outEl.textContent = "🔄 Stelle " + toAsk.length + " offene Frage(n) erneut …";
+    if (outEl) outEl.textContent = "🔁 Stelle " + toAsk.length + " offene Frage(n) erneut …";
     Promise.all(toAsk.map(function (e) {
       if (!e.toNodeId) return Promise.resolve();
       return Promise.resolve(r.askNode(e.toNodeId, e.text)).then(function (res) {
@@ -255,7 +255,7 @@
         var res = (e.answer.results || []).map(function (r) { return r.label; }).filter(Boolean);
         lines.push("✓ „" + e.text + "“ → " + (e.answer.fromName || e.toName) + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)") + (meta ? "  (" + meta + ")" : ""));
       } else if (e.status === "abgelaufen") {
-        lines.push("🕗 abgelaufen: „" + e.text + "“ an " + e.toName + (meta ? "  (" + meta + ")" : "") + " — „🔄 nochmal fragen“ stellt sie neu.");
+        lines.push("🕗 abgelaufen: „" + e.text + "“ an " + e.toName + (meta ? "  (" + meta + ")" : "") + " — „🔁 nochmal fragen“ stellt sie neu.");
       } else {
         lines.push("⏳ offen: „" + e.text + "“ an " + e.toName + (meta ? "  (" + meta + ")" : "") + " — warte auf Antwort (hole ich beim Öffnen ab).");
       }
@@ -295,7 +295,7 @@
         info.appendChild(el("b", null, "🕗 „" + e.text + "“"));
         info.appendChild(el("br"));
         info.appendChild(el("span", "font-size:.72rem;color:#9aa7b6",
-          "an " + e.toName + " — keiner hat rechtzeitig geantwortet. „🔄 nochmal fragen“ stellt sie neu."));
+          "an " + e.toName + " — keiner hat rechtzeitig geantwortet. „🔁 nochmal fragen“ stellt sie neu."));
       } else {
         info.appendChild(el("b", null, "⏳ „" + e.text + "“"));
         info.appendChild(el("br"));
@@ -560,10 +560,10 @@
     var row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
     var connectBtn = el("button", bs, "🌐 Mit dem Knotennetz verbinden"); connectBtn.type = "button";
     var discoverBtn = el("button", bsGhost, "👥 Wer ist im Raum?"); discoverBtn.type = "button";
-    var announceBtn = el("button", bsGhost, "📌 Nur neu anmelden"); announceBtn.type = "button";
+    var announceBtn = el("button", bsGhost, "🙋 Nur neu anmelden"); announceBtn.type = "button";
     mailBtn = el("button", bsGhost, "📬 Antworten abholen"); mailBtn.type = "button";
     mailBtn.title = "Offene Fragen: hier die Antworten abholen. Läuft auch automatisch beim Öffnen — der Zähler an der Blase zeigt ungelesene Post.";
-    reAskBtn = el("button", bsGhost + ";font-size:.74rem", "🔄 offene nochmal fragen"); reAskBtn.type = "button";
+    reAskBtn = el("button", bsGhost + ";font-size:.74rem", "🔁 offene nochmal fragen"); reAskBtn.type = "button";
     reAskBtn.title = "Alle offenen/abgelaufenen Fragen erneut stellen (neu ins Netz) — für einen jetzt wachen Antworter.";
     clearMailBtn = el("button", bsGhost + ";font-size:.74rem", "🗑 leeren"); clearMailBtn.type = "button";
     clearMailBtn.title = "Den lokalen Briefkasten leeren.";
