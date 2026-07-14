@@ -1245,7 +1245,7 @@
       try {
         activeRecognizer = speech.makeBrowserRecognizer({
           lang: lang,
-          onResult: function (t) { if (askInputEl) { askInputEl.value = t; } setVoiceHint("Erkannt: " + t + "  — jetzt einen Knoten <❓ Fragen>."); },
+          onResult: function (t) { if (askInputEl) { askInputEl.value = t; } setVoiceHint("Erkannt: " + t + "  — jetzt „🔎 Antwort holen“ drücken."); },
           onError: function (h) { setVoiceHint("🎤 " + h); },
           onEnd: function () { activeRecognizer = null; },
         });
