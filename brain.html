@@ -1,0 +1,650 @@
+<!doctype html>
+<!--
+  ╔═════════════════════════════════════════════════════════════════╗
+  ║  Kim-Brain — Company-Brain-Probeversion (Erlebnis-Beweis)       ║
+  ║  Teil von Kimseek · server-los · im Browser · BYOK · keine PII  ║
+  ║  https://github.com/lausiklauskn-png/Kimseek                    ║
+  ╚═════════════════════════════════════════════════════════════════╝
+
+  Der Fluss (siehe BRIEF „Company Brain: Probeversion"):
+    1. Einwurf   — Dateien/Ordner reinwerfen. Arbeitet an der KOPIE im
+                   Browser-Speicher (IndexedDB `kimbrain`), fasst Originale nie an.
+    2. Signieren — je Datei: SHA-256-Fingerabdruck → Text heraus (Text/PDF/E-Mail),
+                   Bilder optional via OCR (Modul 24) → Steckbrief + Bedeutungs-
+                   Vektor (Modul 03) → Katalog-Eintrag. Bereits signierte (per
+                   Hash) werden übersprungen.
+    3. Ausgabe   — aufgeräumte Ansicht mit vorgeschlagenen Gruppen (nur Vorschlag).
+    4. Suchen    — Umschalter „Namenssuche ↔ Bedeutungssuche": dieselbe Frage,
+                   links (Name) oft nichts, rechts (Bedeutung) der Treffer mit
+                   Begründung. Cosinus-Vorfilter gratis; KI-Richter (Modul 04)
+                   optional (BYOK, EU).
+
+  Ehrlichkeit: der Bedeutungs-Vektor kommt aus dem echten e5-Modell (Modul 03,
+  lädt beim ersten Lauf ~30 MB vom CDN, danach im Cache). Ohne Netz/Modell bleibt
+  die Namenssuche nutzbar; die Bedeutungssuche meldet sich ehrlich ab (fail-soft).
+  Der KI-Richter läuft NUR mit eigenem EU-Schlüssel. Kein Schlüssel im Code.
+-->
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kim-Brain — Bedeutung statt Dateiname</title>
+  <meta name="description" content="Kim-Brain — Dateien reinwerfen, signieren, sortiert ausgeben und semantisch suchen. Der direkte Vergleich Namenssuche gegen Bedeutungssuche. Server-los, im Browser.">
+  <meta name="theme-color" content="#10102A">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="icon" type="image/png" href="./icon-192.png?v=2">
+  <link rel="apple-touch-icon" href="./icon-192.png?v=2">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100dvh;
+      font-family: 'Geist', system-ui, -apple-system, Arial, sans-serif;
+      color: #F5F5FF; line-height: 1.5;
+      background:
+        radial-gradient(1100px 600px at 78% -10%, rgba(167,139,250,0.18), transparent 60%),
+        radial-gradient(900px 500px at 10% 110%, rgba(110,231,211,0.14), transparent 60%),
+        #0B0B1A;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 6vh 20px 60px; }
+    a { color: #A78BFA; }
+    .badge {
+      display: inline-flex; align-items: center; gap: .5rem;
+      font-size: .72rem; letter-spacing: .09em; text-transform: uppercase;
+      color: rgba(110,231,211,.9); border: 1px solid rgba(110,231,211,.28);
+      padding: .28rem .7rem; border-radius: 999px;
+    }
+    h1 { font-size: 1.9rem; margin: .7rem 0 .3rem; letter-spacing: -.01em; }
+    .sub { color: rgba(245,245,255,.62); margin: 0 0 1.6rem; font-size: 1rem; }
+    .card {
+      background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.09);
+      border-radius: 16px; padding: 20px; margin: 16px 0;
+    }
+    .card h2 { font-size: 1.02rem; margin: 0 0 .5rem; display:flex; align-items:center; gap:.5rem; }
+    .card .hint { color: rgba(245,245,255,.5); font-size: .85rem; margin: .2rem 0 .9rem; }
+    /* Einwurf */
+    #drop {
+      border: 1.6px dashed rgba(167,139,250,.5); border-radius: 14px;
+      padding: 34px 18px; text-align: center; cursor: pointer;
+      transition: background .15s, border-color .15s; background: rgba(167,139,250,.05);
+    }
+    #drop.hot { background: rgba(167,139,250,.14); border-color: #A78BFA; }
+    #drop .big { font-size: 2.1rem; }
+    #drop .lead { font-weight: 600; margin: .4rem 0 .2rem; }
+    #drop .small { color: rgba(245,245,255,.5); font-size: .82rem; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    button, .btn {
+      font: inherit; cursor: pointer; border-radius: 10px; padding: .55rem .9rem;
+      border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06);
+      color: #F5F5FF; transition: background .15s, border-color .15s;
+    }
+    button:hover { background: rgba(255,255,255,.12); }
+    button.primary { background: linear-gradient(135deg,#A78BFA,#6EE7D3); color:#0B0B1A; border:none; font-weight:600; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    button.ghost { background: transparent; }
+    /* Fortschritt */
+    #progWrap { display: none; }
+    .barouter { height: 8px; border-radius: 6px; background: rgba(255,255,255,.09); overflow: hidden; margin: 6px 0 12px; }
+    .barinner { height: 100%; width: 0; background: linear-gradient(90deg,#A78BFA,#6EE7D3); transition: width .2s; }
+    #progList { max-height: 240px; overflow: auto; font-size: .82rem; }
+    .prow { display:flex; justify-content:space-between; gap:10px; padding:3px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+    .prow .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .prow .st { flex: none; color: rgba(245,245,255,.55); }
+    .st.ok { color:#6EE7D3; } .st.skip { color:#F5D06E; } .st.warn { color:#FCA5A5; }
+    /* Gruppen */
+    .grp { border:1px solid rgba(255,255,255,.09); border-radius:12px; padding:12px 14px; margin:10px 0; background:rgba(255,255,255,.02); }
+    .grp .gt { font-weight:600; display:flex; justify-content:space-between; gap:8px; }
+    .grp .gc { color: rgba(245,245,255,.5); font-size:.8rem; }
+    .grp ul { margin:.5rem 0 0; padding-left:1.1rem; font-size:.85rem; color:rgba(245,245,255,.78); }
+    .chip { display:inline-block; font-size:.72rem; padding:.1rem .5rem; border-radius:999px; background:rgba(255,255,255,.08); margin-left:.4rem; color:rgba(245,245,255,.6); }
+    /* Suche */
+    .toggle { display:flex; border:1px solid rgba(255,255,255,.16); border-radius:12px; overflow:hidden; margin-bottom:12px; }
+    .toggle button { flex:1; border:none; border-radius:0; background:transparent; padding:.7rem; color:rgba(245,245,255,.6); }
+    .toggle button.on { background:linear-gradient(135deg,rgba(167,139,250,.9),rgba(110,231,211,.85)); color:#0B0B1A; font-weight:600; }
+    .searchbar { display:flex; gap:8px; }
+    .searchbar input { flex:1; font:inherit; padding:.7rem .9rem; border-radius:11px; border:1px solid rgba(255,255,255,.16); background:rgba(0,0,0,.28); color:#fff; }
+    .res { border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:12px 14px; margin:10px 0; background:rgba(255,255,255,.025); }
+    .res .rt { font-weight:600; display:flex; justify-content:space-between; gap:8px; }
+    .res .score { flex:none; font-size:.78rem; color:#6EE7D3; font-variant-numeric:tabular-nums; }
+    .res .why { font-size:.85rem; color:rgba(245,245,255,.72); margin-top:.35rem; }
+    .res .snip { font-size:.8rem; color:rgba(245,245,255,.5); margin-top:.35rem; }
+    .res .open { margin-top:.5rem; }
+    .empty { color: rgba(245,245,255,.5); font-style: italic; padding: 10px 0; }
+    .counts { font-size:.82rem; color:rgba(245,245,255,.55); margin:.2rem 0 .8rem; }
+    details.ai { margin-top:12px; }
+    details.ai summary { cursor:pointer; color:rgba(245,245,255,.7); font-size:.88rem; }
+    .field { margin:.6rem 0; }
+    .field label { display:block; font-size:.8rem; color:rgba(245,245,255,.6); margin-bottom:.25rem; }
+    .field input, .field select { width:100%; font:inherit; padding:.5rem .65rem; border-radius:9px; border:1px solid rgba(255,255,255,.16); background:rgba(0,0,0,.28); color:#fff; }
+    .note { font-size:.78rem; color:rgba(245,245,255,.45); }
+    /* Modal */
+    #modal { position:fixed; inset:0; background:rgba(5,5,15,.7); display:none; align-items:center; justify-content:center; padding:20px; z-index:50; }
+    #modal .box { background:#12122A; border:1px solid rgba(255,255,255,.14); border-radius:16px; max-width:640px; width:100%; max-height:82vh; overflow:auto; padding:20px; }
+    #modal .box h3 { margin:0 0 .3rem; font-size:1.05rem; }
+    #modal pre { white-space:pre-wrap; word-break:break-word; font-size:.82rem; color:rgba(245,245,255,.82); background:rgba(0,0,0,.25); padding:12px; border-radius:10px; }
+    #modal img { max-width:100%; border-radius:10px; }
+    .modelstat { font-size:.8rem; color:rgba(245,245,255,.55); margin-top:.4rem; min-height:1.2em; }
+    footer { text-align:center; color:rgba(245,245,255,.4); font-size:.82rem; margin-top:30px; }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="badge">🧠 Kim-Brain · Probeversion</span>
+    <h1>Bedeutung statt Dateiname.</h1>
+    <p class="sub">Dateien reinwerfen → signieren → sortiert ausgeben → nach <em>Bedeutung</em> suchen.
+      Der Beweis ist der Umschalter unten: dieselbe Frage, links der Dateiname weiß nichts, rechts der Inhalt antwortet.</p>
+
+    <!-- 1 · EINWURF -->
+    <section class="card">
+      <h2>1 · Einwurf</h2>
+      <p class="hint">Arbeitet an einer Kopie im Browser-Speicher — deine Originale werden nie angefasst.</p>
+      <div id="drop">
+        <div class="big">📥</div>
+        <div class="lead">Dateien oder einen Ordner hierher ziehen</div>
+        <div class="small">oder tippen zum Auswählen · Text · PDF · E-Mail (.eml) · Bilder</div>
+      </div>
+      <div class="row">
+        <button id="pickFiles">Dateien wählen</button>
+        <button id="pickFolder">Ordner wählen</button>
+        <button id="demoBtn" class="ghost">Demo-Dateien einwerfen</button>
+        <button id="clearBtn" class="ghost" title="Nur den Browser-Katalog leeren (Originale unberührt)">Katalog leeren</button>
+      </div>
+      <input id="fileInput" type="file" multiple hidden>
+      <input id="folderInput" type="file" webkitdirectory hidden>
+      <div class="modelstat" id="catStat"></div>
+    </section>
+
+    <!-- 2 · SIGNIEREN -->
+    <section class="card" id="progWrap">
+      <h2>2 · Signieren</h2>
+      <div class="counts" id="progCount"></div>
+      <div class="barouter"><div class="barinner" id="bar"></div></div>
+      <div id="progList"></div>
+    </section>
+
+    <!-- KI (optional) -->
+    <section class="card">
+      <details class="ai">
+        <summary>⚙️ KI-Optionen (optional, EU · eigener Schlüssel) — für Bild-OCR &amp; den KI-Richter</summary>
+        <p class="note">Ohne Schlüssel läuft alles gratis lokal: Bedeutungs-Vektor + Cosinus-Suche im Browser.
+          Ein EU-Schlüssel schaltet zusätzlich Text-Erkennung aus Bildern (OCR) und ein echtes KI-Urteil in der Suche frei.
+          Der Schlüssel bleibt nur im Arbeitsspeicher (nicht gespeichert).</p>
+        <div class="field">
+          <label>KI-Anbieter (Richter &amp; ggf. OCR)</label>
+          <select id="aiProvider">
+            <option value="mistral">Mistral (EU) — empfohlen</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="gemini">Gemini (Google)</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>API-Schlüssel (BYOK, nur im RAM)</label>
+          <input id="aiKey" type="password" autocomplete="off" placeholder="sk-… / bleibt lokal">
+        </div>
+        <div class="field">
+          <label><input type="checkbox" id="euOnly" style="width:auto;margin-right:.4rem"> Nur EU-Anbieter erlauben</label>
+        </div>
+        <div class="field">
+          <label>OCR-Anbieter für Bilder</label>
+          <select id="ocrProvider">
+            <option value="mistral">Mistral OCR (EU)</option>
+            <option value="google">Google Vision (EU-Endpunkt)</option>
+          </select>
+          <p class="note">OCR nutzt denselben Schlüssel oben, wenn der Anbieter passt — sonst hier separat denkbar. Fehlt der Schlüssel, wird das Bild mit Dateiname katalogisiert (fail-soft).</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- 3 · AUSGABE -->
+    <section class="card">
+      <h2>3 · Aufgeräumte Ansicht <span class="chip">Vorschlag</span></h2>
+      <p class="hint">Nach Bedeutung gruppiert — ein Vorschlag, nichts wird verschoben.</p>
+      <div id="groups"><div class="empty">Noch nichts signiert.</div></div>
+    </section>
+
+    <!-- 4 · SUCHEN -->
+    <section class="card">
+      <h2>4 · Suchen — der Aha-Umschalter</h2>
+      <div class="toggle">
+        <button id="tName" class="on">🔤 Namenssuche</button>
+        <button id="tMean">🧠 Bedeutungssuche</button>
+      </div>
+      <div class="searchbar">
+        <input id="q" placeholder="z. B. „das schwarze Auto, neulich bearbeitet, mit Radstand …"">
+        <button id="goBtn" class="primary">Suchen</button>
+      </div>
+      <label style="display:block;margin:.7rem 0 .2rem;font-size:.84rem;color:rgba(245,245,255,.62)">
+        <input type="checkbox" id="useJudge" style="width:auto;margin-right:.4rem">
+        KI-Richter mitbeurteilen lassen (braucht Schlüssel oben) — sonst gratis Cosinus-Rangfolge
+      </label>
+      <div class="modelstat" id="searchStat"></div>
+      <div class="counts" id="counts"></div>
+      <div id="results"></div>
+    </section>
+
+    <footer>
+      Kim-Brain ist eine Probeversion in <a href="./index.html">Kimseek</a>. Server-los · deine Dateien bleiben im Browser · keine Tracker.
+    </footer>
+  </main>
+
+  <div id="modal"><div class="box">
+    <h3 id="mTitle"></h3>
+    <div id="mMeta" class="note" style="margin-bottom:.6rem"></div>
+    <div id="mBody"></div>
+    <div style="margin-top:14px;text-align:right"><button id="mClose">Schließen</button></div>
+  </div></div>
+
+  <!-- Kim-Brain-Kern (rein, getestet) + SBKIM-Kern-Module (byte-1:1-Kopien) -->
+  <script src="./assets/brain-core.js"></script>
+  <script src="./modules/03_embedding.js"></script>
+  <script src="./modules/04_match.js"></script>
+  <script src="./modules/24_ocr_eingabe.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    var C = window.KimBrainCore;
+    var $ = function (id) { return document.getElementById(id); };
+
+    // ---------------- IndexedDB (eigene Schublade `kimbrain`) ----------------
+    // Bewusst NICHT die geteilte `sbkim`-DB (geteilte-Origin-Falle): eigener
+    // DB-Name, damit Geschwister-Apps auf github.io sich nicht stören.
+    var DB_NAME = "kimbrain", STORE = "dateien", db = null;
+    function dbOpen() {
+      return new Promise(function (res, rej) {
+        if (db) return res(db);
+        var r = indexedDB.open(DB_NAME, 1);
+        r.onupgradeneeded = function () {
+          var d = r.result;
+          if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE, { keyPath: "hash" });
+        };
+        r.onsuccess = function () { db = r.result; res(db); };
+        r.onerror = function () { rej(r.error); };
+      });
+    }
+    function dbTx(mode) { return dbOpen().then(function (d) { return d.transaction(STORE, mode).objectStore(STORE); }); }
+    function dbPut(rec) { return dbTx("readwrite").then(function (s) { return new Promise(function (res, rej) { var r = s.put(rec); r.onsuccess = res; r.onerror = function () { rej(r.error); }; }); }); }
+    function dbAll() { return dbTx("readonly").then(function (s) { return new Promise(function (res, rej) { var r = s.getAll(); r.onsuccess = function () { res(r.result || []); }; r.onerror = function () { rej(r.error); }; }); }); }
+    function dbClear() { return dbTx("readwrite").then(function (s) { return new Promise(function (res, rej) { var r = s.clear(); r.onsuccess = res; r.onerror = function () { rej(r.error); }; }); }); }
+
+    // ---------------- Hashing (echte Krypto: SHA-256) ------------------------
+    function sha256Hex(buf) {
+      return crypto.subtle.digest("SHA-256", buf).then(function (h) {
+        var b = new Uint8Array(h), s = "";
+        for (var i = 0; i < b.length; i++) s += b[i].toString(16).padStart(2, "0");
+        return s;
+      });
+    }
+
+    // ---------------- Text-Extraktion je Typ --------------------------------
+    function readAsText(file) {
+      return new Promise(function (res) {
+        var fr = new FileReader();
+        fr.onload = function () { res(String(fr.result || "")); };
+        fr.onerror = function () { res(""); };
+        fr.readAsText(file);
+      });
+    }
+    function readAsArrayBuffer(file) {
+      return new Promise(function (res, rej) {
+        var fr = new FileReader();
+        fr.onload = function () { res(fr.result); };
+        fr.onerror = function () { rej(fr.error); };
+        fr.readAsArrayBuffer(file);
+      });
+    }
+
+    // PDF-Text via pdf.js (CDN, lazy, fail-soft).
+    var pdfLib = null, pdfTried = false;
+    function loadPdfLib() {
+      if (pdfLib || pdfTried) return Promise.resolve(pdfLib);
+      pdfTried = true;
+      return import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs")
+        .then(function (m) {
+          m.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs";
+          pdfLib = m; return m;
+        })
+        .catch(function () { return null; });
+    }
+    function extractPdf(file) {
+      return loadPdfLib().then(function (lib) {
+        if (!lib) return { text: "", ok: false };
+        return readAsArrayBuffer(file).then(function (buf) {
+          return lib.getDocument({ data: buf }).promise.then(function (pdf) {
+            var pages = Math.min(pdf.numPages, 20), chain = Promise.resolve(""), i;
+            for (i = 1; i <= pages; i++) {
+              (function (p) {
+                chain = chain.then(function (acc) {
+                  return pdf.getPage(p).then(function (page) {
+                    return page.getTextContent().then(function (tc) {
+                      return acc + " " + tc.items.map(function (it) { return it.str; }).join(" ");
+                    });
+                  });
+                });
+              })(i);
+            }
+            return chain.then(function (t) { return { text: t, ok: true }; });
+          });
+        });
+      }).catch(function () { return { text: "", ok: false }; });
+    }
+
+    // Bild → OCR (Modul 24), nur mit Schlüssel; sonst fail-soft.
+    function ocrImage(file) {
+      if (!window.SbkimOcr) return Promise.resolve({ text: "", ok: false });
+      var key = $("aiKey").value.trim();
+      if (!key) return Promise.resolve({ text: "", ok: false, reason: "kein Schlüssel" });
+      var prov = $("ocrProvider").value;
+      try {
+        return Promise.resolve(window.SbkimOcr.recognize(file, { provider: prov, apiKey: key }))
+          .then(function (r) {
+            if (r && r.available && r.text) return { text: r.text, ok: true };
+            return { text: "", ok: false, reason: (r && r.reason) || "OCR nicht verfügbar" };
+          })
+          .catch(function () { return { text: "", ok: false }; });
+      } catch (e) { return Promise.resolve({ text: "", ok: false }); }
+    }
+
+    // ---------------- Embedding (Modul 03, echtes e5-Modell) ----------------
+    var embReady = false, embTried = false;
+    function ensureEmbedding() {
+      if (embReady) return Promise.resolve(true);
+      if (!window.SbkimEmbedding) return Promise.resolve(false);
+      setModelStat("Bedeutungs-Modell wird geladen (einmalig ~30 MB) …");
+      return Promise.resolve(window.SbkimEmbedding.init())
+        .then(function () { embReady = true; setModelStat(""); return true; })
+        .catch(function (e) { setModelStat("Modell nicht geladen — Namenssuche funktioniert weiter (" + (e && e.message ? e.message : "offline") + ")."); return false; });
+    }
+    function setModelStat(t) { $("catStat").textContent = t || ""; }
+    function setSearchStat(t) { $("searchStat").textContent = t || ""; }
+
+    // ---------------- Signieren ---------------------------------------------
+    var signing = false;
+    function assemblePassage(typ, name, text) {
+      // Der Steckbrief-Text, den das Modell einbettet: Name + Inhalt.
+      var head = "Datei: " + name;
+      return C.makeSnippet(head + ". " + (text || ""), 1600);
+    }
+
+    async function signFiles(files) {
+      if (signing || !files.length) return;
+      signing = true;
+      $("goBtn").disabled = true;
+      $("progWrap").style.display = "block";
+      var list = $("progList"); list.innerHTML = "";
+      var bar = $("bar");
+      var existing = await dbAll();
+      var have = new Set(existing.map(function (e) { return e.hash; }));
+
+      var total = files.length, done = 0, added = 0, skipped = 0, ocrOn = false;
+      $("progCount").textContent = "0 / " + total;
+
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        var rowId = "p" + i;
+        list.insertAdjacentHTML("beforeend",
+          '<div class="prow"><span class="nm">' + esc(file.name) + '</span><span class="st" id="' + rowId + '">…</span></div>');
+        var stEl = $(rowId);
+        try {
+          var buf = await readAsArrayBuffer(file);
+          var hash = await sha256Hex(buf);
+          if (have.has(hash)) { stEl.textContent = "übersprungen"; stEl.className = "st skip"; skipped++; done++; tick(); continue; }
+          have.add(hash);
+
+          var typ = C.guessType(file.name, file.type);
+          var text = "", note = "";
+          if (typ === "text" || typ === "email") {
+            var raw = await readAsText(file);
+            if (typ === "email") { text = C.emlToText(C.parseEml(raw)); }
+            else { text = C.normalizeWhitespace(raw); }
+          } else if (typ === "pdf") {
+            var pr = await extractPdf(file);
+            text = C.normalizeWhitespace(pr.text);
+            if (!pr.ok) note = " (PDF-Text nicht lesbar)";
+          } else if (typ === "image") {
+            var or = await ocrImage(file);
+            if (or.ok) { text = C.normalizeWhitespace(or.text); ocrOn = true; }
+            else { note = " (nur Dateiname" + (or.reason ? ", " + or.reason : "") + ")"; }
+          }
+
+          var snippet = C.makeSnippet(text || file.name, 600);
+          var vektor = null;
+          if ((text && text.length > 3) || typ === "text" || typ === "email") {
+            var ok = await ensureEmbedding();
+            if (ok) {
+              try {
+                var fv = await window.SbkimEmbedding.embedPassage(assemblePassage(typ, file.name, text));
+                vektor = Array.prototype.slice.call(fv);
+              } catch (e) { /* fail-soft: ohne Vektor katalogisieren */ }
+            }
+          }
+
+          var rec = {
+            hash: hash, id: hash, name: file.name,
+            pfad: file.webkitRelativePath || file.name,
+            typ: typ, groesse: file.size,
+            datum: file.lastModified ? new Date(file.lastModified).toISOString().slice(0, 10) : "",
+            textSchnipsel: snippet,
+            vektor: vektor,
+            kiKurzfassung: snippet.slice(0, 180),
+            vorschlagKategorie: C.provisionalCategory(typ),
+            blob: file, mime: file.type,
+          };
+          await dbPut(rec);
+          added++;
+          stEl.textContent = (vektor ? "signiert ✓" : "katalogisiert") + note;
+          stEl.className = "st " + (vektor ? "ok" : "warn");
+        } catch (err) {
+          stEl.textContent = "Fehler"; stEl.className = "st warn";
+        }
+        done++; tick();
+      }
+
+      function tick() {
+        bar.style.width = Math.round((done / total) * 100) + "%";
+        $("progCount").textContent = done + " / " + total + "  ·  " + added + " neu, " + skipped + " übersprungen";
+      }
+
+      signing = false;
+      $("goBtn").disabled = false;
+      await refresh();
+      setModelStat(added + " neu signiert, " + skipped + " schon bekannt (per Fingerabdruck übersprungen)."
+        + (ocrOn ? " Bilder via OCR gelesen." : ""));
+    }
+
+    // ---------------- Katalog / Gruppen -------------------------------------
+    var catalog = [];
+    async function refresh() {
+      catalog = await dbAll();
+      renderGroups();
+      $("catStat").textContent = catalog.length ? (catalog.length + " Dateien im Katalog.") : "";
+    }
+    function renderGroups() {
+      var box = $("groups");
+      if (!catalog.length) { box.innerHTML = '<div class="empty">Noch nichts signiert.</div>'; return; }
+      var byId = {}; catalog.forEach(function (e) { byId[e.id] = e; });
+      var groups = C.clusterCatalog(catalog, { threshold: 0.84 });
+      box.innerHTML = groups.map(function (g) {
+        var items = g.mitglieder.slice(0, 6).map(function (id) {
+          var e = byId[id]; return "<li>" + esc(e ? e.name : id) + "</li>";
+        }).join("");
+        var more = g.anzahl > 6 ? "<li>… und " + (g.anzahl - 6) + " weitere</li>" : "";
+        return '<div class="grp"><div class="gt"><span>' + esc(g.titel) + '</span><span class="gc">' + g.anzahl + " Dateien</span></div><ul>" + items + more + "</ul></div>";
+      }).join("");
+    }
+
+    // ---------------- Suche --------------------------------------------------
+    var mode = "name"; // "name" | "mean"
+    $("tName").onclick = function () { setMode("name"); };
+    $("tMean").onclick = function () { setMode("mean"); };
+    function setMode(m) {
+      mode = m;
+      $("tName").classList.toggle("on", m === "name");
+      $("tMean").classList.toggle("on", m === "mean");
+      if ($("q").value.trim()) doSearch();
+    }
+    $("goBtn").onclick = doSearch;
+    $("q").addEventListener("keydown", function (e) { if (e.key === "Enter") doSearch(); });
+
+    async function doSearch() {
+      var q = $("q").value.trim();
+      var resBox = $("results"), countBox = $("counts");
+      setSearchStat("");
+      if (!q) { resBox.innerHTML = ""; countBox.textContent = ""; return; }
+      if (!catalog.length) { resBox.innerHTML = '<div class="empty">Erst Dateien einwerfen und signieren.</div>'; return; }
+
+      var byId = {}; catalog.forEach(function (e) { byId[e.id] = e; });
+      var nameHits = C.nameSearch(catalog, q);
+
+      if (mode === "name") {
+        countBox.innerHTML = "Namenssuche: <b>" + nameHits.length + "</b> Treffer · Bedeutungssuche fände oft mehr (umschalten →).";
+        resBox.innerHTML = nameHits.length
+          ? nameHits.map(function (e) { return resCard(e, null, "Dateiname/-pfad enthält den Suchtext."); }).join("")
+          : '<div class="empty">Die Namenssuche findet nichts — der gesuchte Sinn steht nicht im Dateinamen. Schalte auf 🧠 Bedeutungssuche.</div>';
+        return;
+      }
+
+      // Bedeutungssuche
+      if (!window.SbkimEmbedding) { resBox.innerHTML = '<div class="empty">Bedeutungs-Modell nicht verfügbar.</div>'; return; }
+      var ok = await ensureEmbedding();
+      if (!ok) { resBox.innerHTML = '<div class="empty">Bedeutungs-Modell konnte nicht laden (offline?). Die Namenssuche funktioniert weiter.</div>'; return; }
+      setSearchStat("suche nach Bedeutung …");
+      var qv;
+      try { qv = await window.SbkimEmbedding.embedQuery(q); } catch (e) { resBox.innerHTML = '<div class="empty">Frage konnte nicht eingebettet werden.</div>'; return; }
+
+      var ranked = C.rankByVector(catalog, qv, { cosine: cosineWith, k: 12 });
+      setSearchStat("");
+      countBox.innerHTML = "Bedeutungssuche: <b>" + ranked.length + "</b> nach Nähe · Namenssuche fand <b>" + nameHits.length + "</b>.";
+      if (!ranked.length) { resBox.innerHTML = '<div class="empty">Kein Eintrag hat einen Bedeutungs-Vektor.</div>'; return; }
+
+      // Optionaler KI-Richter (Modul 04)
+      var verdicts = null;
+      if ($("useJudge").checked) {
+        var key = $("aiKey").value.trim();
+        if (!key) { setSearchStat("KI-Richter braucht einen Schlüssel — zeige gratis Cosinus-Rangfolge."); }
+        else if (window.SbkimMatch && window.SbkimMatch.hybridMatch) {
+          setSearchStat("KI-Richter urteilt …");
+          try {
+            var cands = ranked.slice(0, 8).map(function (r) {
+              return { label: r.entry.name, text: (r.entry.kiKurzfassung || r.entry.textSchnipsel || r.entry.name), cosine: r.score, anchorId: r.entry.id };
+            });
+            var hj = await window.SbkimMatch.hybridMatch(q, cands, {
+              apiKey: key, provider: $("aiProvider").value, euOnly: $("euOnly").checked,
+            });
+            if (hj && hj.available && hj.verdicts) verdicts = hj.verdicts;
+            setSearchStat(verdicts ? "" : "KI-Richter nicht verfügbar — gratis Cosinus-Rangfolge.");
+          } catch (e) { setSearchStat("KI-Richter fehlgeschlagen — gratis Cosinus-Rangfolge."); }
+        }
+      }
+
+      var top = ranked.slice(0, 12);
+      if (verdicts) {
+        // nach KI-Urteil sortieren (passt=true zuerst, dann score)
+        var vById = {}; verdicts.forEach(function (v) { if (v.anchorId) vById[v.anchorId] = v; });
+        top = top.slice().sort(function (a, b) {
+          var va = vById[a.entry.id], vb = vById[b.entry.id];
+          var sa = va ? (va.passt ? 1 : 0) + va.score : a.score;
+          var sb = vb ? (vb.passt ? 1 : 0) + vb.score : b.score;
+          return sb - sa;
+        });
+        resBox.innerHTML = top.map(function (r) {
+          var v = vById[r.entry.id];
+          var why = v ? (v.begruendung || (v.passt ? "passt inhaltlich." : "eher nicht passend.")) : "Bedeutungs-Nähe (Cosinus).";
+          if (v && v.sicherheit === "gefahr") why = "⚠️ " + why;
+          return resCard(r.entry, v ? v.score : r.score, why, true);
+        }).join("");
+      } else {
+        resBox.innerHTML = top.map(function (r) {
+          return resCard(r.entry, r.score, "Nähe zur Bedeutung deiner Frage (Cosinus-Rangfolge, gratis).");
+        }).join("");
+      }
+    }
+
+    function cosineWith(qv, ev) {
+      // Modul 04 (SbkimMatch.match) erwartet Float32Array(384); unser Katalog
+      // hält den Vektor als Array. Der lokale Cosinus ist identisch (e5 ist
+      // L2-normalisiert) und typ-tolerant. Reine Vorfilter-Rangfolge.
+      return C.cosine(qv, ev);
+    }
+
+    function resCard(e, score, why, isJudge) {
+      var sc = (typeof score === "number") ? '<span class="score">' + (isJudge ? "KI " : "") + fmtScore(score) + "</span>" : "";
+      return '<div class="res"><div class="rt"><span>' + esc(e.name) + '</span>' + sc + '</div>'
+        + '<div class="why">' + esc(why) + '</div>'
+        + '<div class="snip">' + esc(e.textSchnipsel || "").slice(0, 220) + '</div>'
+        + '<div class="open"><button data-open="' + esc(e.id) + '">öffnen</button> <span class="note">' + esc(e.vorschlagKategorie || "") + ' · ' + esc(e.datum || "") + '</span></div></div>';
+    }
+    function fmtScore(s) { return (s <= 1 ? (s * 100).toFixed(0) + " %" : s.toFixed(2)); }
+
+    // öffnen (Vorschau)
+    document.addEventListener("click", function (ev) {
+      var b = ev.target.closest && ev.target.closest("[data-open]");
+      if (!b) return;
+      var id = b.getAttribute("data-open");
+      var e = catalog.filter(function (x) { return x.id === id; })[0];
+      if (e) openPreview(e);
+    });
+    function openPreview(e) {
+      $("mTitle").textContent = e.name;
+      $("mMeta").textContent = e.typ + " · " + (e.groesse ? Math.round(e.groesse / 1024) + " KB" : "") + " · " + (e.datum || "") + " · " + (e.pfad || "");
+      var body = $("mBody"); body.innerHTML = "";
+      if (e.typ === "image" && e.blob) {
+        var img = document.createElement("img");
+        img.src = URL.createObjectURL(e.blob); body.appendChild(img);
+      } else {
+        var pre = document.createElement("pre");
+        pre.textContent = e.textSchnipsel || "(kein Text extrahiert)"; body.appendChild(pre);
+      }
+      $("modal").style.display = "flex";
+    }
+    $("mClose").onclick = function () { $("modal").style.display = "none"; };
+    $("modal").addEventListener("click", function (e) { if (e.target === $("modal")) $("modal").style.display = "none"; });
+
+    // ---------------- Einwurf-Verdrahtung -----------------------------------
+    var drop = $("drop");
+    drop.onclick = function () { $("fileInput").click(); };
+    $("pickFiles").onclick = function () { $("fileInput").click(); };
+    $("pickFolder").onclick = function () { $("folderInput").click(); };
+    $("fileInput").onchange = function () { if (this.files.length) signFiles(Array.prototype.slice.call(this.files)); this.value = ""; };
+    $("folderInput").onchange = function () { if (this.files.length) signFiles(Array.prototype.slice.call(this.files)); this.value = ""; };
+    ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("hot"); }); });
+    ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("hot"); }); });
+    drop.addEventListener("drop", function (e) {
+      var files = [];
+      if (e.dataTransfer && e.dataTransfer.files) files = Array.prototype.slice.call(e.dataTransfer.files);
+      if (files.length) signFiles(files);
+    });
+    $("clearBtn").onclick = async function () {
+      if (!confirm("Nur den Browser-Katalog leeren? Deine Originale bleiben unberührt.")) return;
+      await dbClear(); await refresh(); $("results").innerHTML = ""; $("counts").textContent = ""; setModelStat("Katalog geleert.");
+    };
+
+    // Demo-Dateien: ein paar synthetische Blobs, damit der Aha-Vergleich sofort
+    // erlebbar ist (klar als Demo markiert, keine PII).
+    $("demoBtn").onclick = function () {
+      var demo = [
+        ["IMG_2381.txt", "Fahrzeug-Steckbrief: schwarzer Kombi, matt foliert. Radstand 2,79 Meter, letzte Bearbeitung diese Woche. Kunde wünscht dezente Seitenbeschriftung."],
+        ["notiz_werkstatt.txt", "Der dunkle Kombi vom Kunden aus der Innenstadt wurde gestern fertig foliert. Achsabstand knapp 2,8 m. Übergabe steht an."],
+        ["angebot_limousine.eml", "From: kunde@example.com\nTo: werkstatt@example.com\nSubject: Angebot dunkle Limousine\nDate: Mon, 6 Jul 2026 09:00:00 +0200\n\nBitte um ein Angebot für die Vollverklebung einer schwarzen Limousine, langer Radstand."],
+        ["rezept_kuchen.txt", "Marmorkuchen: 250 g Butter, 250 g Zucker, 4 Eier, Mehl, Kakao. Bei 180 Grad 50 Minuten backen."],
+        ["steuer_2025.txt", "Umsatzsteuer-Voranmeldung Q2 2025. Vorsteuer, Zahllast, Finanzamt-Frist zehnter des Folgemonats."],
+        ["urlaub_italien.eml", "From: reise@example.com\nSubject: Angebot Toskana\nDate: Tue, 7 Jul 2026 12:00:00 +0200\n\nFerienhaus in der Toskana, Pool, zwei Wochen im September, inklusive Mietwagen."],
+        ["reifen_bestellung.txt", "Bestellung Winterreifen 205/55 R16 für den grauen Transporter. Liefertermin nächste Woche."],
+        ["logo_entwurf.txt", "Entwurf Firmenlogo: kräftiges Rot, weiße Schrift, Flohsymbol. Für Fahrzeugbeschriftung und Briefkopf."],
+      ];
+      var files = demo.map(function (d) {
+        var isEml = d[0].endsWith(".eml");
+        return new File([d[1]], d[0], { type: isEml ? "message/rfc822" : "text/plain", lastModified: Date.now() });
+      });
+      signFiles(files);
+    };
+
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+
+    // Start
+    refresh();
+  })();
+  </script>
+</body>
+</html>

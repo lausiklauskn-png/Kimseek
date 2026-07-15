@@ -20,6 +20,31 @@ Live: <https://lausiklauskn-png.github.io/Kimseek/>
   (Ed25519), Status-Lampen-Leiste + Selbst-Siegel (Bronze/Gold), server-loser
   Handshake mit anderen Knoten über ein geborgtes Nostr-Relais.
 
+## Kim-Brain — Company-Brain-Probeversion (`brain.html`)
+
+Eine schlanke Probe des „Company Brain"-Gedankens auf **einem** Gerät, gebaut aus
+demselben Baukasten (Module 03 Embedding · 04 Richter · 24 OCR). Der Fluss:
+
+1. **Einwurf** — Dateien/Ordner reinwerfen. Arbeitet an einer **Kopie** im
+   Browser-Speicher (eigene IndexedDB `kimbrain`), fasst Originale nie an.
+2. **Signieren** — je Datei: **SHA-256-Fingerabdruck** → Text heraus
+   (Text/PDF/E-Mail; Bilder optional via **OCR**, Modul 24) → Steckbrief +
+   **Bedeutungs-Vektor** (Modul 03, echtes e5-Modell). Bereits signierte
+   (per Hash) werden übersprungen.
+3. **Ausgabe** — aufgeräumte Ansicht mit vorgeschlagenen Gruppen (nur Vorschlag,
+   nichts wird verschoben).
+4. **Suchen** — Umschalter **„🔤 Namenssuche ↔ 🧠 Bedeutungssuche"**: dieselbe
+   Frage, links weiß der Dateiname oft nichts, rechts antwortet der Inhalt —
+   mit Begründung + Schnipsel. Cosinus-Vorfilter **gratis, lokal**; **KI-Richter**
+   (Modul 04) optional (BYOK, EU).
+
+Der **„Demo-Dateien einwerfen"-Knopf** lädt ein paar synthetische Beispiele
+(klar als Demo markiert, keine PII), sodass der Aha-Vergleich sofort erlebbar ist
+(z. B. „das schwarze Auto … mit Radstand" findet den Inhalt, den die Namenssuche
+nicht sieht). Der Beweis der reinen Logik läuft über `npm test`
+(`test/brain.test.js`); der Browser-Pfad (echtes Modell, IndexedDB, OCR, KI-Richter)
+bleibt **„ungeprüft, wartet auf Klaus' Browser-Lauf"**.
+
 ## Saubere Netz-Anmeldung (der Browser als schwarzes Loch)
 
 Alle SBKIM-PWAs liegen unter **einer** Origin (`lausiklauskn-png.github.io`).
@@ -65,6 +90,7 @@ Kanonische Quelle der `modules/*.js`: `Sage-Protokol/src/modules/*` (bzw.
 
 ```bash
 npm test   # node --test: Drift-Guard (sha256) + App-Schale + Modul-23-Oberfläche
+           #            + Kim-Brain-Kern (test/brain.test.js)
 ```
 
 Der **Browser-Sichttest** (echtes IndexedDB, Service-Worker, Live-Relais,
