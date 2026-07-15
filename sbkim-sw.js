@@ -19,16 +19,19 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimseek-v24";
+var CACHE_VERSION = "kimseek-v26";
 
 var APP_SHELL = [
   "./",
   "./index.html",
+  "./brain.html",
   "./manifest.json",
+  "./brain-manifest.json",
   "./impressum.html",
   "./sicherheit.html",
   "./icon-192.png",
   "./icon-512.png",
+  "./assets/brain-core.js",
   "./assets/storage-init.js",
   "./assets/nostr-listen-init.js",
   "./assets/rendezvous-init.js",
