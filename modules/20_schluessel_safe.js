@@ -235,6 +235,20 @@
     if (!sp || typeof sp.exportBackup !== "function") {
       throw makeError("SporeNotAvailableError", "Modul 02 (SbkimSpore.exportBackup) ist nicht geladen.");
     }
+    // Fremdnutzer-Schutz (Klaus-Sichttest B1 2026-07-17): Ohne erzeugte Spore ist
+    // der Safe NICHT wiederherstellbar — importBackup verlangt je Identität eine
+    // Spore, exportBackup erlaubt sie aber fehlend. Das erzeugte sonst einen Safe,
+    // der sich anlegen, aber nie wieder entsperren lässt (stiller Fehlschlag). Hier
+    // ein KLARER Fehler statt des stillen unlock-Fehlers. Fail-soft: greift nur, wenn
+    // Modul 02 getOwnSpore anbietet (sonst wie bisher — z.B. reine Geheimnis-Ablage).
+    if (typeof sp.getOwnSpore === "function") {
+      var existingSpore = await sp.getOwnSpore();
+      if (!existingSpore) {
+        throw makeError("NoSporeError",
+          "Der Safe braucht eine erzeugte Identität mit Spore. Bitte zuerst über den " +
+            "Andock-Wizard eine Spore erzeugen, dann den Safe anlegen.");
+      }
+    }
     if (await hasVault()) {
       throw makeError("VaultExistsError",
         "Safe existiert bereits — erst entsperren oder löschen, statt neu anzulegen.");
