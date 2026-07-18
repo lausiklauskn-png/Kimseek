@@ -27,8 +27,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // aktualisiert (bewusster Commit).
 const EXPECTED_SHA256 = {
   "01_storage.js": "e507aec18d75bde66b81b9eba9738650000d9686aac90c6817679e7df06d61c1",
-  "02_spore.js": "ae6960e0140680e7630a59dc568541f50bdd7e7437b1718afad3a229a6817341",
-  "03_embedding.js": "14162887290f572312150c1efc58d93e6552f81141df3131d761106cfd75205e",
+  "02_spore.js": "6789fe6e903ad2e53f39b2dee576c640698555ef71ef4e9134eb75573fdb7d68",
+  "03_embedding.js": "e4bb8bd6a237914e7841cab5165912daf636adf0ee90c5d4ffd0c74cc5d706e5",
   "04_match.js": "9e2648729758f644fe8e35b0e049ba8d66668a72dc6b7e4b41ebd75d52c0826a",
   "05_anastomose.js": "255ac79aeb3b0203e92f0cebd0a905e47c488b43efe18f41332a7d35520bbf23",
   "05b_nostr_relay.js": "030aa2d260149f5627b84694a0b55e916cc186158009e260117d1e4f60d429bd",
