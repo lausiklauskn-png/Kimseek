@@ -108,6 +108,14 @@
       <li><span class="dot">🔐</span><span><b>Dein Schlüssel bleibt lokal.</b> BYOK im verschlüsselten Widget-Tresor (Shamir 2-von-3). Nie ins Netz, nie auf GitHub.</span></li>
     </ul>
     <p class="hint">Tipp: Das Such-Werkzeug erscheint als 🔍-Blase. Antippen öffnet es; den Griff unten rechts ziehen macht es größer. „🌐 Mit dem Netz verbinden" liegt unten links.</p>
+
+    <!-- Gerätename: frei wählbarer Anzeige-Name (nur Anzeige, kein Vertrauens-Beweis). -->
+    <div class="geraetename-box" style="margin-top:1.4rem;padding:0.9rem 1rem;border:1px solid rgba(245,245,255,0.14);border-radius:12px;background:rgba(255,255,255,0.03);">
+      <label for="geraetename" style="display:block;font-size:0.92rem;font-weight:600;color:#F5F5FF;margin-bottom:0.5rem;">🏷️ Gerätename (frei wählbar)</label>
+      <input id="geraetename" type="text" maxlength="40" placeholder="z. B. Klaus-Handy"
+             style="width:100%;box-sizing:border-box;padding:0.5rem 0.7rem;border:1px solid rgba(245,245,255,0.18);border-radius:8px;background:rgba(0,0,0,0.25);color:#F5F5FF;font:inherit;font-size:0.95rem;">
+      <p class="hint" style="margin:0.5rem 0 0;">Erscheint im Netz-Raum neben „Kimseek" (z. B. „Kimseek · Klaus-Handy"), damit du zwei Geräte unterscheiden kannst. Nur ein Hinweis, kein Vertrauens-Beweis — die kryptische Kennung bleibt daneben.</p>
+    </div>
   </main>
 
   <footer>
@@ -191,6 +199,28 @@
   <script src="./modules/21_spracheingabe.js"></script>
   <script src="./modules/24_ocr_eingabe.js"></script>
   <script src="./modules/22_such_widget.js"></script>
+
+  <script>
+    // ── Gerätename (lokal, kein PII): frei wählbarer Anzeige-Name, reist als
+    //    Hinweis mit. SICHERHEIT: nur Anzeige, nie Vertrauen — immer zusammen mit
+    //    der Kennung zeigen. Geteilt über alle Apps derselben Origin (ein Name pro
+    //    Gerät/Browser-Instanz).
+    var LS_GERAETENAME = 'sbkim_geraetename';
+    function getGeraetename() { try { return (localStorage.getItem(LS_GERAETENAME) || '').trim().slice(0, 40); } catch (_e) { return ''; } }
+    function setGeraetename(v) { try { localStorage.setItem(LS_GERAETENAME, String(v || '').trim().slice(0, 40)); } catch (_e) { /* */ } }
+
+    // Feld: laden, beim Tippen speichern + Kopplungs-Event feuern (der
+    // Rendezvous-Glue hört darauf und re-konfiguriert den Anzeige-Namen).
+    (function wireGeraetename() {
+      var gn = document.getElementById('geraetename');
+      if (!gn) return;
+      gn.value = getGeraetename();
+      gn.addEventListener('input', function () {
+        setGeraetename(gn.value);
+        try { window.dispatchEvent(new CustomEvent('sbkim:geraetename-changed')); } catch (_e) {}
+      });
+    })();
+  </script>
 
   <script>
     // Service-Worker registrieren → macht die Seite installierbar (eigene App).
