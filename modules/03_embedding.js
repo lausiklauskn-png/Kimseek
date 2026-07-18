@@ -14,6 +14,7 @@
  *   embedQueryBatch(texts) -> Promise<Float32Array[]>
  *   embedPassageBatch(texts) -> Promise<Float32Array[]>
  *   embedContentVector(samples, opts?) -> Promise<{vector,count,source}>  // inhalts-treuer Domänen-Vektor
+ *   embedSnippets(text|string[], opts?) -> Promise<[{vec:Float32Array(384), text}]>  // A10 Satz-Schnipsel
  *
  * Self-check: console.info after init() succeeds — not on script load,
  * because the model download is asynchronous. See INTERFACES.md and
@@ -27,6 +28,16 @@
   var EMBEDDING_MAX_TOKENS = 512;
   var EMBEDDING_QUERY_PREFIX = "query: ";
   var EMBEDDING_PASSAGE_PREFIX = "passage: ";
+
+  // --- A10: „Schnipsel-Mittel" (Spore v0.2, 2026-07-14) ---------------------
+  // Spiegelt INTERFACES §0 SPORE_SNIPPET_MAX / SPORE_SNIPPET_GRANULARITY.
+  // embedSnippets zerlegt den Domänen-Text SATZ-weise und bettet bis zu
+  // SPORE_SNIPPET_MAX Sätze als Passage-Vektoren ein — reine Berechnung, KEIN
+  // Spore-Schreibvorgang (Modul 02 assembliert daraus die Spore).
+  var SPORE_SNIPPET_MAX = 20;
+  var SPORE_SNIPPET_GRANULARITY = "sentence";
+  // Anzeige/Debug-Kürzung des Quell-Satzes (KEIN PII — kuratierte Domänen-Sätze).
+  var SNIPPET_TEXT_MAX = 160;
 
   // Pinned CDN version so reproducible across browsers / re-installs.
   // Bump in lockstep with a spec note when the e5-small handling changes.
@@ -109,7 +120,7 @@
     if (typeof console !== "undefined" && console.info) {
       console.info(
         "MODUL 03 EMBEDDING bereit, Funktionen: " +
-        "init/isReady/embedQuery/embedPassage/embedQueryBatch/embedPassageBatch/embedContentVector, " +
+        "init/isReady/embedQuery/embedPassage/embedQueryBatch/embedPassageBatch/embedContentVector/embedSnippets, " +
         "Modell: " + EMBEDDING_MODEL + ", Dim: " + EMBEDDING_DIM +
         ", Quelle: " + (modelSource === "local" ? "lokal (eigener Server)" : "HuggingFace"),
       );
@@ -578,6 +589,74 @@
     return { vector: acc, count: texts.length, source: "content", contextUsed: assembled.contextUsed };
   }
 
+  // --- A10: Satz-Zerlegung + Schnipsel-Einbettung --------------------------
+  // Deterministisch, offline, fail-soft. Zerlegt Domänen-Text in Sätze:
+  // erst an Zeilenumbrüchen (Listen/Absätze), dann an Satz-Endzeichen
+  // (. ! ? …). Whitespace wird pro Zeile normalisiert. Keine externen
+  // Abhängigkeiten. Kein-String / leer / nur-Whitespace → [].
+  function splitIntoSentences(text) {
+    if (typeof text !== "string") return [];
+    if (text.trim().length === 0) return [];
+    var lines = text.split(/[\r\n]+/);
+    var out = [];
+    for (var li = 0; li < lines.length; li++) {
+      var line = lines[li].replace(/\s+/g, " ").trim();
+      if (line.length === 0) continue;
+      // Split nach Satz-Endzeichen gefolgt von Leerraum (Lookbehind: Chrome 62+
+      // / Node — im gesamten Repo verwendet). Kein Leerraum danach → ganze Zeile
+      // bleibt ein Satz (fail-soft, nie leere Fragmente).
+      var parts = line.split(/(?<=[.!?…])\s+/);
+      for (var pi = 0; pi < parts.length; pi++) {
+        var s = parts[pi].trim();
+        if (s.length > 0) out.push(s);
+      }
+    }
+    return out;
+  }
+
+  // Kürzt einen Quell-Satz für Anzeige/Debug (KEIN PII). Nur die `text`-Anzeige
+  // wird gekürzt — der eingebettete Vektor nutzt den vollen Satz.
+  function shortenSnippetText(s) {
+    s = String(s).trim();
+    if (s.length <= SNIPPET_TEXT_MAX) return s;
+    return s.slice(0, SNIPPET_TEXT_MAX - 1).trim() + "…";
+  }
+
+  // Reine, deterministische Satz-Vorbereitung VOR jedem Embedding. Nimmt einen
+  // String ODER ein String-Array (mehrere Domänen-Texte, in Reihenfolge) und
+  // liefert bis zu opts.max (Default SPORE_SNIPPET_MAX) Sätze in
+  // Satz-Reihenfolge. Als Test-Brücke (_prepareSnippetTexts) exportiert, damit
+  // die Zerlegungs-/Deckel-Logik headless (ohne Modell) beweisbar ist.
+  function prepareSnippetTexts(input, cap) {
+    cap = (typeof cap === "number" && cap > 0) ? Math.floor(cap) : SPORE_SNIPPET_MAX;
+    var sources = Array.isArray(input) ? input : [input];
+    var sentences = [];
+    for (var i = 0; i < sources.length && sentences.length < cap; i++) {
+      var parts = splitIntoSentences(sources[i]);
+      for (var j = 0; j < parts.length && sentences.length < cap; j++) {
+        sentences.push(shortenSnippetText(parts[j]));
+      }
+    }
+    return sentences;
+  }
+
+  // A10 „Schnipsel-Mittel": jeder Satz ein L2-normalisierter Passage-Vektor.
+  // Rückgabe in Satz-Reihenfolge. Fail-soft: leer → Promise<[]>. Reine
+  // Berechnung — schreibt KEINE Spore (Modul 02 nimmt das Ergebnis auf).
+  async function embedSnippets(input, opts) {
+    opts = (opts && typeof opts === "object") ? opts : {};
+    var cap = (typeof opts.max === "number" && opts.max > 0)
+      ? Math.floor(opts.max) : SPORE_SNIPPET_MAX;
+    var texts = prepareSnippetTexts(input, cap);
+    if (texts.length === 0) return [];
+    var vecs = await embedPassageBatch(texts);
+    var out = [];
+    for (var i = 0; i < texts.length; i++) {
+      out.push({ vec: vecs[i], text: texts[i] });
+    }
+    return out;
+  }
+
   function embedQuery(text) {
     return embedSingle(text, EMBEDDING_QUERY_PREFIX, "embedQuery");
   }
@@ -600,6 +679,7 @@
     embedQueryBatch: embedQueryBatch,
     embedPassageBatch: embedPassageBatch,
     embedContentVector: embedContentVector,
+    embedSnippets: embedSnippets,
     // Test-Brücke: Modell-Quellen-Erkennung (Body-Probe) headless prüfbar —
     // unterscheidet echtes JSON (selbst-gehostet) von der SPA-index.html-Falle.
     _detectModelSource: detectModelSource,
@@ -611,6 +691,15 @@
         ? Math.floor(opts.max) : CONTENT_SAMPLE_MAX;
       return assembleContentTexts(
         Array.isArray(samples) ? samples : [], cap, opts.context);
+    },
+    // Test-Brücke (A10): reine Satz-Zerlegung + Deckel VOR dem Embedding —
+    // beweist die Schnipsel-Vorbereitung headless (ohne Modell).
+    _splitIntoSentences: splitIntoSentences,
+    _prepareSnippetTexts: function (input, opts) {
+      opts = (opts && typeof opts === "object") ? opts : {};
+      var cap = (typeof opts.max === "number" && opts.max > 0)
+        ? Math.floor(opts.max) : SPORE_SNIPPET_MAX;
+      return prepareSnippetTexts(input, cap);
     },
     // Test-Brücke (A Last-Schoner): Worker-Zustand headless prüfbar.
     _workerState: function () {
@@ -634,6 +723,9 @@
       localModelProbe: LOCAL_MODEL_PROBE,
       contentSampleMax: CONTENT_SAMPLE_MAX,
       contentContextSep: CONTENT_CONTEXT_SEP,
+      sporeSnippetMax: SPORE_SNIPPET_MAX,
+      sporeSnippetGranularity: SPORE_SNIPPET_GRANULARITY,
+      snippetTextMax: SNIPPET_TEXT_MAX,
       workerMode: true,
     },
   };

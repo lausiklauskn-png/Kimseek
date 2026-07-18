@@ -141,12 +141,24 @@
       .then(function (id) { say("Identität: " + id.nodeId + " — initialisiere Embedding …"); return window.SbkimEmbedding.init(); })
       .then(function () { say("Berechne semantischen Vektor (384-dim) …"); return window.SbkimEmbedding.embedPassage(beschreibung); })
       .then(function (vec) {
-        say("Signiere Spore …");
         var arr = Array.from(vec);
+        // A10 „Schnipsel-Mittel" (Spore v0.2): die Beschreibung zusätzlich SATZ-
+        // weise einbetten → snippetVectors. Fail-soft: schlägt das Einbetten fehl,
+        // wird ohne Schnipsel weiter signiert (v0.2 bleibt). Reine Anzeige/
+        // Verwandt-Messung, gatet nichts.
+        say("Erzeuge Satz-Schnipsel (v0.2) …");
+        if (!window.SbkimEmbedding.embedSnippets) return { arr: arr, snippetVectors: [] };
+        return window.SbkimEmbedding.embedSnippets(beschreibung)
+          .then(function (snips) { return { arr: arr, snippetVectors: (snips || []).map(function (s) { return { vec: Array.from(s.vec), text: s.text }; }) }; })
+          .catch(function () { return { arr: arr, snippetVectors: [] }; });
+      })
+      .then(function (r) {
+        say("Signiere Spore …");
         return window.SbkimSpore.generateOwnSpore({
           domain: WIZ.domain, endpoint: WIZ.endpoint, nodeType: WIZ.nodeType, nodeName: WIZ.nodeName,
           domainDescription: beschreibung, domainKeywords: WIZ.domainKeywords,
-          domainVector: arr, stammCategories: WIZ.stammCategories, guestCategories: WIZ.guestCategories,
+          domainVector: r.arr, snippetVectors: r.snippetVectors,
+          stammCategories: WIZ.stammCategories, guestCategories: WIZ.guestCategories,
         });
       })
       .then(function (spore) {
@@ -271,11 +283,22 @@
       out("#kswiz-o2", "Lade Embedding-Modell (~30 MB, einmalig) …");
       window.SbkimEmbedding.init()
         .then(function () { out("#kswiz-o2", "Erzeuge domainVector (384) …"); return window.SbkimEmbedding.embedPassage(WIZ.domainDescription + ". " + WIZ.domainKeywords.join(", ")); })
-        .then(function (vec) { out("#kswiz-o2", "Signiere Spore …");
+        .then(function (vec) {
+          var arr = Array.from(vec);
+          // A10 „Schnipsel-Mittel" (Spore v0.2): Domänen-Text SATZ-weise einbetten
+          // → snippetVectors. Fail-soft: ohne Schnipsel wird trotzdem v0.2 signiert.
+          out("#kswiz-o2", "Erzeuge Satz-Schnipsel (v0.2) …");
+          if (!window.SbkimEmbedding.embedSnippets) return { arr: arr, snippetVectors: [] };
+          return window.SbkimEmbedding.embedSnippets(WIZ.domainDescription + ". " + WIZ.domainKeywords.join(", "))
+            .then(function (snips) { return { arr: arr, snippetVectors: (snips || []).map(function (s) { return { vec: Array.from(s.vec), text: s.text }; }) }; })
+            .catch(function () { return { arr: arr, snippetVectors: [] }; });
+        })
+        .then(function (r) { out("#kswiz-o2", "Signiere Spore …");
           return window.SbkimSpore.generateOwnSpore({
             domain: WIZ.domain, endpoint: WIZ.endpoint, nodeType: WIZ.nodeType, nodeName: WIZ.nodeName,
             domainDescription: WIZ.domainDescription, domainKeywords: WIZ.domainKeywords,
-            domainVector: Array.from(vec), stammCategories: WIZ.stammCategories, guestCategories: WIZ.guestCategories,
+            domainVector: r.arr, snippetVectors: r.snippetVectors,
+            stammCategories: WIZ.stammCategories, guestCategories: WIZ.guestCategories,
           }); })
         .then(function (spore) { lastSpore = spore; downloadJson("spore.json", spore);
           out("#kswiz-o2", "Spore erzeugt + ⬇ (nodeId=" + spore.id + "). Nach sbkim/spore.json committen.");
