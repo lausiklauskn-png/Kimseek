@@ -36,6 +36,12 @@
     domainKeywords: ["Semantische Suche", "Bedeutung", "Absicht", "Embedding", "Sprachsuche", "OCR", "SBKIM", "Mycel"],
   };
 
+  // Gerätename (frei wählbarer Anzeige-Zusatz, kein PII): NUR für die Anzeige im
+  // Raum / auf der Karte — NICHT für generateOwnSpore (die signierte Spore behält
+  // den kanonischen nodeName). Fail-soft: kein Name → nur der Basis-App-Name.
+  function geraetename() { try { return (localStorage.getItem("sbkim_geraetename") || "").trim().slice(0, 40); } catch (_e) { return ""; } }
+  function displayNodeName() { var g = geraetename(); return g ? (CFG.nodeName + " · " + g) : CFG.nodeName; }
+
   function createIdentity() {
     if (!window.SbkimEmbedding || !window.SbkimSpore) {
       return Promise.reject(new Error("Module 02/03 (Spore/Embedding) nicht geladen."));
@@ -116,7 +122,7 @@
     if (window.SbkimRendezvous && typeof window.SbkimRendezvous.init === "function") {
       try {
         window.SbkimRendezvous.init({
-          nodeName: CFG.nodeName,
+          nodeName: displayNodeName(),
           dbSuffix: DB_SUFFIX,
           createIdentity: createIdentity,
           ensureIdentity: true,   // Modus A
@@ -131,7 +137,7 @@
     }
     try {
       window.SbkimRendezvousUI.init({
-        nodeName: CFG.nodeName,
+        nodeName: displayNodeName(),
         dbSuffix: DB_SUFFIX,
         corner: "bl",
         createIdentity: createIdentity,
@@ -140,6 +146,14 @@
     } catch (e) {
       console.warn("[Kimseek] Rendezvous-UI übersprungen:", e);
     }
+
+    // Kopplung: ändert der Nutzer den Gerätenamen, den Anzeige-Namen im Raum
+    // neu setzen (fail-soft, kein Re-Sign der Spore).
+    try {
+      window.addEventListener("sbkim:geraetename-changed", function () {
+        try { if (window.SbkimRendezvous && window.SbkimRendezvous.configure) window.SbkimRendezvous.configure({ nodeName: displayNodeName() }); } catch (_e) {}
+      });
+    } catch (_e) {}
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
