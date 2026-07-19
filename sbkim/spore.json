@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-07-18T22:49:31.332Z",
+  "createdAt": "2026-07-19T13:17:48.163Z",
   "domain": "Semantische Bedeutungs-Suche",
   "domainDescription": "Kimseek — semantisches Such-Werkzeug, das die Bedeutung und Absicht hinter einer Frage versteht (nicht nur Stichwörter). Ordnet Treffer nach Bedeutungs-Nähe, server-los im Browser; optional Spracheingabe, Bild-/Handschrift-Erkennung (OCR) und eine KI-Brücke mit Web-Suche.",
   "domainKeywords": [
@@ -405,7 +405,7 @@
     "Backup",
     "Handshake"
   ],
-  "id": "48jlhy_QIqhNgnJBBpKU_uIEru1_RbY2x0oNJGoV-Xw",
+  "id": "Yd8mwHSDYkcyd1meDe-7DJa5PS4KrY5bsl8VDn6x-TM",
   "nodeName": "Kimseek",
   "nodeType": "hybrid",
   "protocolVersion": "0.2",
@@ -417,9 +417,9 @@
       "verify"
     ],
     "kty": "OKP",
-    "x": "n32-Aen9UzuCPjzZi856KX6cgSTgTBquvw3edoAfmDs"
+    "x": "Jkd08jTJfJwFDYEsjs4aWLdWzyU1HFyXbfhPGmRG2qk"
   },
-  "signature": "ppP7tetbxEjFbpf1lixqFG3NflE7TpwDZSrz7IALkVgb3Sx0O-ZDF0TtnfVbYytWeU4ZRGYpJ_LD0nVumHfFCw",
+  "signature": "O85JpkJwGnuk0-Rgekc5gi-Xo28TfLwCdKt82MXW9HOID1jzjg5HjjiyAdgPGwfT9JQvxLHFAUU2L3VZSw3fBw",
   "snippetVectors": [
     {
       "text": "Kimseek — semantisches Such-Werkzeug, das die Bedeutung und Absicht hinter einer Frage versteht (nicht nur Stichwörter).",
