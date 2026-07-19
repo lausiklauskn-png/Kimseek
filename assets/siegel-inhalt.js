@@ -347,6 +347,19 @@
     }
     dlg.querySelector("#kswiz-close").addEventListener("click", function () { closeWiz(dlg); });
     dlg.addEventListener("click", function (e) { if (e.target === dlg) closeWiz(dlg); });
+    // Wizard-Init-Heilung (Klaus-Befund 2026-07-19: „Backup-Knopf loest nichts aus"):
+    // existiert bereits eine Identitaet (z. B. beim ersten Verbinden automatisch angelegt),
+    // schalte Schritt 2 (Spore signieren) + 3 (Backup) SOFORT frei — der Nutzer muss nicht
+    // erst „Identitaet erzeugen" klicken, um sichern zu koennen. listIdentities() erzeugt
+    // NICHTS (nur Lesen), fail-soft.
+    if (window.SbkimSpore && typeof window.SbkimSpore.listIdentities === "function") {
+      window.SbkimSpore.listIdentities().then(function (ids) {
+        if (ids && ids.length) {
+          var s2 = dlg.querySelector("#kswiz-s2"); if (s2) s2.disabled = false;
+          var s3 = dlg.querySelector("#kswiz-s3"); if (s3) s3.disabled = false;
+        }
+      }).catch(function () {});
+    }
   }
   function openWizard() { var d = document.getElementById("ks-ident-wizard"); if (d && d.showModal) d.showModal(); else if (d) d.setAttribute("open", ""); }
   function closeWiz(d) { if (d.close) d.close(); else d.removeAttribute("open"); }
