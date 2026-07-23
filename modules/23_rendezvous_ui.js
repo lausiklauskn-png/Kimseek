@@ -641,6 +641,17 @@
     panelEl.appendChild(el("p", "margin:0 0 10px;color:#9aa7b6",
       "Triff andere SBKIM-Knoten im gemeinsamen Raum — server-los, direkt aus deinem Browser. Du kannst dieses Fenster schließen und normal weiterarbeiten; nur die App-Seite selbst offen lassen, damit du erreichbar bleibst."));
 
+    // A15 — Zwei-Stufen-Hinweis (ehrliche Kosten-Benennung, reine Anzeige):
+    // „nur stöbern" ist anonym (kein Modell/keine Identität, man wird nicht
+    // gefunden); „voll mitmachen" legt einmal eine lokale Identität an und macht
+    // fragen/verbinden möglich. Der Übergang ist sanft (siehe onAsk/onAnswerFetch).
+    var stageNote = el("div", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);color:#9aa7b6;font-size:.74rem;line-height:1.5");
+    stageNote.innerHTML =
+      "<b style=\"color:#c7d2de\">🔎 Nur stöbern</b> — anonym umsehen, wer im Raum ist. Kein Download, keine Identität, du wirst selbst nicht gefunden. (Knopf „👥 Wer ist im Raum?“)<br>" +
+      "<b style=\"color:#c7d2de\">🌐 Voll mitmachen</b> — einmal eine eigene Identität anlegen (bleibt in deinem Browser). Erst dann bist du auffindbar und kannst fragen &amp; dich verbinden. (Knopf „🌐 Mit dem Knotennetz verbinden“)";
+    panelEl.appendChild(stageNote);
+
     var row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
     var connectBtn = el("button", bs, "🌐 Mit dem Knotennetz verbinden"); connectBtn.type = "button";
     var discoverBtn = el("button", bsGhost, "👥 Wer ist im Raum?"); discoverBtn.type = "button";

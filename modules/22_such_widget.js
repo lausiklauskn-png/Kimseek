@@ -286,6 +286,12 @@
   // (Modul 05 + Relais). Im Standalone-Such-Tool ohne Modul 05 = null → der
   // Knoten-Bereich bleibt rein lokal (fail-soft, kein Bruch).
   var queryNodeFn = null;
+  // A11B-Inc-3 — optional via options.connectNode injizierte Funktion (nodeId)
+  // -> {ok, outcome, score, reason, nodeName}. Auf der Sage-Seite verdrahtet mit
+  // SbkimRendezvous (discover Raum → Karte finden → handshakeCard, 0.80-Riegel
+  // entscheidet). Ohne Injektion (Standalone/Forker ohne Modul 23) = null →
+  // der „🤝 verbinden"-Knopf bleibt aus (fail-soft, kein toter Knopf).
+  var connectNodeFn = null;
   var LIVE_NODE_MAX = 2;          // top-N Nachbarn pro Suche live fragen (Deckel)
   var SEARXNG_MAX_RESULTS = 50;   // wie viele Roh-Treffer wir holen + sortieren
 
@@ -3252,12 +3258,23 @@
       var copyBtn = doc.createElement("button");
       copyBtn.type = "button";
       copyBtn.className = "sbkim-sw-copyall";
-      copyBtn.textContent = "🖨 Block kopieren (" + treffer.length + ")";
+      var copyLabel = "🖨 Block kopieren (" + treffer.length + ")";
+      copyBtn.textContent = copyLabel;
       copyBtn.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
       copyBtn.addEventListener("click", function (ev) {
         if (ev && ev.preventDefault) ev.preventDefault();
         copyToClipboard(buildResultsText(lastRenderRes)).then(function (ok) {
           setHint(ok ? "Treffer-Block kopiert — einfügen und losschicken." : "Kopieren nicht möglich (Browser blockiert).");
+          // Sichtbare Rückmeldung DIREKT am Knopf (Klaus-Befund 2026-07-17: „ein
+          // Link ohne sichtbares Ergebnis" — der Hint allein wird leicht übersehen).
+          copyBtn.textContent = ok ? "✓ kopiert!" : "✗ nicht möglich";
+          copyBtn.style.background = ok ? "#166534" : "#7f1d1d";
+          copyBtn.style.color = "#fff";
+          if (global.setTimeout) global.setTimeout(function () {
+            copyBtn.textContent = copyLabel;
+            copyBtn.style.background = "";
+            copyBtn.style.color = "";
+          }, 1600);
         });
       });
       resultsEl.appendChild(copyBtn);
@@ -3392,6 +3409,11 @@
             setHint(ok
               ? "Frage kopiert — Suchmaschine selbst öffnen (Splitscreen) und einfügen. Die App bleibt offen."
               : "Konnte nicht kopieren — Frage oben markieren und kopieren.");
+            // Sichtbare Rückmeldung direkt am Knopf (Klaus-Befund 2026-07-17).
+            webCopyBtn.textContent = ok ? "✓ kopiert!" : "✗ nicht möglich";
+            if (global.setTimeout) global.setTimeout(function () {
+              webCopyBtn.textContent = "📋 Frage kopieren";
+            }, 1600);
           });
         });
       })(res.webLink.query || "");
@@ -3465,6 +3487,7 @@
       source: t.source || "app",
       score: typeof t.score === "number" ? t.score : null,
       begruendung: t.begruendung || null,
+      nodeId: t.nodeId || null,   // A11B — Knoten-Treffer: gezielt fragen/verbinden
     };
   }
 
@@ -4013,6 +4036,121 @@
       urlEl.className = "sbkim-sw-detail-url";
       urlEl.textContent = item.url;
       detailOverlayEl.appendChild(urlEl);
+    }
+
+    // A11B-Inc-2 — Knoten-Detail-Frage: ist der Treffer ein Mycel-KNOTEN
+    // (nodeId vorhanden), kann man DIESEN Knoten gezielt fragen — der natürliche
+    // Erst-Kontakt-Fluss (erst fragen, dann verbinden). Fail-soft: ohne Live-Pfad
+    // (queryNode nicht injiziert / noch nicht „🌐 voll mitmachen") ein ehrlicher
+    // Hinweis statt totem Knopf. REINE Anzeige/Auswahl — der 0.80-Andock-Riegel
+    // + Kern (Modul 05) bleiben unberührt (nur die öffentliche queryNode-Fläche).
+    if (item.nodeId) {
+      var askWrap = doc.createElement("div");
+      askWrap.setAttribute("style", "margin-top:10px;padding-top:9px;border-top:1px solid rgba(154,167,182,.18)");
+      var askTitle = doc.createElement("div");
+      askTitle.setAttribute("style", "font-size:.78rem;font-weight:600;margin-bottom:5px");
+      askTitle.textContent = "Frage an diesen Knoten:";
+      askWrap.appendChild(askTitle);
+      if (typeof queryNodeFn === "function") {
+        var askIn = doc.createElement("input");
+        askIn.type = "text";
+        askIn.setAttribute("style", "width:100%;box-sizing:border-box;padding:6px 9px;border-radius:8px;" +
+          "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.5);color:#e8eef6;font:inherit;font-size:.78rem");
+        askIn.value = (inputEl ? inputEl.value : queryValue) || "";
+        askIn.setAttribute("placeholder", "z.B. " + (item.titel || "…"));
+        askIn.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
+        askWrap.appendChild(askIn);
+        var askBtn = makeBtn(doc, "sbkim-sw-aibtn sbkim-sw-detail-ask", "🔎 Antwort holen", "Diesen Knoten fragen");
+        var askOut = doc.createElement("div");
+        askOut.setAttribute("style", "font-size:.76rem;color:#9aa7b6;margin-top:7px;white-space:pre-wrap;word-break:break-word");
+        askOut.style.display = "none";
+        askBtn.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
+        askBtn.addEventListener("click", function (ev) {
+          if (ev && ev.preventDefault) ev.preventDefault();
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          var frage = (askIn.value || "").trim();
+          askOut.style.display = "";
+          if (!frage) { askOut.textContent = "Zuerst eine Frage eintippen."; return; }
+          while (askOut.firstChild) askOut.removeChild(askOut.firstChild);
+          askOut.textContent = "⏳ Frage unterwegs an " + (item.titel || "den Knoten") + " …";
+          askBtn.disabled = true;
+          Promise.resolve().then(function () { return queryNodeFn(item.nodeId, frage); })
+            .then(function (hits) {
+              askBtn.disabled = false;
+              hits = Array.isArray(hits) ? hits : [];
+              while (askOut.firstChild) askOut.removeChild(askOut.firstChild);
+              if (!hits.length) {
+                askOut.textContent = "Keine Live-Antwort (Knoten evtl. gerade zu — oder du bist noch nicht angemeldet: „🌐 Voll mitmachen“). Die Frage bleibt server-los offen.";
+                return;
+              }
+              var lead = doc.createElement("div");
+              lead.setAttribute("style", "font-weight:600;color:#c7d2de;margin-bottom:4px");
+              lead.textContent = "Antwort von " + (item.titel || "dem Knoten") + " (nach Bedeutung):";
+              askOut.appendChild(lead);
+              for (var j = 0; j < Math.min(hits.length, 5); j++) {
+                var h = hits[j];
+                var hrow = doc.createElement("div");
+                hrow.setAttribute("style", "padding:2px 0");
+                var pct = (h && typeof h.score === "number") ? (" · " + Math.round(h.score * 100) + " %") : "";
+                hrow.textContent = "• " + ((h && (h.label || h.text)) || "(Treffer)") + pct;
+                askOut.appendChild(hrow);
+              }
+              // A11B-Inc-3: „🤝 mit diesem Knoten verbinden" — erscheint ERST NACH
+              // einer Antwort (Erst-Kontakt über Neugier). Der Handshake läuft über
+              // den injizierten connectNode (Sage: discover→handshakeCard); der
+              // 0.80-Andock-Riegel (Modul 05) entscheidet UNVERÄNDERT. Fail-soft:
+              // ohne connectNode kein Knopf; Ergebnis wird ehrlich benannt.
+              if (typeof connectNodeFn === "function") {
+                var connWrap = doc.createElement("div");
+                connWrap.setAttribute("style", "margin-top:9px");
+                var connBtn = makeBtn(doc, "sbkim-sw-aibtn sbkim-sw-detail-connect", "🤝 mit diesem Knoten verbinden", "Mit diesem Knoten verbinden");
+                var connOut = doc.createElement("div");
+                connOut.setAttribute("style", "font-size:.76rem;color:#9aa7b6;margin-top:6px;white-space:pre-wrap;word-break:break-word");
+                connOut.style.display = "none";
+                connBtn.addEventListener("pointerdown", function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); });
+                connBtn.addEventListener("click", function (ev) {
+                  if (ev && ev.preventDefault) ev.preventDefault();
+                  if (ev && ev.stopPropagation) ev.stopPropagation();
+                  connOut.style.display = "";
+                  connOut.textContent = "⏳ verbinde mit " + (item.titel || "dem Knoten") + " …";
+                  connBtn.disabled = true;
+                  Promise.resolve().then(function () { return connectNodeFn(item.nodeId); })
+                    .then(function (r) {
+                      connBtn.disabled = false;
+                      r = r || {};
+                      var pct = (typeof r.score === "number") ? (" (" + Math.round(r.score * 100) + " %)") : "";
+                      if (r.ok || r.outcome === "established") {
+                        connOut.textContent = "✓ Verbunden mit " + (r.nodeName || item.titel || "dem Knoten") + pct + ".";
+                      } else if (r.outcome === "rejected" || (typeof r.score === "number" && r.score < 0.80)) {
+                        connOut.textContent = "Geprüft, aber (noch) keine Verbindung — andere Domäne / unter der Andock-Schwelle" + pct + ".";
+                      } else {
+                        connOut.textContent = "Nicht verbunden: " + (r.reason || "Gegenknoten evtl. gerade zu, oder du bist noch nicht angemeldet („🌐 Voll mitmachen“).");
+                      }
+                    })
+                    .catch(function (e) {
+                      connBtn.disabled = false;
+                      connOut.textContent = "Verbinden fehlgeschlagen (" + ((e && e.message) || e) + ").";
+                    });
+                });
+                connWrap.appendChild(connBtn);
+                connWrap.appendChild(connOut);
+                askOut.appendChild(connWrap);
+              }
+            })
+            .catch(function (e) {
+              askBtn.disabled = false;
+              askOut.textContent = "Frage fehlgeschlagen (" + ((e && e.message) || e) + "). Evtl. noch nicht angemeldet: „🌐 Voll mitmachen“.";
+            });
+        });
+        askWrap.appendChild(askBtn);
+        askWrap.appendChild(askOut);
+      } else {
+        var askHint = doc.createElement("div");
+        askHint.setAttribute("style", "font-size:.74rem;color:#9aa7b6");
+        askHint.textContent = "Live-Fragen an einen Knoten brauchen einmal „🌐 Voll mitmachen“ (eigene Identität). Danach erscheint hier „🔎 Antwort holen“.";
+        askWrap.appendChild(askHint);
+      }
+      detailOverlayEl.appendChild(askWrap);
     }
 
     // [📌 Merken] / [📌 Gemerkt ✓] — Merken aus dem Overlay; gilt sofort.
@@ -4753,6 +4891,7 @@
     if (typeof options.prepareNodeCorpus === "function") nodeCorpusPreparer = options.prepareNodeCorpus;
     // Live-Cross-Knoten-Frage (Bau Query-über-Relais): (nodeId, text) -> Promise<Array<{label,score,anchorId}>>.
     if (typeof options.queryNode === "function") queryNodeFn = options.queryNode;
+    if (typeof options.connectNode === "function") connectNodeFn = options.connectNode;
     if (typeof options.searxngUrl === "string") searxngUrl = options.searxngUrl.trim();
     if (typeof options.webSearchEngine === "string") {
       for (var wi = 0; wi < WEB_ENGINES.length; wi++) {
@@ -4904,6 +5043,7 @@
       get corpusReady() { return corpusReady; },
       get nodeCorpusSize() { return Array.isArray(nodeCorpus) ? nodeCorpus.length : 0; },
       get liveNodeQuery() { return typeof queryNodeFn === "function"; },
+      get liveNodeConnect() { return typeof connectNodeFn === "function"; },
       get areas() { return { app: areas.app.enabled, knoten: areas.knoten.enabled, internet: areas.internet.enabled }; },
       get richterOn() { return richterOn; },
       // A1/A4-Verdrahtung (reine Diagnose): Vorfilter läuft hybrid, Multi-Query

@@ -273,6 +273,37 @@
           return [];
         } catch (e) { return []; }
       }
+      // A11B-Inc-3 — Verbinden aus dem Such-Widget (nach einer Antwort): liest den
+      // Raum (Modul 23 discover), findet die lebende Karte zum nodeId und handshaked
+      // sie (0.80-Andock-Riegel entscheidet unverändert). Fail-soft, ehrliche Meldung.
+      async function kimseekConnectNode(nodeId) {
+        try {
+          if (!window.SbkimRendezvous || typeof window.SbkimRendezvous.discover !== "function"
+              || typeof window.SbkimRendezvous.handshakeCard !== "function") {
+            return { ok: false, reason: "Verbinden hier nicht verfügbar (Modul 23 fehlt)." };
+          }
+          var d = await window.SbkimRendezvous.discover({});
+          var cards = (d && Array.isArray(d.cards)) ? d.cards : (Array.isArray(d) ? d : []);
+          var card = null;
+          for (var i = 0; i < cards.length; i++) {
+            var c = cards[i];
+            var cid = c && (c.nodeId || (c.spore && c.spore.id));
+            if (cid === nodeId) { card = c; break; }
+          }
+          if (!card) {
+            return { ok: false, reason: "Dieser Knoten ist gerade nicht im Raum (keine frische Visitenkarte). Bitte später erneut." };
+          }
+          var r = await window.SbkimRendezvous.handshakeCard(card);
+          var oc = r && r.outcome;
+          return {
+            ok: oc === "established",
+            outcome: oc,
+            score: (r && typeof r.score === "number") ? r.score : undefined,
+            reason: r && r.reason,
+            nodeName: card.nodeName || null,
+          };
+        } catch (e) { return { ok: false, reason: (e && e.message) ? e.message : String(e) }; }
+      }
       function start() {
         if (!window.SbkimSearchWidget) {
           console.warn("[Kimseek] Modul 22 (Such-Widget) nicht geladen.");
@@ -285,6 +316,7 @@
           areasHidden: { app: true },
           prepareNodeCorpus: kimseekBuildKnotenKorpus,
           queryNode: kimseekQueryNode,
+          connectNode: kimseekConnectNode,
           richter: false,
           startExpanded: true,
           reloadButton: true,
