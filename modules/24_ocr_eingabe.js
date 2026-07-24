@@ -251,6 +251,24 @@
   }
 
   // Kern: OCR über den gewählten (oder Politik-Default-) Anbieter. Fail-soft.
+  // Putzt den Markdown-Rausch aus OCR-Text (Mistral OCR liefert Markdown):
+  //   - Bild-Platzhalter ![alt](url)  -> weg (verweisen auf nichts Lesbares)
+  //   - Link [Text](url)              -> nur der Text bleibt
+  //   - Überschriften-Marker ## Titel -> Titel (am Zeilenanfang)
+  //   - Mehrfach-Leerraum/Leerzeilen zusammengezogen
+  // Der eigentliche Text bleibt vollständig. Fail-soft: Nicht-Strings unberührt.
+  // Google/Browser liefern Klartext -> hier praktisch No-Op (kein Markdown).
+  function cleanOcrText(text) {
+    if (!text || typeof text !== "string") return text || "";
+    return text
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")          // Bild-Platzhalter raus
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")        // Link -> nur Text
+      .replace(/(^|\n)[ \t]{0,3}#{1,6}[ \t]+/g, "$1") // Überschriften-Marker weg
+      .replace(/[ \t]{2,}/g, " ")                      // Mehrfach-Space -> 1
+      .replace(/\n{3,}/g, "\n\n")                      // >2 Leerzeilen -> 2
+      .trim();
+  }
+
   async function recognize(image, options) {
     options = options || {};
     var euPolicy = normalizeEuPolicy(options.euPolicy); // sync throw nur bei Unfug
@@ -297,7 +315,7 @@
         return { available: false, provider: providerId, reason: "Texterkennung HTTP " + (res ? res.status : "?") + " — bitte tippen." };
       }
       var data = await res.json();
-      var text = provider.extract(data);
+      var text = cleanOcrText(provider.extract(data));
       // Tatsächlich benutzte Modell-Version aus der API-Antwort (Mistral OCR
       // liefert das datierte Modell, z.B. "mistral-ocr-2505") — sichtbar machen,
       // damit klar ist, welche Version lief. Fällt auf die angeforderte Version
@@ -329,6 +347,7 @@
     isBrowserOcrSupported: isBrowserOcrSupported,
     recognize: recognize,
     recognizeBrowser: recognizeBrowser,
+    cleanOcrText: cleanOcrText,
     ocrErrorHint: ocrErrorHint,
     InvalidEuPolicyError: InvalidEuPolicyError,
     _meta: {
