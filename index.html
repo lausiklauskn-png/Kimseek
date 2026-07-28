@@ -331,5 +331,39 @@
       }
     })();
   </script>
+
+<!-- ── family-projekt.de · dezenter Fuß-Verweis (netzweit identisch) ──────────
+     Zweck: Wer diese App irgendwo findet (GitHub-Download, Fork, geteilter Link),
+     kommt von hier zurück zum Marktplatz. Bewusst KLEIN und ganz unten — nicht
+     dominant auf der ersten Seite (Klaus 2026-07-28). Farbwelt = family-project
+     (--accent #6ee7d3). Selbst-enthalten, kein CDN, keine Abhängigkeit. -->
+<style>
+  .fp-badge-wrap{max-width:960px;margin:30px auto 18px;padding:0 16px;text-align:center;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+  .fp-badge{display:inline-flex;align-items:center;gap:.5em;padding:7px 15px;
+    border-radius:999px;border:1px solid rgba(110,231,211,.38);color:#6ee7d3;
+    background:rgba(110,231,211,.06);font-size:.82rem;text-decoration:none;
+    transition:background .18s ease,border-color .18s ease;}
+  .fp-badge:hover,.fp-badge:focus-visible{background:rgba(110,231,211,.15);
+    border-color:rgba(110,231,211,.72);outline:none;}
+  .fp-badge.fp-strong{background:rgba(110,231,211,.13);
+    border-color:rgba(110,231,211,.55);font-size:.86rem;padding:8px 17px;}
+  .fp-badge .fp-dot{width:7px;height:7px;border-radius:50%;background:#6ee7d3;
+    box-shadow:0 0 7px rgba(110,231,211,.85);flex:none;}
+  .fp-copy{margin-top:9px;font-size:.72rem;line-height:1.5;color:#9aa7b6;opacity:.78;}
+  @media (prefers-color-scheme: light){
+    .fp-badge{color:#0f766e;border-color:rgba(15,118,110,.35);background:rgba(15,118,110,.05);}
+    .fp-badge:hover,.fp-badge:focus-visible{background:rgba(15,118,110,.12);}
+    .fp-badge .fp-dot{background:#0f766e;box-shadow:0 0 7px rgba(15,118,110,.5);}
+    .fp-copy{color:#5b6b7a;}
+  }
+</style>
+<div class="fp-badge-wrap">
+  <a class="fp-badge fp-strong" href="https://family-projekt.de" target="_blank" rel="noopener"
+     title="Zum Marktplatz family-projekt.de — weitere Werkzeuge und Apps">
+    <span class="fp-dot"></span> Mehr Werkzeuge auf family-projekt.de
+  </a>
+  <div class="fp-copy">&copy; 2026 Klaus Nitzsche &middot; kostenlos, ohne Konto, offline nutzbar</div>
+</div>
 </body>
 </html>
