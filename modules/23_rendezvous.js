@@ -115,6 +115,9 @@
   var RDV_FRESH_SEC_DEFAULT = 1800;     // Karten der letzten 30 min berücksichtigen
   var RDV_LISTEN_MS_DEFAULT = 4000;     // Sammelfenster beim Lesen des Raums
   var RDV_HANDSHAKE_TIMEOUT_MS = 300000; // 5 min (Klaus 2026-07-08; dokumentierter Wert INTERFACES §Modul 05 / PULS Modul-18-Handshake): Empfänger lädt beim ersten Andocken evtl. das ~30-MB-Modell — 12 s waren zu kurz
+  // Mengenschutz gegen Karten-Flutung (Schutz-Plan Stufe 2b, Vorgriff Modul 11).
+  var RDV_CARDS_MAX = 200;              // Obergrenze je discover()-Durchlauf
+  var RDV_CARDS_PER_SENDER_MAX = 3;     // je Nostr-pubkey höchstens so viele Identitäten
   var NOSTR_KIND = 1;
   // Der geteilte Alt-Topf (Default-DB des Storage-Moduls). Modus B löscht NUR
   // diese DB — NIE die eigene Schublade `sbkim_<suffix>`.
@@ -152,6 +155,15 @@
   function resolveSpore() {
     var s = cfg.spore || global.SbkimSpore;
     return (s && typeof s.getOwnSpore === "function") ? s : null;
+  }
+  // Modul 02 als PRÜFER der fremden Karten (Schutz-Plan Stufe 2b). Getrennt vom
+  // Resolver oben, weil dort nur `getOwnSpore` verlangt wird: eine App kann ein
+  // Spore-Modul ohne `verifyForeignSpore` mitbringen — dann bleibt der Raum
+  // funktionsfähig, meldet die Karten aber ehrlich als UNGEPRÜFT
+  // (`_meta.cardsVerified === false`), statt sie still durchzuwinken.
+  function resolveVerifier() {
+    var s = cfg.spore || global.SbkimSpore;
+    return (s && typeof s.verifyForeignSpore === "function") ? s : null;
   }
   // Modul 04 (Match) ist eine OPTIONALE Anzeige-Abhängigkeit — nur für den
   // zentrierten Verwandtschafts-Score der Raum-Karten. Fehlt es, bleibt der
@@ -628,6 +640,9 @@
 
     var sinceSec = nowSec() - freshSec;
     var byId = {};   // nodeId -> { card, ts }
+    var perSender = Object.create(null);  // nostr-pubkey -> Anzahl Identitäten
+    var cardCount = 0;                    // Karten gesamt in diesem Durchlauf
+    var rejected = 0;                     // wegen Echtheit/Bindung verworfen
     var unsub = null;
     try {
       unsub = relay.subscribe(
@@ -637,6 +652,19 @@
           var card;
           try { card = JSON.parse(ev.content); } catch (e) { return; }
           if (!card || card.kind !== RDV_PRESENCE_KIND || !card.nodeId || !card.spore) return;
+          // Mengenschutz (Stufe 2b): der Raum darf nicht beliebig groß werden,
+          // und ein einzelner Nostr-Absender nicht beliebig viele Identitäten
+          // gleichzeitig auslegen. Still verwerfen — der Fluter erfährt nichts.
+          var sender = (typeof ev.pubkey === "string" && ev.pubkey) ? ev.pubkey : "?";
+          if (!byId[card.nodeId]) {
+            if (cardCount >= RDV_CARDS_MAX) return;
+            var vonDiesem = perSender[sender] || 0;
+            if (vonDiesem >= RDV_CARDS_PER_SENDER_MAX) return;
+            perSender[sender] = vonDiesem + 1;
+            cardCount++;
+          }
+          // Die Karte kann keine fremde Spore unter eigenem Namen tragen.
+          if (card.spore.id !== card.nodeId) { rejected++; return; }
           var ts = (typeof card.ts === "number" ? card.ts : (typeof ev.created_at === "number" ? ev.created_at : 0));
           if (!byId[card.nodeId] || ts > byId[card.nodeId].ts) byId[card.nodeId] = { card: card, ts: ts };
         },
@@ -646,7 +674,7 @@
     }
 
     return await new Promise(function (resolve) {
-      setTimeout(function () {
+      setTimeout(async function () {
         if (unsub) { try { unsub(); } catch (e) {} }
         var now = nowSec();
         var cards = Object.keys(byId)
@@ -679,9 +707,30 @@
             seenName[key] = true; return true;
           });
         }
+        // ECHTHEIT (Stufe 2b): Ed25519-Prüfung je Karte über Modul 02. Erst hier,
+        // weil verifyForeignSpore async ist und der Empfangs-Callback es nicht
+        // abwarten kann. Ungültige Karten fallen raus — niemand kann sich mehr
+        // unter fremder Identität ins Brett hängen.
+        var verifier = resolveVerifier();
+        var cardsVerified = !!verifier;
+        if (verifier) {
+          var geprueft = [];
+          for (var vi = 0; vi < cards.length; vi++) {
+            var okSpore = false;
+            try { okSpore = await verifier.verifyForeignSpore(cards[vi].spore) !== false; }
+            catch (e) { okSpore = false; }   // wirft bei ungültiger Spore → unecht
+            if (okSpore) geprueft.push(cards[vi]); else rejected++;
+          }
+          cards = geprueft;
+        }
         // Reine Anzeige-Anreicherung: zentrierter Verwandtschafts-Score je Karte
         // (gatet nichts; Handshake bleibt 0.80-Riegel). Fail-soft ohne Modul 04.
-        resolve({ ok: true, cards: relatednessForCards(cards, own) });
+        resolve({
+          ok: true,
+          cards: relatednessForCards(cards, own),
+          cardsVerified: cardsVerified,   // false = Modul 02 fehlt, Karten UNGEPRÜFT
+          rejected: rejected,             // ehrlich: wie viele fielen raus
+        });
       }, listenMs);
     });
   }
@@ -1050,6 +1099,12 @@
         hasRelay: resolveRelay() !== null,
         hasAnastomose: resolveAnastomose() !== null,
         hasSpore: resolveSpore() !== null,
+        // Werden fremde Karten kryptografisch geprüft? false = Modul 02 fehlt
+        // oder kann kein verifyForeignSpore → Karten sind UNGEPRÜFT. Ehrlich
+        // sichtbar statt still durchgewinkt (Schutz-Plan Stufe 2b).
+        cardsVerified: resolveVerifier() !== null,
+        cardsMax: RDV_CARDS_MAX,
+        cardsPerSenderMax: RDV_CARDS_PER_SENDER_MAX,
         hasMatch: resolveMatch() !== null,
         hasStorage: resolveStorage() !== null,
         // Identitäts-Isolierung (2026-07-11): trägt das aktive Storage-Modul
