@@ -125,7 +125,11 @@
           nodeName: displayNodeName(),
           dbSuffix: DB_SUFFIX,
           createIdentity: createIdentity,
-          ensureIdentity: true,   // Modus A
+          // ensureIdentity ABSICHTLICH NICHT (Stufe 0b, 2026-07-30): Modus A legte
+          // beim Seiten-Start WORTLOS eine neue Kennung an, wenn die Schublade leer
+          // war. Aus einem Speicher-Problem wurde so unbemerkt ein Identitaets-
+          // Wechsel. Die Kennung entsteht jetzt nur auf ausdrueckliche Nutzer-
+          // Entscheidung im Netz-Panel (neu anlegen ODER Sicherung einspielen).
         });
       } catch (e) {
         console.warn("[Kimseek] Rendezvous-Modul-Init (Modus A) übersprungen:", e);
