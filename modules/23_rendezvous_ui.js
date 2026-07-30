@@ -452,7 +452,7 @@
   // Konsequent fail-soft (Fremdnutzer-/Marktplatz-Brille): fehlt Modul 02 oder
   // eine Fläche daraus, sagt der Knopf das ehrlich — nie ein Crash, nie ein
   // toter Knopf, die App bleibt voll nutzbar.
-  var idBoxEl = null, idHintEl = null, idFormEl = null, werkstattRowEl = null;
+  var idBoxEl = null, idHintEl = null, idFormEl = null, werkstattRowEl = null, slotsBtnEl = null;
 
   function backupStampKey() { return "sbkim_backup_made_" + (cfg.dbSuffix || "default"); }
   function loadBackupStamp() {
@@ -502,8 +502,13 @@
       } else {
         lines.push("Letzte Sicherung: " + stamp + " (nur hier vermerkt — die Datei selbst musst du aufbewahren).");
       }
+      // Der Aufräum-Knopf erscheint NUR, wenn es mehr als ein Fach gibt. Sonst
+      // stünde ein Knopf da, der nichts zu tun hat — und der sich mit dem
+      // Alt-Speicher-Aufräumen weiter unten verwechseln ließe.
+      if (slotsBtnEl) slotsBtnEl.style.display = (st.slots.length > 1) ? "" : "none";
       if (st.slots.length > 1) {
-        lines.push("🧹 " + st.slots.length + " Fächer belegt (" + st.slots.join(", ") + ") — Aufräumen behält das aktive.");
+        lines.push("🗂 " + st.slots.length + " Kennungs-Fächer belegt (" + st.slots.join(", ") +
+          ") — Aufräumen behält das aktive.");
         warn = true;
       }
       idHintEl.textContent = lines.join("\n");
@@ -1080,8 +1085,14 @@
     backupBtn.title = "Kennung in eine verschlüsselte Datei sichern";
     var restoreBtn = el("button", idBtnCss(false), "📥 Sicherung einspielen"); restoreBtn.type = "button";
     restoreBtn.title = "Kennung aus einer Sicherungs-Datei zurückholen";
-    var slotsBtn = el("button", idBtnCss(false), "🧹 Fächer aufräumen"); slotsBtn.type = "button";
+    // Eigenes Symbol (🗂) + eindeutiger Name — NICHT 🧹 wie der Alt-Speicher-Knopf
+    // weiter unten. Klaus' Befund 2026-07-30: zwei Knöpfe, die beide „🧹 aufräumen"
+    // heißen, aber Verschiedenes tun, sind eine Doppelung im Kopf des Nutzers,
+    // auch wenn sie es im Code nicht sind. Zusätzlich: dieser Knopf erscheint nur,
+    // wenn es wirklich mehr als ein Fach gibt — im Normalfall steht er gar nicht da.
+    var slotsBtn = el("button", idBtnCss(false) + ";display:none", "🗂 Mehrfach-Kennungen aufräumen"); slotsBtn.type = "button";
     slotsBtn.title = "Alte Identitäts-Fächer entfernen, aktives behalten";
+    slotsBtnEl = slotsBtn;
     backupBtn.addEventListener("click", function () { openBackupForm(); });
     restoreBtn.addEventListener("click", function () { openImportForm(); });
     slotsBtn.addEventListener("click", function () { openCleanupForm(); });
@@ -1144,8 +1155,8 @@
     var repairRow = el("div", "margin-top:8px");
     var repairBtn = el("button", "padding:6px 11px;border-radius:8px;border:1px dashed var(--line,#5a4a3a);" +
       "background:transparent;color:#e6b980;cursor:pointer;font:inherit;font-size:.74rem",
-      "🧹 Aufräumen & neu anmelden"); repairBtn.type = "button";
-    repairBtn.title = "Aufräumen & neu anmelden";
+      "🧹 Alt-Speicher aufräumen & neu anmelden"); repairBtn.type = "button";
+    repairBtn.title = "Den geteilten Alt-Speicher dieser Adresse leeren und neu im Raum anmelden — die eigene Kennung bleibt";
     repairBtn.addEventListener("click", function () { onRepair(); });
     repairRow.appendChild(repairBtn);
     panelEl.appendChild(repairRow);
@@ -1970,6 +1981,7 @@
       refreshIdentityBox: function () { refreshIdentityBox(); },
       hasIdentityWatch: function () { return _aliveHandler !== null; },
       werkstattVisible: function () { return !!(werkstattRowEl && werkstattRowEl.style.display !== "none"); },
+      slotsBtnVisible: function () { return !!(slotsBtnEl && slotsBtnEl.style.display !== "none"); },
       werkstattText: function () { return werkstattRowEl ? werkstattRowEl.textContent : null; },
       clickWerkstatt: function () {
         if (!werkstattRowEl) return false;
