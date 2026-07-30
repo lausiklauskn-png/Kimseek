@@ -40,7 +40,7 @@ const EXPECTED_SHA256 = {
   "21_spracheingabe.js": "6be3902c67c3ebfb24a845c59bad9147af903c467b7fb7535bc26cc7943b2a49",
   "22_such_widget.js": "45f42a54e224a2c4d7ef6924aa8ab13d6f624873012680c31c193edf6958d0af",
   "23_rendezvous.js": "9f3a20856c33080989db278a54ee23d723eeec82e169e2c4aee67dbc236f992a",
-  "23_rendezvous_ui.js": "c78d18d0771cb9cc15570be44d417d142b648884709fce5faa11eced64b2bd9d",
+  "23_rendezvous_ui.js": "3d6052a6ff1c8c1cfd94ed39b9e16720ffbee2a204f914d031f5575c83f82c5b",
   "24_ocr_eingabe.js": "c0d616ff763cae409f4ec3dd943326b04c8ec0275b404ddfac348dc4c402077e",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
 };
