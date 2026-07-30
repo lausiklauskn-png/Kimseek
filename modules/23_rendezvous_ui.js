@@ -483,8 +483,23 @@
       var nidP = (typeof s.getNodeId === "function")
         ? Promise.resolve(s.getNodeId()).catch(function () { return null; })
         : Promise.resolve(null);
-      return nidP.then(function (nid) { return { known: true, slots: slots, nodeId: nid || null }; });
-    }).catch(function () { return { known: false, slots: [], nodeId: null }; });
+      // Klaus' Sichttest 2026-07-30 hat einen HALBEN Zustand ans Licht gebracht:
+      // im Fach liegen SCHLÜSSEL, aber noch KEINE Spore (Visitenkarte). Dann
+      // sagte die Statuszeile „noch keine Kennung" (sie liest getOwnSpore),
+      // während das Einspielen meldete „hier liegt schon eine" (es sieht das
+      // Fach) — und die Sicherung scheiterte erst NACH der Passwort-Eingabe mit
+      // SporeMissingError. Drei Stellen, drei Antworten. Darum wird der Zustand
+      // jetzt gelesen und beim Namen genannt.
+      var sporeP = (typeof s.getOwnSpore === "function")
+        ? Promise.resolve(s.getOwnSpore()).catch(function () { return null; })
+        : Promise.resolve(null);
+      return Promise.all([nidP, sporeP]).then(function (r) {
+        return {
+          known: true, slots: slots, nodeId: r[0] || null,
+          hasSpore: !!(r[1] && r[1].id),
+        };
+      });
+    }).catch(function () { return { known: false, slots: [], nodeId: null, hasSpore: false }; });
   }
 
   function refreshIdentityBox() {
@@ -495,6 +510,14 @@
       var lines = [], warn = false;
       if (st.known && !st.nodeId) {
         lines.push("Noch keine Kennung in diesem Browser — „🌐 Mit dem Knotennetz verbinden“ fragt dich vorher.");
+        warn = true;
+      } else if (st.known && st.nodeId && !st.hasSpore) {
+        // Halbe Kennung: Schlüssel da, Visitenkarte fehlt. Kein Fehler, aber
+        // auch nicht sicherbar — und der Weg heraus gehört dazu, nicht nur die
+        // Feststellung.
+        lines.push("⚠ Angefangene Kennung: der Schlüssel liegt hier, die Visitenkarte (Spore) fehlt noch.\n" +
+          "Solange sie fehlt, lässt sich nichts sichern. Einmal „🌐 Mit dem Knotennetz verbinden“ " +
+          "vervollständigt sie — oder im Siegel Schritt 2 „Spore erzeugen“.");
         warn = true;
       } else if (!stamp) {
         lines.push("⚠ Für diesen Knoten liegt hier noch KEINE Sicherung. Ohne sie ist ein Verlust nicht reparierbar.");
@@ -584,6 +607,20 @@
   function openBackupForm() {
     var s = backupMod();
     if (!s) { setIdForm(idNote("Modul 02 (Sicherung) ist in dieser App nicht geladen — Sicherung nicht möglich.", true)); return; }
+    // Erst prüfen, dann fragen: ohne Visitenkarte (Spore) kann Modul 02 gar kein
+    // Backup schreiben. Es dem Nutzer VOR der Passwort-Eingabe sagen, statt ihn
+    // zweimal tippen zu lassen und dann zu scheitern (Klaus' Sichttest 2026-07-30).
+    readIdentityState().then(function (st) {
+      if (st.known && st.nodeId && !st.hasSpore) {
+        setIdForm(idNote("Noch nichts zu sichern: der Schlüssel liegt hier, aber die Visitenkarte (Spore) fehlt.\n" +
+          "Einmal „🌐 Mit dem Knotennetz verbinden“ vervollständigt die Kennung — oder im Siegel Schritt 2 " +
+          "„Spore erzeugen“. Danach lässt sie sich sichern.", true));
+        return;
+      }
+      buildBackupForm(s);
+    });
+  }
+  function buildBackupForm(s) {
     var box = el("div", "");
     box.appendChild(el("div", "font-size:.72rem;color:#9aa7b6;line-height:1.45",
       "Passwort für die Sicherungs-Datei (mindestens 8 Zeichen). Ohne dieses Passwort ist die Datei wertlos — es wird nirgends gespeichert, auch nicht hier."));
