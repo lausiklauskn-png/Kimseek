@@ -149,6 +149,12 @@
       aspect:      "Verschlüsselte Geheimnis-Ablage im Safe (putSecret/getSecret)",
       description: "Der Safe kann jetzt beliebige kleine Geheimnisse (z.B. einen KI-Richter-API-Schlüssel) verschlüsselt ablegen — PBKDF2-SHA256 600k → AES-GCM-256, frisches Salt/IV je Geheimnis, kein Klartext in localStorage/IndexedDB. So überlebt ein Schlüssel Reload/App-Schließen, ohne dass eine andere App auf der geteilten Adresse ihn lesen kann (Fremdnutzer-/Marktplatz-Leitsatz). Falsches Passwort/Manipulation → fail-soft (null).",
     },
+    {
+      since:       "2026-07-29",
+      module:      "23",
+      aspect:      "Echtheit der Karten im gemeinsamen Raum",
+      description: "Jede Visitenkarte im Rendezvous-Raum wird jetzt geprüft, bevor sie angezeigt wird: die Karte muss ihre eigene Spore tragen (spore.id === nodeId) und deren Ed25519-Signatur muss über Modul 02 (verifyForeignSpore) halten. Damit kann sich niemand mehr unter fremder Identität ins Brett hängen. Dazu Mengen-Deckel je Durchlauf (200 Karten) und je Nostr-Absender (3 Identitäten) gegen Flutung. Fehlt der Prüfer, läuft der Raum weiter, meldet die Karten aber ehrlich als UNGEPRÜFT statt sie still durchzuwinken. Reine Vor-Prüfung — der 0.80-Andock-Riegel bleibt unberührt.",
+    },
   ];
 
   // ---- Aspekt-4-Anker (Karte 16 § Sub (e) dynamische Render-Variante) ----
