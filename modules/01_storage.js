@@ -882,20 +882,51 @@
     });
   }
 
+  // Selbstheilung „database connection is closing" (2026-07-29). Fasst ein
+  // ZWEITES Fenster / eine zweite App auf DERSELBEN Origin denselben Speicher
+  // an, feuert der Browser `onversionchange` → `db.close()`. Die gecachte
+  // Verbindung ist dann tot; `db.transaction()` wirft SYNCHRON einen
+  // InvalidStateError („The database connection is closing"). Bisher brach jede
+  // Operation an dieser Stelle ab — mit zwei Folgen: (a) der Handshake schlug
+  // fehl, und (b) ein fehlgeschlagener Identitäts-Lesevorgang konnte als „keine
+  // Identität" missverstanden werden → neue Kennung (Identitäts-Churn, Klaus'
+  // Mycel-Analyse 2026-07-29). `onversionchange` invalidiert `dbPromise`/
+  // `currentDb` bereits — ein ZWEITER Versuch bekommt also eine FRISCHE
+  // Verbindung. `beginTx` baut die Transaktion mit genau EINEM Reopen-Retry auf.
+  // Schlägt auch der zweite Versuch fehl, wird der Fehler EHRLICH weitergereicht
+  // (kein stilles `undefined` → kein fälschliches „keine Identität").
+  function isConnectionClosing(err) {
+    if (!err) return false;
+    if (err.name === "InvalidStateError") return true;
+    return /connection is closing/i.test(String(err.message || ""));
+  }
+  function beginTx(storeName, mode) {
+    return init().then(function (db) {
+      try {
+        return { db: db, store: db.transaction(storeName, mode).objectStore(storeName) };
+      } catch (err) {
+        if (!isConnectionClosing(err)) throw err;
+        // Tote Verbindung fallenlassen, frisch öffnen, EINMAL neu versuchen.
+        if (currentDb === db) currentDb = null;
+        dbPromise = null;
+        return init().then(function (db2) {
+          return { db: db2, store: db2.transaction(storeName, mode).objectStore(storeName) };
+        });
+      }
+    });
+  }
+
   function get(storeName, key) {
     assertKnownStore(storeName);
-    return init().then(function (db) {
-      var tx = db.transaction(storeName, "readonly");
-      var store = tx.objectStore(storeName);
-      return wrapRequest(store.get(key), "get(" + storeName + ", " + key + ")");
+    return beginTx(storeName, "readonly").then(function (h) {
+      return wrapRequest(h.store.get(key), "get(" + storeName + ", " + key + ")");
     });
   }
 
   function put(storeName, key, value) {
     assertKnownStore(storeName);
-    return init().then(function (db) {
-      var tx = db.transaction(storeName, "readwrite");
-      var store = tx.objectStore(storeName);
+    return beginTx(storeName, "readwrite").then(function (h) {
+      var store = h.store;
       var req;
       try {
         req = store.put(value, key);
@@ -919,19 +950,16 @@
 
   function del(storeName, key) {
     assertKnownStore(storeName);
-    return init().then(function (db) {
-      var tx = db.transaction(storeName, "readwrite");
-      var store = tx.objectStore(storeName);
-      return wrapRequest(store.delete(key), "del(" + storeName + ", " + key + ")").then(function () { /* void */ });
+    return beginTx(storeName, "readwrite").then(function (h) {
+      return wrapRequest(h.store.delete(key), "del(" + storeName + ", " + key + ")").then(function () { /* void */ });
     });
   }
 
   function all(storeName) {
     assertKnownStore(storeName);
-    return init().then(function (db) {
+    return beginTx(storeName, "readonly").then(function (h) {
       return new Promise(function (resolve, reject) {
-        var tx = db.transaction(storeName, "readonly");
-        var store = tx.objectStore(storeName);
+        var store = h.store;
         var results = [];
         var cursorReq = store.openCursor();
         cursorReq.onsuccess = function () {
@@ -957,10 +985,8 @@
 
   function clear(storeName) {
     assertKnownStore(storeName);
-    return init().then(function (db) {
-      var tx = db.transaction(storeName, "readwrite");
-      var store = tx.objectStore(storeName);
-      return wrapRequest(store.clear(), "clear(" + storeName + ")").then(function () { /* void */ });
+    return beginTx(storeName, "readwrite").then(function (h) {
+      return wrapRequest(h.store.clear(), "clear(" + storeName + ")").then(function () { /* void */ });
     });
   }
 

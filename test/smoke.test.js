@@ -26,7 +26,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Nachziehen einer neuen Modul-Version wird dieser Block mit den neuen Hashes
 // aktualisiert (bewusster Commit).
 const EXPECTED_SHA256 = {
-  "01_storage.js": "e507aec18d75bde66b81b9eba9738650000d9686aac90c6817679e7df06d61c1",
+  "01_storage.js": "3f4ac7df44141a75f9da77f24d7eff7d266ca982ca6b13f827532bf11b7287a6",
   "02_spore.js": "6789fe6e903ad2e53f39b2dee576c640698555ef71ef4e9134eb75573fdb7d68",
   "03_embedding.js": "e4bb8bd6a237914e7841cab5165912daf636adf0ee90c5d4ffd0c74cc5d706e5",
   "04_match.js": "9e2648729758f644fe8e35b0e049ba8d66668a72dc6b7e4b41ebd75d52c0826a",
