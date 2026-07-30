@@ -464,6 +464,48 @@
     });
   }
 
+  // Härtung „Löschen nur bei zweifelsfreier Leere" (2026-07-30, Auslöser:
+  // Klaus' Über-Nacht-Identitätsverlust). Vor JEDEM Selbst-Heilungs-Löschen
+  // eine ZWEITE, UNABHÄNGIGE Probe. Grund: die Store-Liste der ersten Probe
+  // kann unvollständig sein, wenn ein ANDERES Fenster derselben Origin gerade
+  // einen Schema-Umbau fährt (`objectStoreNames` ist während einer
+  // versionchange-Transaktion transient). Ein Fehlurteil ist hier NICHT
+  // harmlos: `indexedDB.deleteDatabase()` lässt sich NICHT zurücknehmen — bei
+  // `onblocked` (ein anderes Fenster hält die DB) bleibt die Löschung im
+  // Browser VORGEMERKT und greift, sobald die letzte Verbindung fällt
+  // (typisch: der Tab schläft über Nacht ein). Genau so verschwand eine
+  // Identität, ohne dass je ein Fehler sichtbar wurde. Regel deshalb:
+  // **im Zweifel NICHT löschen** — Löschen ist unumkehrbar, ein ehrlicher
+  // Fehler ist reparierbar.
+  //
+  // Resolves `true` NUR, wenn der Identitäts-Store zweifelsfrei fehlt. Jede
+  // Unklarheit (Öffnen scheitert, blockiert, Store doch vorhanden) → `false`.
+  function confirmIdentityStoreMissing(name) {
+    return new Promise(function (resolve) {
+      var req;
+      try { req = indexedDB.open(name); } catch (_e) { return resolve(false); }
+      var settled = false;
+      function finish(value, db) {
+        if (settled) return;
+        settled = true;
+        if (db) { try { db.close(); } catch (_e) {} }
+        resolve(value);
+      }
+      // Blockiert = ein anderes Fenster hält die DB → NIE löschen.
+      req.onblocked = function () { finish(false, null); };
+      req.onerror = function () { finish(false, null); };
+      req.onsuccess = function () {
+        var db = req.result;
+        var contains;
+        try {
+          contains = !!(db.objectStoreNames && db.objectStoreNames.contains(IDENTITY_KEYS_STORE));
+        } catch (_e) { return finish(false, db); }
+        // Store vorhanden → die erste Probe hat sich geirrt (Race) → NICHT löschen.
+        finish(!contains, db);
+      };
+    });
+  }
+
   // Härtung „Identitäts-Isolierung" (2026-07-11): behandelt einen Folge-
   // init({dbSuffix}) mit ABWEICHENDEM Namen. Ist die offene DB identitäts-
   // leer → sicheres Re-Point (alte Verbindung schließen, State zurücksetzen,
@@ -574,10 +616,33 @@
               // Pflicht-Store fehlt, könnte eine Identität existieren → dann
               // bleibt es beim fail-fast (kein stiller Datenverlust, Klaus'
               // ausdrückliche „ich repariere nicht"-Regel gilt weiter).
+              //
+              // Härtung 2026-07-30 (Klaus' Über-Nacht-Identitätsverlust): das
+              // Urteil „identitäts-leer" wird durch eine ZWEITE, unabhängige
+              // Probe BESTÄTIGT, bevor gelöscht wird. Ein Race mit einem
+              // anderen Fenster kann die Store-Liste transient unvollständig
+              // zeigen; ein `deleteDatabase()` ist unumkehrbar und wirkt bei
+              // `onblocked` sogar VERZÖGERT (vorgemerkt bis die letzte
+              // Verbindung fällt). Widerspricht die zweite Probe → NICHT
+              // löschen, sondern ehrlich melden.
               if (missing.indexOf(IDENTITY_KEYS_STORE) !== -1) {
-                deleteDb(dbNameInUse).then(function () {
-                  openFreshAtDbVersion(resolve, reject);
-                });
+                confirmIdentityStoreMissing(dbNameInUse).then(function (reallyMissing) {
+                  if (!reallyMissing) {
+                    reject(makeError(
+                      "StorageOpenError",
+                      "Selbst-Heilung abgebrochen: die erste Probe meldete den Identitaets-Store '" +
+                        IDENTITY_KEYS_STORE + "' als fehlend, die Gegenprobe widerspricht " +
+                        "(anderes Fenster haelt die DB oder Schema-Umbau laeuft). Es wird NICHT " +
+                        "geloescht — Loeschen ist unumkehrbar. Bitte alle weiteren Fenster dieser " +
+                        "App schliessen und neu laden.",
+                    ));
+                    return;
+                  }
+                  // Zweifelsfrei leer → gefahrlos neu aufbaubar.
+                  deleteDb(dbNameInUse).then(function () {
+                    openFreshAtDbVersion(resolve, reject);
+                  }, reject);   // Härtung: fehlte — eine blockierte Loeschung liess die Kette still sterben.
+                }, reject);
                 return;
               }
               reject(makeError(
