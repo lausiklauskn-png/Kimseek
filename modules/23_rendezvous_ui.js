@@ -1252,6 +1252,15 @@
     // Anbieters. Sichtbar nur, wenn KI-Richter an ist UND noch KEIN Schlüssel
     // eingegeben wurde (dann braucht man ihn ja gerade). Neuer Tab, fail-soft.
     kiKeyLinkEl = doc().createElement("a");
+    // Eine Adresse MUSS schon hier stehen (Lighthouse „crawlable-anchors",
+    // 2026-08-01): `kiProvider` ist beim Bauen noch leer, das Element wäre sonst
+    // bis zum ersten `updateKiKeyLink()` ein Link ins Nichts — für Suchmaschinen
+    // und für Vorlesewerkzeuge. Der erste bekannte Anbieter ist der Platzhalter;
+    // sobald ein Anbieter gewählt ist, überschreibt `updateKiKeyLink()` ihn.
+    // Die SICHTBARKEIT bleibt unberührt an der echten Kenntnis hängen
+    // (unbekannter Anbieter → kein Link, fail-soft) — hier wird nur verhindert,
+    // dass ein verborgenes <a> ohne Ziel im Dokument steht.
+    kiKeyLinkEl.href = KI_KEY_URLS[kiProvider] || KI_KEY_URLS[Object.keys(KI_KEY_URLS)[0]] || "";
     kiKeyLinkEl.textContent = "🔑 Schlüssel holen ↗";
     kiKeyLinkEl.target = "_blank"; kiKeyLinkEl.rel = "noopener noreferrer";
     kiKeyLinkEl.title = "Schlüssel beim Anbieter holen";

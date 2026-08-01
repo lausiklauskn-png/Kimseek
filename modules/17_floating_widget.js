@@ -329,16 +329,35 @@
     // CSS-Variablen auf `:root` definiert — PWA kann sie via eigenem
     // `:root`-Block überschreiben (Hintergrund/Akzent-Farben/Text-Farbe).
     // Theme-Option `"transparent"` setzt den Hintergrund auf `transparent`
-    // (für PWAs mit eigenem Outer-Frame). Default folgt dem Sage-Page-
-    // Wert `rgba(0,0,0,0.45)` direkt.
+    // (für PWAs mit eigenem Outer-Frame).
+    //
+    // LESBARKEIT (Lighthouse-Runde 2026-08-01, nachgerechnet):
+    // Der Hintergrund stand auf `rgba(0, 0, 0, 0.45)` — dem Sage-Page-Wert. Das
+    // Widget wurde für die DUNKLE Sage-Page entworfen; in einer hellen PWA kippt
+    // die Rechnung, weil 45 % Schwarz über Weiß nur ein Mittelgrau ergibt:
+    //
+    //              Untergrund        helle Schrift   abgeblendete
+    //   vorher     helle Seite       3,09:1          1,97:1     <- beide unter der Norm
+    //   vorher     dunkle Seite     18,58:1          5,86:1
+    //   nachher    helle Seite      11,57:1          7,27:1
+    //   nachher    dunkle Seite     17,33:1          9,96:1
+    //
+    // (WCAG verlangt 4,5:1 für normalen Text. Gerechnet über die relative
+    // Leuchtdichte, nicht geschätzt.)
+    //
+    // Der Grund ist jetzt fast deckend und damit unabhängig von der Seite
+    // darunter. Der Glas-Eindruck bleibt — der `backdrop-filter` ist unberührt,
+    // er wird nur satter. Die Variablen bleiben ausdrücklich `:root`-Variablen,
+    // damit eine PWA sie weiterhin überschreiben kann; geändert wird nur der
+    // Standard, nicht diese Möglichkeit.
     return [
       "/* SBKIM Modul 17 Floating-Widget — 1:1 Sage-Page-Stil (Pflege UX 2026-05-25). */",
       "/* CSS-Variablen auf :root für PWA-Override. Eigene PWA setzt z.B. */",
       "/*   :root { --sbkim-widget-bg: var(--meine-pwa-card-bg); }       */",
       ":root {",
-      "  --sbkim-widget-bg: rgba(0, 0, 0, 0.45);",
+      "  --sbkim-widget-bg: rgba(18, 18, 24, 0.86);",
       "  --sbkim-widget-fg: #F5F5FF;",
-      "  --sbkim-widget-fg-dim: rgba(245, 245, 255, 0.55);",
+      "  --sbkim-widget-fg-dim: rgba(245, 245, 255, 0.75);",
       "  --sbkim-widget-line: rgba(255, 255, 255, 0.18);",
       "  --sbkim-widget-lamp-bg: rgba(255, 255, 255, 0.12);",
       "  --sbkim-widget-accent-green: #6EE7D3;",
@@ -724,7 +743,9 @@
       "  font-size: 0.86rem;",
       "  font-family: 'Geist Mono', ui-monospace, monospace;",
       "}",
-      ".sbkim-widget-lebt-grid dt { color: var(--sbkim-widget-fg-dim, rgba(245,245,255,0.55)); }",
+      // Der Ersatzwert muss dieselbe Rechnung tragen wie die Variable (0.75),
+      // sonst fällt die Lesbarkeit genau dann zurück, wenn die Variable fehlt.
+      ".sbkim-widget-lebt-grid dt { color: var(--sbkim-widget-fg-dim, rgba(245,245,255,0.75)); }",
       ".sbkim-widget-lebt-grid dd { margin: 0; }",
     ].join("\n");
   }
