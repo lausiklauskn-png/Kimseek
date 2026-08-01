@@ -36,11 +36,11 @@ const EXPECTED_SHA256 = {
   "15_membran.js": "fbf9f42d8a2720b01d6318b00e84c0eac35a108cb3ee50e87096796e3c72e7cf",
   "16_siegel.js": "4e11ef0d0390d155accf64cb4f71c473f77fd46b91ca10a1bc167ba3d3bbec53",
   "20_schluessel_safe.js": "e7e25c9070e93f8267171d2b626109cfd90cb481c2781242f5f7dfc203f031f3",
-  "17_floating_widget.js": "f48a95ac357ae212fe80e04e28426c43ae0ad9ab35de1eff42d19b8a3b0116c9",
+  "17_floating_widget.js": "6017e263bb7fa292657cf0c544d0d0d2987fe752a355fe8925398f443e74d103",
   "21_spracheingabe.js": "6be3902c67c3ebfb24a845c59bad9147af903c467b7fb7535bc26cc7943b2a49",
   "22_such_widget.js": "45f42a54e224a2c4d7ef6924aa8ab13d6f624873012680c31c193edf6958d0af",
   "23_rendezvous.js": "3caa0bb1fbe7bf5293c90b6a59a74cccf8600bff45095a892b1f048244c61fcf",
-  "23_rendezvous_ui.js": "f2cf79c9defb7120270af8ade992cc6748e00ce8f9f2e97f490d1a62de4b24f1",
+  "23_rendezvous_ui.js": "00a6920535d3540c6e277fd0645956e9b3e7ac842a315242b3ac7182f38c78ca",
   "24_ocr_eingabe.js": "c0d616ff763cae409f4ec3dd943326b04c8ec0275b404ddfac348dc4c402077e",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
 };
