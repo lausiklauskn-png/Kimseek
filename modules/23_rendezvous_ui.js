@@ -895,6 +895,39 @@
     } catch (_e) { /* fail-soft — dann bleibt es beim Label ohne Tooltip */ }
   }
 
+  // ── Kollision mit der Lampen-Leiste (Modul 17) auf schmalen Schirmen ────────
+  // Befund 2026-08-03 (gemessen an BookLedgerPro, 412 px breit): die Lampen-
+  // Leiste sitzt unten rechts, wird mit allen vier Lampen aber so breit, dass
+  // sie bis an den linken Rand reicht. Der 🌐-Knopf sitzt unten links — und lag
+  // damit MITTEN AUF der Leiste. Der Prüfer meldete beide Elemente zugleich
+  // ("teilweise verdeckt", nur 8,2 px der LEBT-Lampe blieben frei); mit dem
+  // Finger war die Lampe nicht mehr zu treffen.
+  //
+  // Klaus' Entscheid 2026-08-03: der 🌐-Knopf rückt hoch, die Leiste bleibt, wo
+  // sie ist. Nur unterhalb von 560 px — darüber stehen beide nebeneinander und
+  // es ändert sich nichts. 78 px = 16 px Abstand der Leiste vom Rand + rund
+  // 56 px Leisten-Höhe + 6 px Luft.
+  //
+  // Warum als eingehängte Regel und nicht am Knopf: die Position steht inline
+  // am Element, und inline schlägt jedes Stylesheet — nur `!important` in einer
+  // Medien-Abfrage kommt dagegen an. Sie greift ausdrücklich NUR bei den beiden
+  // unteren Ecken (`data-ecke-unten`); wer den Knopf oben verankert, ist von der
+  // Leiste ohnehin weit weg. Fail-soft: ohne `head` passiert schlicht nichts.
+  var RDV_STIL_ID = "sbkim-rdv-stil";
+  function stilEinhaengen() {
+    var d = doc();
+    if (!d || !d.head || d.getElementById(RDV_STIL_ID)) return;
+    try {
+      var st = d.createElement("style");
+      st.id = RDV_STIL_ID;
+      st.textContent =
+        "@media (max-width: 560px){" +
+        "#sbkim-rdv-btn[data-ecke-unten=\"1\"]{bottom:78px !important;}" +
+        "}";
+      d.head.appendChild(st);
+    } catch (e) { /* fail-soft: ohne die Regel ueberlappt es nur wieder */ }
+  }
+
   function cornerCss(corner, panel) {
     var off = panel ? "64px" : "14px";
     switch (corner) {
@@ -1027,11 +1060,27 @@
 
     btnEl = el("button", "position:fixed;" + cornerCss(cfg.corner, false) + ";z-index:2147483600;" +
       "font:600 .8rem var(--mono,system-ui,sans-serif);padding:8px 12px;border-radius:10px;" +
-      "border:1px solid " + ac + ";background:rgba(10,12,20,.7);color:" + ac + ";cursor:pointer;" +
+      // LESBARKEIT (Lighthouse-Runde 2026-08-03, gemessen an BookLedgerPro):
+      // Die Schrift stand auf der Akzentfarbe der App. Das geht gut, solange die
+      // App einen HELLEN Akzent auf dunklem Grund hat (Sage: #6ee7d3, Minze).
+      // BookLedgerPro hat aber ein dunkles Petrol (#0f766e) — dunkle Schrift auf
+      // dunklem Grund, gemessen 1,35:1 statt der geforderten 4,5:1. Praktisch
+      // unlesbar, und es faellt nur niemandem auf, weil man ahnt, was da steht.
+      //
+      // Der Knopf uebernimmt jetzt dieselbe Schriftfarbe wie das Panel, das er
+      // oeffnet (#eef2f8) — dort stand sie von Anfang an. Der Akzent bleibt als
+      // Rahmen erhalten, die App bleibt also erkennbar; nur die Schrift ist nicht
+      // mehr von einer Farbe abhaengig, die die App fuer HELLE Flaechen gewaehlt
+      // hat. Wer den Knopf bewusst anders faerben will, setzt weiterhin
+      // `cfg.accent` — das faerbt den Rahmen.
+      "border:1px solid " + ac + ";background:rgba(10,12,20,.7);color:#eef2f8;cursor:pointer;" +
       "backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,.35)", RDV_BUBBLE_BASE);
     btnEl.type = "button";
     btnEl.id = "sbkim-rdv-btn";
     btnEl.title = "Mit dem Knotennetz verbinden";
+    // Nur die unteren Ecken koennen mit der Lampen-Leiste kollidieren.
+    if (cfg.corner !== "tl" && cfg.corner !== "tr") btnEl.setAttribute("data-ecke-unten", "1");
+    stilEinhaengen();
 
     panelEl = el("div", "position:fixed;" + cornerCss(cfg.corner, true) + ";z-index:2147483600;" +
       "width:min(420px,92vw);display:none;max-height:80vh;overflow-y:auto;-webkit-overflow-scrolling:touch;" +
