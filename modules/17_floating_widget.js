@@ -76,9 +76,34 @@
   // localStorage-Schlüssel (Karte 17 § Persistenz / § localStorage-Schema).
   // Pflege 17 UX 2026-05-25: dritter Schlüssel `sbkim_widget_minimized`
   // für den Drei-Zustand-Pfad full / minimized / hidden.
-  var LS_KEY_VISIBLE = "sbkim_widget_visible";
-  var LS_KEY_POSITION = "sbkim_widget_position";
-  var LS_KEY_MINIMIZED = "sbkim_widget_minimized";
+  //
+  // Pro-App-Namensraum (Fix 2026-06-28, Klaus — 2026-08-03 in den Kanon geholt):
+  // Die Schlüssel tragen den App-Pfad (z.B. "Mein-Mixarium"), damit Geschwister-
+  // Apps auf demselben Origin (lausiklauskn-png.github.io) sich NICHT denselben
+  // Widget-Zustand teilen. Vorher führte ein Schließen in EINER App zum
+  // Verschwinden in ALLEN.
+  //
+  // Warum das hier erst jetzt steht: der Fix wurde 2026-06-28 direkt in
+  // Mein-Rezeptbuch, Muttis-Rezeptbuch und Mein-Mixarium eingebaut und nie in
+  // den Kanon zurückgeholt. Beim Modul-17-Rollout am 2026-08-03 fiel auf, dass
+  // die drei Apps deshalb eine EIGENE Fassung trugen — ein byte-1:1-Rollout
+  // hätte den Fix stillschweigend wieder ausgebaut. Jetzt ist der Kanon die
+  // Obermenge, und die übrigen zehn Träger bekommen den Fix mit dazu.
+  // (Verlangt so auch CLAUDE.md § Fremdnutzer-Brille: „localStorage-Schlüssel
+  // app-spezifisch (Suffix), damit Geschwister-Apps sich nicht stören".)
+  //
+  // Einmaliger Nebeneffekt: gemerkte Position/Minimierung starten einmal neu,
+  // weil die Schlüssel neu heißen. Das Widget selbst ist danach sofort wieder da.
+  var WIDGET_SCOPE = (function () {
+    try {
+      var p = (typeof location !== "undefined" && location.pathname) ? location.pathname : "";
+      var seg = p.replace(/^\/+/, "").split("/")[0];
+      return (seg && seg.length) ? seg : "root";
+    } catch (e) { return "root"; }
+  })();
+  var LS_KEY_VISIBLE = "sbkim_widget_visible__" + WIDGET_SCOPE;
+  var LS_KEY_POSITION = "sbkim_widget_position__" + WIDGET_SCOPE;
+  var LS_KEY_MINIMIZED = "sbkim_widget_minimized__" + WIDGET_SCOPE;
 
   // Custom-Event-Namen (Karte 17 § Event-Bus-Schema).
   var EVENT_ALIVE = "sbkim:alive";
@@ -455,6 +480,19 @@
       "  background: transparent;",
       "  border: none;",
       "  padding: 4px 6px;",
+      // BERUEHRUNGSZIEL (Lighthouse-Runde 2026-08-03, gemessen):
+      // Die Lampen-Knoepfe waren 54,5 x 18,6 px. Die Norm verlangt 24 x 24 px
+      // — wer mit dem Finger tippt (und nicht mit der Maus zielt), trifft
+      // 18 px schlecht. Gemessen an BookLedgerPro, mobil:
+      //
+      //   LEBT      54,5 x 18,6      VERKEHR   75,5 x 18,6
+      //   FREMD     61,5 x 18,6      SIEGEL    51,9 x 44,2   (war schon gross genug)
+      //
+      // Die Breite passt ueberall, nur die Hoehe fehlte. Darum NUR min-height
+      // — ein min-width wuerde das Zusammenschieben im minimierten Zustand
+      // kaputtmachen (dort steht max-width: 0). Die Pille waechst dadurch um
+      // rund 5 px; das Aussehen bleibt sonst unveraendert.
+      "  min-height: 24px;",
       "  margin: 0;",
       "  cursor: pointer;",
       "  display: inline-flex;",
@@ -658,8 +696,14 @@
       "}",
       // Minimize-/Close-Knöpfe: kleine Icon-Buttons rechts. Touch-Größe 18 px.
       "#" + WIDGET_ID + " .sbkim-widget-btn {",
-      "  width: 18px;",
-      "  height: 18px;",
+      // BERUEHRUNGSZIEL (Lighthouse-Runde 2026-08-03): die beiden kleinen
+      // Knoepfe "−" (minimieren) und "✕" (schliessen) massen 18 x 18 px und
+      // lagen damit unter der Norm von 24 x 24 px. Gerade diese beiden trifft
+      // man mit dem Finger am haeufigsten daneben — und ein Fehlgriff auf "✕"
+      // blendet die Leiste aus. Das Glyph bleibt gleich gross (font-size
+      // unveraendert), nur die Trefferflaeche waechst.
+      "  width: 24px;",
+      "  height: 24px;",
       "  border-radius: 50%;",
       "  background: rgba(255, 255, 255, 0.08);",
       "  color: var(--sbkim-widget-fg);",
