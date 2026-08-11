@@ -1025,6 +1025,25 @@
     if (!node || !p) return;
     node.style.left = p.x + "px"; node.style.top = p.y + "px";
     node.style.right = "auto"; node.style.bottom = "auto";
+    // ⚠ Und das Ecken-Merkmal abnehmen (Klaus 2026-08-11, zweiter Befund:
+    // „das Mizel ist immer noch son langer Container … in Kombination mit dem
+    // Minimieren").
+    //
+    // Die Regel `#sbkim-rdv-btn[data-ecke-unten="1"]{bottom:78px !important}`
+    // hebt einen in der UNTEREN ECKE verankerten Knopf über die Lampen-Leiste.
+    // `!important` schlaegt aber auch das `bottom:auto`, das eine Zeile darueber
+    // inline gesetzt wird. Sobald hier eine freie Position anliegt, gelten also
+    // `top` UND `bottom` gleichzeitig — und ein `position:fixed`-Element mit
+    // beidem zieht sich ueber die ganze Hoehe dazwischen. Genau das: ein
+    // fingerbreiter, schirmhoher Kasten mit der Schrift in der Mitte, auf zwei
+    // Geraeten fotografiert. Nur unter 560 px, und nur nachdem eine Position
+    // gesetzt wurde (Ziehen, Minimieren, gemerkte Position beim Laden) — darum
+    // sah es beim ersten Aufruf richtig aus.
+    //
+    // Wer frei positioniert ist, steht nicht mehr in der Ecke; die Ausnahme fuer
+    // die Ecke gilt fuer ihn nicht mehr. Zurueck kommt sie beim naechsten Laden
+    // ohne gemerkte Position — dann steht der Knopf wieder in der Ecke.
+    try { if (node.removeAttribute) node.removeAttribute("data-ecke-unten"); } catch (_e) {}
   }
   function makeDraggable(node, handle) {
     handle = handle || node;
