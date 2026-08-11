@@ -995,10 +995,29 @@
     // Klemme, dass das GANZE Panel auf den Schirm passt — ein hohes Panel klemmte
     // dann vertikal fest (nur horizontal verschiebbar). Oben nie ganz raus, weil
     // die Kopfzeile der Ziehgriff ist.
+    //
+    // ⚠ WAAGERECHT gilt das NICHT MEHR (Klaus 2026-08-11: „der selbe Bug ist
+    // überall, auch auf den iOS-Handys"). Gemessen im echten Browser:
+    //
+    //   1100 px  Panel @980..1400 (420 breit)  →  nur 120 px sichtbar
+    //    500 px  Blase @980..1045              →  sichtbar −480 px (ganz weg)
+    //
+    // Ein 420 px breites Panel, geklemmt auf `vw - 56`, zeigt einen 56 px
+    // schmalen, hohen Streifen am rechten Rand — genau das, was Klaus als
+    // „wandert nach rechts und ist schmaler" beschrieben hat. Und auf dem
+    // Handy war der Knopf gar nicht mehr zu treffen.
+    //
+    // Klaus' Entscheid von 2026-07-24 bleibt trotzdem gültig — er zielte auf
+    // die HÖHE: ein hohes Panel soll über den unteren Rand ragen dürfen, statt
+    // senkrecht festzukleben. Genau diese Hälfte bleibt. Waagerecht passt das
+    // Panel dagegen IMMER (`width:min(420px,92vw)`), also gibt es keinen Grund,
+    // es halb aus dem Bild zu schieben: was hineinpasst, bleibt ganz drin.
     var vw = global.innerWidth || 1024, vh = global.innerHeight || 768;
     var w = (node && node.offsetWidth) || 60;
     var KEEP = 56;
-    var loX = Math.min(4, KEEP - w), hiX = Math.max(loX, vw - KEEP);
+    var loX, hiX;
+    if (w + 8 <= vw) { loX = 4; hiX = Math.max(loX, vw - w - 4); }   // passt → ganz sichtbar
+    else { loX = Math.min(4, KEEP - w); hiX = Math.max(loX, vw - KEEP); } // breiter als der Schirm
     var loY = 4, hiY = Math.max(loY, vh - KEEP);
     return { x: Math.min(Math.max(loX, x), hiX), y: Math.min(Math.max(loY, y), hiY) };
   }
@@ -1375,8 +1394,24 @@
     answerBtn.addEventListener("click", function () { onToggleAnswering(); });
 
     // Flying-Widget: gemerkte Position wiederherstellen + Drag verdrahten.
+    /* Die gemerkte Position IMMER klemmen, auch beim Laden (Klaus 2026-08-11).
+     *
+     * Vorher stand hier `applyPos(btnEl, savedPos)` ohne Klemme, und geklemmt
+     * wurde nur im `resize`-Zuhoerer darunter. Beim NEULADEN feuert aber kein
+     * `resize` — wer die Blase am breiten Schirm nach rechts zieht und die
+     * Seite dann am Handy oder im Splitscheirm oeffnet, findet sie ausserhalb
+     * des Bildes. Gemessen: bei 390 px lag sie bei x=980, also 590 px
+     * jenseits des rechten Randes. Nicht zu sehen, nicht zu treffen, nicht
+     * zurueckzuholen — ausser man dreht das Geraet, damit ein `resize` kommt.
+     *
+     * Die Klemme braucht die echte Breite des Elements. Beim Mount steht die
+     * noch nicht im Layout, darum erst anhaengen, dann klemmen. */
     var savedPos = loadPos();
-    if (savedPos) applyPos(btnEl, savedPos);
+    if (savedPos) {
+      var sicher = clampInts(savedPos.x, savedPos.y, btnEl);
+      applyPos(btnEl, sicher);
+      if (sicher.x !== savedPos.x || sicher.y !== savedPos.y) savePos(sicher.x, sicher.y);
+    }
     makeDraggable(btnEl, btnEl);   // Blase direkt ziehbar
     makeDraggable(panelEl, head);  // Panel an der Kopfzeile ziehbar
     // Bei Fenster-/Splitscreen-Änderung ins Sichtfeld zurückklemmen (fail-soft).
@@ -1965,7 +2000,19 @@
   }
 
   function show() {
-    if (panelEl) { panelEl.style.display = "block"; var p = loadPos(); if (p) applyPos(panelEl, p); }
+    /* Panel und Blase teilen sich EINE gemerkte Position — aber das Panel ist
+     * rund 420 px breit und die Blase knapp 90. Eine Stelle, an der die Blase
+     * gut sitzt, schiebt das Panel zu drei Vierteln aus dem Bild. Genau so
+     * entstand der schmale hohe Streifen (gemessen: 120 von 420 px sichtbar).
+     * Darum wird hier fuer die BREITE DES PANELS neu geklemmt, erst nachdem
+     * es sichtbar ist — vorher hat es keine Masse.
+     * Die gemerkte Position bleibt unveraendert: sie gehoert der Blase, und
+     * beim Minimieren soll die wieder dort stehen, wo Klaus sie hingezogen hat. */
+    if (panelEl) {
+      panelEl.style.display = "block";
+      var p = loadPos();
+      if (p) applyPos(panelEl, clampInts(p.x, p.y, panelEl));
+    }
     if (btnEl) btnEl.style.display = "none";      // Panel offen → Blase weg (Flying-Widget)
     refreshStatus();                              // Stufe 0a: Kennung + Speicher-Status frisch
     refreshIdentityBox();                         // Stufe 0b: Sicherungs-/Fächer-Hinweis frisch
