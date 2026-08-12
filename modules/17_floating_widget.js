@@ -791,6 +791,49 @@
       // sonst fällt die Lesbarkeit genau dann zurück, wenn die Variable fehlt.
       ".sbkim-widget-lebt-grid dt { color: var(--sbkim-widget-fg-dim, rgba(245,245,255,0.75)); }",
       ".sbkim-widget-lebt-grid dd { margin: 0; }",
+
+      /* ── Schmale Geraete: die Pille war breiter als der Bildschirm ─────────
+       *
+       * GEMESSEN 2026-08-12 (tools/breite-messen.mjs + eigene Widget-Messung,
+       * Chromium, Grundschrift 16 px, alle vier Slots inkl. SIEGEL):
+       *
+       *     Fenster 320 px  →  Pille 385 px  →  81 px LINKS abgeschnitten
+       *     Fenster 360 px  →  Pille 385 px  →  41 px LINKS abgeschnitten
+       *     Fenster 412 px  →  Pille 385 px  →  passt
+       *
+       * Die Pille hat keine Breiten-Grenze: sie ist so breit wie ihr Inhalt.
+       * Weil sie rechts in der Ecke haengt, waechst sie nach LINKS aus dem
+       * Bild — der lebt-Slot war auf einem 360-px-Handy nicht mehr zu sehen.
+       *
+       * WARUM NICHT NUR max-width. Eine Breiten-Grenze allein hilft nicht: die
+       * Slots sind Flex-Kinder mit `min-width: auto` und schrumpfen nicht unter
+       * ihre Wortbreite. Der Inhalt quoelle dann aus der Pille statt aus dem
+       * Bild — dasselbe Problem, nur eine Ebene tiefer.
+       *
+       * ALSO: unter 400 px tragen die Lampen keine Woerter mehr. Gemessen
+       * 223 px statt 385 px. Die Bedeutung geht nicht verloren — jeder Slot
+       * behaelt sein aria-label, seine Farbe und sein Modal beim Antippen.
+       * Ab 400 px bleibt alles wie bisher, mit Woertern (Klaus' Wunsch
+       * 2026-05-25 „1:1 Sage-Page-Stil" gilt dort unveraendert weiter).
+       * Klaus hat diesen Weg am 2026-08-12 gegen zwei gemessene Alternativen
+       * gewaehlt (zweizeilig umbrechen · alles enger stellen).
+       *
+       * DIE TREFFERFLAECHE BLEIBT 24 px. Ohne Wort schrumpfte der Slot auf
+       * 21 px und faellt unter die Norm, die am 2026-08-03 eigens hergestellt
+       * wurde. Zurueckgeholt wird sie ueber das INNENMASS, nicht ueber
+       * `min-width` — ein min-width braeche das Zusammenschieben im
+       * minimierten Zustand, wo auf denselben Slots `max-width: 0` steht
+       * (siehe die Begruendung oben an .sbkim-widget-slot). Darum haengt die
+       * Regel ausdruecklich an :not([data-minimized="true"]).
+       */
+      "@media (max-width: 400px) {",
+      "  #" + WIDGET_ID + " { max-width: calc(100vw - 24px); }",
+      "  #" + WIDGET_ID + " .sbkim-widget-label { display: none; }",
+      "  #" + WIDGET_ID + ":not([data-minimized=\"true\"]) .sbkim-widget-slot {",
+      "    padding-left: 8px;",
+      "    padding-right: 8px;",
+      "  }",
+      "}",
     ].join("\n");
   }
 
