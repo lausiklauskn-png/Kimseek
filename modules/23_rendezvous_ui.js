@@ -356,6 +356,7 @@
 
   var askInputEl = null, answerBtn = null;   // Bau 23.B — Frage-Feld + Antwortrecht-Schalter
   var voiceBtnEl = null, activeRecognizer = null;   // 🎤 Spracheingabe (Modul 21)
+  var voiceLangEl = null, voiceLangChosen = null;  // gesprochene Sprache (Wahl + Anzeige)
   var answerFetchBtn = null;   // A11 — „🔎 Antwort holen": bestpassenden Knoten automatisch fragen
   // A11-Last-Schoner (Klaus 2026-07-11, Tablet friert bei Mehrfach-Klick ein):
   // eine laufende Auto-Suche sperrt weitere Klicks, und dieselbe Frage wird nicht
@@ -1299,6 +1300,7 @@
     voiceBtnEl = el("button", bsGhost + ";font-size:.9rem;padding:5px 8px", "🎤");
     voiceBtnEl.type = "button";
     voiceBtnEl.title = "Frage einsprechen";
+    voiceLangEl = buildVoiceLangPicker();
     answerBtn = el("button", bsGhost + ";font-size:.74rem;padding:5px 10px", "💬 Antworten: aus");
     answerBtn.type = "button";
     answerBtn.title = "Anderen Knoten antworten";
@@ -1314,6 +1316,7 @@
     askRow.appendChild(askInputEl);
     askRow.appendChild(answerFetchBtn);
     askRow.appendChild(voiceBtnEl);
+    if (voiceLangEl) askRow.appendChild(voiceLangEl);
     askRow.appendChild(answerBtn);
     panelEl.appendChild(askRow);
     voiceBtnEl.addEventListener("click", function () { onVoiceClick(); });
@@ -1881,6 +1884,77 @@
   // Kurze, transiente Notiz im Ausgabe-Bereich (Spracheingabe-Status/Fehler).
   function setVoiceHint(t) { if (outEl) outEl.textContent = t; }
 
+  /* ---- Die Sprache, in der gesprochen wird -------------------------------
+   *
+   * Vorher stand hier `var lang = (langs[0] || ["de-DE"])[0]` — IMMER der erste
+   * Eintrag, also immer Deutsch, und niemand konnte etwas daran ändern. Dieses
+   * 🎤 sitzt im „Mit dem Netz verbinden"-Feld JEDER App mit Modul 23; für alle,
+   * die kein Deutsch sprechen, war es damit unbrauchbar. Klaus 2026-08-11:
+   * „wenn ich in Arabisch etwas hineinspreche, muss auch Arabisch als Text
+   * herauskommen."
+   *
+   * Die Wahl wird pro App gemerkt (`cfg.dbSuffix`), weil Geschwister-Apps auf
+   * GitHub Pages denselben Origin teilen — ohne eigenen Namen stellte eine App
+   * der anderen die Sprache um. */
+  function voiceLangKey() { return "sbkim_rdv_miclang_" + (cfg.dbSuffix || "default"); }
+  function storedVoiceLang() {
+    try { return global.localStorage ? global.localStorage.getItem(voiceLangKey()) : null; }
+    catch (_e) { return null; }
+  }
+  function rememberVoiceLang(code) {
+    try { if (global.localStorage) global.localStorage.setItem(voiceLangKey(), code); } catch (_e) {}
+  }
+  // Ohne Modul 21 gibt es keine Liste — dann bleibt es bei Deutsch, und der
+  // 🎤-Knopf sagt beim Antippen ehrlich, dass das Modul fehlt.
+  function voiceLang() {
+    var speech = global.SbkimSpeech;
+    if (speech && typeof speech.preferredLanguage === "function") {
+      return speech.preferredLanguage(voiceLangChosen || storedVoiceLang());
+    }
+    return voiceLangChosen || "de-DE";
+  }
+
+  /* Die Auswahl erscheint NUR, wenn Modul 21 geladen ist. Ein Wähler ohne
+   * Spracheingabe wäre ein toter Knopf — schlimmer als keiner (Fremdnutzer-
+   * Brille: fail-soft heißt „das Feature verschwindet still", nicht „es steht
+   * da und tut nichts"). */
+  function buildVoiceLangPicker() {
+    var speech = global.SbkimSpeech;
+    if (!speech || typeof speech.getLanguages !== "function") return null;
+    var langs = speech.getLanguages();
+    if (!langs || langs.length < 2) return null;
+    var sel = global.document.createElement("select");
+    sel.id = "sbkim-rdv-miclang";
+    sel.title = "🎤 Sprache, in der du sprichst";
+    sel.setAttribute("aria-label", sel.title);
+    sel.style.cssText = "padding:5px 6px;border-radius:8px;border:1px solid rgba(154,167,182,.35);" +
+      "background:rgba(10,16,24,.6);color:#e8eef6;font:inherit;font-size:.72rem;max-width:9.5rem";
+    for (var i = 0; i < langs.length; i++) {
+      var o = global.document.createElement("option");
+      o.value = langs[i][0]; o.textContent = langs[i][1];
+      sel.appendChild(o);
+    }
+    sel.value = voiceLang();
+    sel.addEventListener("change", function () {
+      voiceLangChosen = sel.value;
+      rememberVoiceLang(voiceLangChosen);
+      applyAskDirection();
+    });
+    return sel;
+  }
+
+  /* Ein Feld, in das arabisch gesprochen wird, muss von rechts lesen.
+   * `dir="auto"` lässt den Browser am INHALT entscheiden — richtiger als ein
+   * festes `dir`, das lügt, sobald jemand die Sprache wechselt oder deutsch
+   * dazwischentippt. */
+  function applyAskDirection() {
+    if (!askInputEl) return;
+    try {
+      askInputEl.setAttribute("dir", "auto");
+      askInputEl.setAttribute("lang", String(voiceLang()).split("-")[0]);
+    } catch (_e) {}
+  }
+
   // 🎤 Spracheingabe (Modul 21) — Frage einsprechen. Spiegelt Modul 22
   // onVoiceClick, fail-soft. Fremdnutzer-sicher: ohne Modul 21 / ohne
   // Browser-Unterstützung bleibt das Textfeld voll nutzbar.
@@ -1894,17 +1968,29 @@
     try { engine = speech.pickEngine(cfg.euOnly ? "bindend" : "frei"); }
     catch (e) { setVoiceHint(speech.speechErrorHint ? speech.speechErrorHint(e) : "🎤 nicht möglich — bitte tippen."); return; }
     if (engine === "browser" && typeof speech.isBrowserSupported === "function" && speech.isBrowserSupported()) {
-      var langs = (typeof speech.getLanguages === "function") ? speech.getLanguages() : [];
-      var lang = (langs[0] || ["de-DE"])[0];
+      var lang = voiceLang();
+      var label = (typeof speech.languageLabel === "function") ? speech.languageLabel(lang) : lang;
+      applyAskDirection();
       try {
         activeRecognizer = speech.makeBrowserRecognizer({
           lang: lang,
-          onResult: function (t) { if (askInputEl) { askInputEl.value = t; } setVoiceHint("Erkannt: " + t + "  — jetzt „🔎 Antwort holen“ drücken."); },
+          onResult: function (t) {
+            if (askInputEl) { askInputEl.value = t; }
+            /* Der STILLE Fehlschlag (Klaus' Sichttest 2026-08-11): Paschtu kam
+             * als „Salaam" in LATEINISCHEN Buchstaben zurück, ganz OHNE Fehler —
+             * der Browser hatte stillschweigend etwas anderes gehört. Ein
+             * Fehler-Hinweis kann da nicht greifen, weil es keinen Fehler gibt.
+             * Also wird die Schrift geprüft. */
+            var schief = (typeof speech.scriptMismatchHint === "function")
+              ? speech.scriptMismatchHint(t, lang) : null;
+            setVoiceHint(schief ? ("🎤 " + schief)
+              : ("Erkannt: " + t + "  — jetzt „🔎 Antwort holen“ drücken."));
+          },
           onError: function (h) { setVoiceHint("🎤 " + h); },
           onEnd: function () { activeRecognizer = null; },
         });
         activeRecognizer.start();
-        setVoiceHint("🎤 Sprich jetzt deine Frage …");
+        setVoiceHint("🎤 Sprich jetzt deine Frage in " + label + " …");
       } catch (e) {
         setVoiceHint(speech.speechErrorHint ? speech.speechErrorHint(e) : "🎤 nicht möglich — bitte tippen.");
       }

@@ -43,11 +43,51 @@
 
   // --- Konstanten ---
   // Array-getrieben, vom Knoten erweiterbar (BLP-Muster SPEECH_LANGS).
+  //
+  // Erweitert 2026-08-12 von drei auf zwölf (Klaus 2026-08-11: „wenn ich in
+  // Arabisch etwas hineinspreche, muss auch Arabisch als Text herauskommen").
+  // Deutsch bleibt an erster Stelle — Aufrufer, die ohne eigene Wahl einfach
+  // `getLanguages()[0]` nehmen, verhalten sich dadurch unverändert.
+  //
+  // EHRLICHE GRENZE: die Browser-Spracherkennung hat KEINE Sprach-Erkennung.
+  // Sie hört genau die Sprache, die man ihr nennt, und eine abfragbare Liste
+  // der gekonnten Sprachen gibt es nicht. Diese Liste ist also ein ANGEBOT —
+  // ob ein bestimmter Browser eine Sprache wirklich kann, zeigt erst der
+  // Versuch. Darum gehört zu jedem Einbau ein sichtbarer Fehler-Hinweis
+  // (speechErrorHint) UND eine Schrift-Kontrolle für den STILLEN Fehlschlag:
+  // Paschtu kam in Klaus' Sichttest als „Salaam" in lateinischen Buchstaben
+  // zurück, ganz ohne Fehler.
   var SPEECH_LANGS = [
     ["de-DE", "Deutsch"],
     ["en-US", "English"],
     ["ru-RU", "Русский"],
+    ["ar-SA", "العربية"],
+    ["tr-TR", "Türkçe"],
+    ["pl-PL", "Polski"],
+    ["uk-UA", "Українська"],
+    ["fr-FR", "Français"],
+    ["es-ES", "Español"],
+    ["it-IT", "Italiano"],
+    ["ps-AF", "پښتو"],
+    ["fa-IR", "دری / فارسی"],
   ];
+
+  // Welche Schrift bei welcher Sprache zu erwarten ist — für den STILLEN
+  // Fehlschlag (kein Fehler, aber offensichtlich die falsche Sprache gehört).
+  // Nur Sprachen mit nicht-lateinischer Schrift stehen hier; bei allen anderen
+  // wäre die Prüfung nur lästig.
+  var SCRIPT_EXPECTED = {
+    ar: [/[؀-ۿ]/, "arabischer"],
+    fa: [/[؀-ۿ]/, "arabischer"],
+    ps: [/[؀-ۿ]/, "arabischer"],
+    ru: [/[Ѐ-ӿ]/, "kyrillischer"],
+    uk: [/[Ѐ-ӿ]/, "kyrillischer"],
+  };
+  // Rechts-nach-links-Schriften — Textfelder sollen den Inhalt richtig herum
+  // zeigen. Aufrufer setzen daraufhin `dir="auto"` (der Browser entscheidet am
+  // Inhalt — richtiger als ein festes `dir`, das lügt, sobald jemand deutsch
+  // dazwischentippt).
+  var RTL_LANGS = ["ar", "he", "fa", "ur", "ps"];
   var EU_POLICIES = ["bindend", "frei"];
   var EU_POLICY_DEFAULT = "frei"; // freie Knoten: EU wählbar, nicht erzwungen.
   var ENGINES = {
@@ -90,11 +130,20 @@
     return SPEECH_LANGS.map(function (pair) { return pair.slice(); });
   }
 
-  // Alle Sprach-Codes außer dem gewählten — für alternativeLanguageCodes
-  // (EU-Engine, Sprach-Misch-Toleranz).
+  /* Sprach-Codes außer dem gewählten — für alternativeLanguageCodes
+   * (EU-Engine, Sprach-Misch-Toleranz).
+   *
+   * GEDECKELT AUF DREI (Befund 2026-08-12). Google Cloud Speech-to-Text nimmt
+   * in `alternativeLanguageCodes` höchstens drei Einträge; alles darüber ist
+   * ein Fehler-Aufruf. Solange die Liste drei Sprachen lang war, fiel das nicht
+   * auf — mit zwölf hätte JEDE EU-Anfrage abgelehnt werden können. Wer mehr
+   * braucht, übergibt `options.alternativeLanguageCodes` selbst; dann liegt die
+   * Verantwortung beim Aufrufer. */
+  var EU_ALT_MAX = 3;
   function alternativeCodes(selectedCode) {
     return SPEECH_LANGS.map(function (pair) { return pair[0]; })
-      .filter(function (code) { return code !== selectedCode; });
+      .filter(function (code) { return code !== selectedCode; })
+      .slice(0, EU_ALT_MAX);
   }
 
   // "bindend" → nur EU (Browser-Engine ohne EU-Residenz-Garantie).
@@ -113,6 +162,68 @@
   function isBrowserSupported() {
     return typeof global.SpeechRecognition === "function" ||
       typeof global.webkitSpeechRecognition === "function";
+  }
+
+  // Der Anzeige-Name zu einem Code ("ar-SA" → "العربية"). Unbekannt → der Code
+  // selbst; besser ein Code als eine Lücke.
+  function languageLabel(code) {
+    for (var i = 0; i < SPEECH_LANGS.length; i++) {
+      if (SPEECH_LANGS[i][0] === code) return SPEECH_LANGS[i][1];
+    }
+    return String(code || "");
+  }
+
+  /* Welche Sprache soll das Mikrofon VOR jeder Einstellung hören?
+   *
+   * Die Geräte-Sprache. Das ist der Fall, der zählt: wer erst eine Einstellung
+   * finden muss, um verstanden zu werden, benutzt das Mikrofon nicht. Kennt die
+   * Liste die Geräte-Sprache nicht (z.B. Japanisch), bleibt es beim ersten
+   * Eintrag — ehrliche Vorgabe statt Raten.
+   *
+   * `stored` ist eine bereits getroffene Wahl (der Aufrufer holt sie aus SEINEM
+   * Speicher — das Modul kennt weder localStorage-Namen noch App). Fail-soft. */
+  function preferredLanguage(stored) {
+    for (var s = 0; s < SPEECH_LANGS.length; s++) {
+      if (SPEECH_LANGS[s][0] === stored) return stored;
+    }
+    var wishes = [];
+    try {
+      wishes = (global.navigator && global.navigator.languages && global.navigator.languages.length)
+        ? global.navigator.languages
+        : [(global.navigator && global.navigator.language) || ""];
+    } catch (_e) { wishes = []; }
+    for (var i = 0; i < wishes.length; i++) {
+      var short = String(wishes[i]).split("-")[0].toLowerCase();
+      for (var j = 0; j < SPEECH_LANGS.length; j++) {
+        if (SPEECH_LANGS[j][0].split("-")[0].toLowerCase() === short) return SPEECH_LANGS[j][0];
+      }
+    }
+    return SPEECH_LANGS[0][0];
+  }
+
+  // Liest ein Textfeld dieser Sprache von rechts nach links?
+  function isRtl(code) {
+    return RTL_LANGS.indexOf(String(code || "").split("-")[0].toLowerCase()) !== -1;
+  }
+
+  /* Der STILLE Fehlschlag (Klaus' Sichttest 2026-08-11).
+   *
+   * Russisch kam als „Здравствуйте" zurück, Arabisch als „سلام عليكم" — beides
+   * richtig. Paschtu kam als „Salaam" zurück, in LATEINISCHEN Buchstaben, und
+   * OHNE Fehler: der Browser hat stillschweigend etwas anderes gehört.
+   * `speechErrorHint` kann da nicht greifen, weil es keinen Fehler gibt.
+   *
+   * Gibt einen Satz zurück, wenn die Schrift nicht zur Sprache passt — sonst
+   * null. Kurze Ergebnisse (< 4 Zeichen) werden übergangen: dort ist die
+   * Aussage zu dünn für einen Vorwurf. */
+  function scriptMismatchHint(text, code) {
+    var short = String(code || "").split("-")[0].toLowerCase();
+    var e = SCRIPT_EXPECTED[short];
+    if (!e || !text || String(text).trim().length < 4) return null;
+    if (e[0].test(text)) return null;
+    return "Der Browser hat vermutlich nicht in " + languageLabel(code) +
+      " gehört — der Text steht in lateinischer Schrift, nicht in " + e[1] +
+      ". Du kannst ihn stehen lassen oder tippen.";
   }
 
   // Bekannte Fehler-Formen → ruhiger deutscher Hinweis. Wirft nie.
@@ -302,6 +413,10 @@
     startRecording: startRecording,
     recognizeEU: recognizeEU,
     speechErrorHint: speechErrorHint,
+    languageLabel: languageLabel,
+    preferredLanguage: preferredLanguage,
+    isRtl: isRtl,
+    scriptMismatchHint: scriptMismatchHint,
     InvalidEuPolicyError: InvalidEuPolicyError,
     _meta: {
       languages: SPEECH_LANGS.map(function (pair) { return pair.slice(); }),
