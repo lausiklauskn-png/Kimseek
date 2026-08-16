@@ -1,0 +1,69 @@
+Kimseek — Nutzungslizenz
+Copyright (c) 2026 Klaus Nitzsche. Alle Rechte vorbehalten, soweit nachstehend
+nicht ausdrücklich eingeräumt.
+
+1. Begriffe
+   "Software" bezeichnet die Anwendung „Kimseek" einschließlich des
+   Quellcodes und aller Dateien in diesem Repository.
+   "Freie Version" bezeichnet jede Version der Software, die der Urheber vor einem
+   etwaigen Stichtag (siehe Ziffer 3) öffentlich bereitgestellt hat. Solange der
+   Urheber keinen Stichtag bekanntgegeben hat, sind ALLE Versionen Freie Versionen.
+
+2. Kostenlose Nutzung der Freien Versionen
+   Jeder natürlichen und juristischen Person wird ein einfaches, nicht
+   ausschließliches, unentgeltliches und dauerhaftes Recht eingeräumt, die Freien
+   Versionen zu nutzen, zu installieren und für eigene — auch geschäftliche —
+   Zwecke zu betreiben.
+   Wer eine Freie Version erhalten hat, darf sie dauerhaft weiter nutzen, auch
+   nach einem späteren Stichtag.
+
+3. Spätere Bezahl-Versionen (Vorbehalt)
+   Der Urheber ist berechtigt, einen Stichtag (Datum oder Versionsnummer)
+   bekanntzugeben. Versionen, die NACH diesem Stichtag veröffentlicht werden
+   ("Bezahl-Versionen"), dürfen nur auf Grundlage einer gesonderten, gegebenenfalls
+   kostenpflichtigen Lizenz des Urhebers genutzt werden. Die kostenlose Nutzung
+   bereits erhaltener Freier Versionen bleibt hiervon unberührt.
+
+4. Einschränkungen
+   Ohne vorherige schriftliche Zustimmung des Urhebers sind nicht gestattet:
+   die Weitergabe oder der Vertrieb der Software an Dritte, die Unterlizenzierung,
+   der Weiterverkauf sowie die Veränderung und die Verbreitung veränderter
+   Fassungen. Die persönliche und die innerbetriebliche Nutzung nach Ziffer 2
+   bleiben hiervon unberührt.
+
+5. Fremde Bestandteile und SBKIM-Module
+   Fremde Bestandteile behalten ihre eigenen Lizenzen. Dieses Repository kann
+   Bibliotheken Dritter mitführen, erkennbar am Lizenz-Kopf der jeweiligen Datei —
+   etwa noble-secp256k1 (MIT, Paul Miller), three.js (MIT, Three.js Authors) oder
+   GSAP (GreenSock-Standardlizenz). Für diese Dateien gilt die Lizenz ihres
+   Urhebers, nicht die vorliegende.
+   Die SBKIM-Module aus dem Sage-Protokol (typisch unter `sbkim/` oder
+   `modules/`) stehen dort unter der MIT-Lizenz und dürfen von jedem
+   weiterverwendet werden — das Protokoll soll nachgebaut werden können. Diese
+   Lizenz beschränkt nur die App selbst, nicht die mitgeführten Protokoll-Module.
+
+6. Urheberrecht
+   Das Urheberrecht und alle Verwertungsrechte verbleiben beim Urheber
+   (Klaus Nitzsche). Diese Lizenz überträgt kein Eigentum an der Software, sondern
+   räumt ausschließlich Nutzungsrechte ein.
+
+7. Gewährleistung und Haftung
+   Die Software wird „wie besehen" („as is") ohne jegliche Gewährleistung
+   bereitgestellt. Eine Haftung des Urhebers ist — außer bei Vorsatz und grober
+   Fahrlässigkeit — ausgeschlossen.
+
+8. Anwendbares Recht
+   Es gilt das Recht der Bundesrepublik Deutschland.
+
+Lizenzanfragen: Klaus Nitzsche — info@family-projekt.de
+Volle Einordnung, wem was gehört und warum:
+https://github.com/lausiklauskn-png/Sage-Protokol/blob/main/docs/URHEBERSCHAFT_UND_RECHTE.md
+
+--------------------------------------------------------------------------------
+Summary (English, non-binding): Free to use for everyone — including for
+commercial purposes — for every version released so far. The author may later
+release paid versions; versions already obtained remain free forever.
+Redistribution, modification and resale require the author's written permission.
+Third-party libraries and the SBKIM protocol modules keep their own licences.
+Copyright remains with the author. Provided "as is", without warranty.
+The German text above is authoritative.
