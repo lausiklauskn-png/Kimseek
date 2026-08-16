@@ -1271,6 +1271,36 @@
     relOnlyBtn.type = "button";
     relOnlyBtn.title = "Nur verwandte Knoten zeigen";
     filterRow.appendChild(relOnlyBtn);
+
+    /* ── Weg zur Mycel-Karte (Klaus 2026-08-16) ────────────────────────────
+     * Klaus: „Kannst du bei den restlichen Apps die Mycel-Karte hinzufügen?"
+     *
+     * Hierher und nicht irgendwohin: wer dieses Fenster offen hat, denkt
+     * gerade über das Netz nach. Die Karte zeigt dasselbe Netz von außen —
+     * wer im Raum ist, wer wen fragt, was gerade läuft. Sie hört nur zu und
+     * erfindet keinen Verkehr.
+     *
+     * ZWEI FORMEN WURDEN VORHER VERWORFEN, beide aus einem gemessenen Grund:
+     *
+     *   eingebettet   Die Karte hält Verbindungen offen und zeichnet dauernd.
+     *                 In jeder App kostete das genau die Messwerte, die im
+     *                 Marktplatz öffentlich neben der App stehen.
+     *   schwebend     Eine Pille unten am Rand. Am ersten Einbau (Kimboard)
+     *                 lag sie auf der Lampen-Leiste; nach dem Ausweichen auf
+     *                 dem nächsten Knopf. Diese Apps haben alle einen vollen
+     *                 unteren Rand, und zwölf davon kann niemand einzeln
+     *                 ansehen. Hase und Igel.
+     *
+     * Im Fluss dieses Fensters kollidiert nichts, kostet nichts und steht
+     * beim Thema. Ein Link, kein Fenster im Fenster. */
+    var karteLink = el("a", "margin-left:8px;font-size:.74rem;color:#9ff7df;" +
+      "text-decoration:none;border-bottom:1px dotted currentColor", "🍄 Mycel-Karte ansehen ↗");
+    karteLink.href = "https://lausiklauskn-png.github.io/mycel-karte/";
+    karteLink.target = "_blank";
+    karteLink.rel = "noopener noreferrer";
+    karteLink.title = "Die lebende Karte des Netzes — zeigt in einem neuen Tab, wer gerade im Raum ist und was läuft";
+    filterRow.appendChild(karteLink);
+
     panelEl.appendChild(filterRow);
 
     // Modus B — „🧹 Aufräumen & neu anmelden" (Identitäts-Hygiene, zerstörend,
