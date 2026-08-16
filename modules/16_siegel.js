@@ -76,6 +76,24 @@
     { id: "03", name: "Embedding",  globalName: "SbkimEmbedding",  surfaceFn: "embedPassage",        lazy: true  },
     { id: "04", name: "Match",      globalName: "SbkimMatch",      surfaceFn: "match",               lazy: false },
     { id: "05", name: "Anastomose", globalName: "SbkimAnastomose", surfaceFn: "handshake",           lazy: false },
+    // 05b — aufgenommen 2026-08-16 auf Klaus' Wort, nach einem Befund an
+    // seinem Tablet: das Netz-Panel meldete „Kein Nostr-Relais-Client (Modul
+    // 05b) verfügbar", der Raum liess sich nicht lesen — und das SIEGEL LEUCHTETE
+    // TROTZDEM. Es prüfte die sieben unten, und 05b war nicht darunter.
+    //
+    // Ein Siegel, das goldenes Vertrauen zeigt, während der Knoten den Raum
+    // gar nicht lesen kann, sagt die Unwahrheit. Genau davor soll die
+    // Anti-Greenwashing-Klausel (Karte 16) schützen — sie griff hier nicht,
+    // weil die Liste unvollstaendig war, nicht weil die Prüfung schwach war.
+    //
+    // Gemessen vor der Aufnahme (alle 22 Knoten-Repos): JEDER laedt 05b.
+    // Die Aufnahme loescht also nirgends ein Siegel — sie verhindert nur, dass
+    // eines leuchtet, wo der Raum tot ist.
+    //
+    // `subscribe` ist die richtige Fläche: daran entscheidet sich das Lesen des
+    // Raums. `publish` allein wuerde einen Knoten durchgehen lassen, der senden,
+    // aber nichts empfangen kann.
+    { id: "05b", name: "Relais-Client", globalName: "SbkimNostrRelay", surfaceFn: "subscribe", lazy: false },
     { id: "07", name: "Apoptose",   globalName: "SbkimApoptose",   surfaceFn: "prepareSelfApoptose", lazy: false },
     { id: "15", name: "Membran",    globalName: "SbkimMembrane",   surfaceFn: "init",                lazy: false },
   ];
@@ -154,6 +172,24 @@
       module:      "23",
       aspect:      "Echtheit der Karten im gemeinsamen Raum",
       description: "Jede Visitenkarte im Rendezvous-Raum wird jetzt geprüft, bevor sie angezeigt wird: die Karte muss ihre eigene Spore tragen (spore.id === nodeId) und deren Ed25519-Signatur muss über Modul 02 (verifyForeignSpore) halten. Damit kann sich niemand mehr unter fremder Identität ins Brett hängen. Dazu Mengen-Deckel je Durchlauf (200 Karten) und je Nostr-Absender (3 Identitäten) gegen Flutung. Fehlt der Prüfer, läuft der Raum weiter, meldet die Karten aber ehrlich als UNGEPRÜFT statt sie still durchzuwinken. Reine Vor-Prüfung — der 0.80-Andock-Riegel bleibt unberührt.",
+    },
+    {
+      since:       "2026-08-01",
+      module:      "15",
+      aspect:      "Nachvollziehbares Fremdzugriff-Protokoll",
+      description: "Anlass war ein echter Fund im Feld: die FREMD-Lampe stand auf Rot, das Fenster sagte nur „ignored“ — die Membran hatte etwas abgewiesen, aber WER gesendet hatte, war nicht zu erkennen. Jeder Eintrag führt jetzt mit, welcher der vier gleich aussehenden Abweis-Gründe zutraf (fremder Typ / nicht erlaubt / fehlende Kennung / unbekannter Wunsch / gedrosselt), wer abgeschickt hat (Fenster, eingebetteter Rahmen, öffnendes Fenster), wofür sich die Nachricht ausgab, wie lange nach dem Laden sie kam und ob der Tab dabei vorn war. Das Fenster erklärt das in ganzen Sätzen. PII-Tabu bleibt hart: keine Werte aus fremden Objekten, nur Feld-Namen, Text-Auszug gekappt und Ziffernfolgen maskiert, alles RAM-only und nie übers Netz.",
+    },
+    {
+      since:       "2026-08-14",
+      module:      "15",
+      aspect:      "Fachworte der App beim Antworten (abschaltbar, standardmäßig aus)",
+      description: "Ehrlich vorweg: das ist keine Schutz-Verbesserung, sondern eine Erweiterung am Antwort-Pfad der Membran — sie steht hier, weil jede Änderung an einem Schutz-Modul sichtbar bleiben soll, auch die harmlose. Fragt ein anderer Knoten etwas an, konnte bisher nur die reine Bedeutungs-Suche antworten; wer nach „Faktura“ fragte, fand nichts über „Rechnung“. Eine App kann jetzt ihre eigenen Fachworte mitgeben, dann wird die Frage vor dem Suchen aufgefächert und zusätzlich nach Wörtern gesucht. Herkunft: BookLedgerPro hatte das seit dem 2026-07-11 in seiner eigenen Kopie stehen — an der falschen Stelle, weil eine Kopie nicht geändert werden darf; die Mechanik ist deshalb in den Kanon gewandert, die Fachworte bleiben bei der App. Standardmäßig AUS: wer nichts einstellt, bekommt exakt den bisherigen Weg. Es werden nur zusätzliche Treffer AUFGENOMMEN — der 0.80-Andock-Riegel bleibt unberührt, hier wird geantwortet, nicht angedockt.",
+    },
+    {
+      since:       "2026-08-16",
+      module:      "05b",
+      aspect:      "Relais-Client gehört zur Selbst-Prüfung",
+      description: "Das Siegel prüft ab jetzt auch den Relais-Client (Modul 05b). Vorher konnte es golden leuchten, während der Knoten den gemeinsamen Raum gar nicht lesen konnte. Geprüft wird die Fläche subscribe: wer nur senden, aber nichts empfangen kann, nimmt nicht teil.",
     },
   ];
 
