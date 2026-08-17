@@ -313,7 +313,15 @@
           }); })
         .then(function (spore) { lastSpore = spore; downloadJson(sporeFileName(), spore);
           out("#kswiz-o2", "Spore erzeugt + ⬇ (nodeId=" + spore.id + "). Nach sbkim/spore.json committen.");
-          dlg.querySelector("#kswiz-s3").disabled = false; })
+          dlg.querySelector("#kswiz-s3").disabled = false;
+          // Die alte Meldung aus Schritt 3 wegräumen. Sie stammt aus einem Klick
+          // VOR der Identität und blieb danach als Fehler stehen — das Backup war
+          // längst möglich, nur sagte die Zeile weiter das Gegenteil.
+          // (Dieser Wizard hat keinen Identitäts-Wechsler; die Auffrischung aus
+          // Perfect Skin Beauty PR #49 entfällt hier deshalb.)
+          var o3 = dlg.querySelector("#kswiz-o3");
+          if (o3 && /Keine Identit/.test(o3.textContent || "")) o3.textContent = "";
+        })
         .catch(function (e) { out("#kswiz-o2", "Fehler: " + (e && e.message || e), true); b.disabled = false; })
         .then(function () { window.removeEventListener("sbkim:embedding-progress", onProg); });
     });
