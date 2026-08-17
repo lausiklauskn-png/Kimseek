@@ -40,6 +40,48 @@
   // Raum / auf der Karte — NICHT für generateOwnSpore (die signierte Spore behält
   // den kanonischen nodeName). Fail-soft: kein Name → nur der Basis-App-Name.
   function geraetename() { try { return (localStorage.getItem("sbkim_geraetename") || "").trim().slice(0, 40); } catch (_e) { return ""; } }
+  // Alle Namensfelder der Seite gleichziehen. Eine App darf mehrere haben (Panel +
+  // eigenes Feld in den Einstellungen); sie schreiben denselben Speicher und dürfen
+  // beim Tippen nicht auseinanderlaufen. Programmatisches Setzen von .value löst
+  // kein "input" aus — deshalb keine Schleife.
+  function syncGeraetenameFields() {
+    try {
+      var v = geraetename();
+      var list = document.querySelectorAll("[data-sbkim-geraetename]");
+      for (var i = 0; i < list.length; i++) { if (list[i].value !== v) list[i].value = v; }
+    } catch (_e) {}
+  }
+  // NETZWEITE BAUREGEL (INTERFACES §11.7): jeder Knoten mit Verbinden-Panel trägt
+  // das Gerätenamen-Feld IM Panel. Der Einbau hängt sich an das geteilte Panel
+  // (#sbkim-rdv-panel) — kein index.html-Eingriff, und NIEMALS in die byte-kopierte
+  // Panel-Datei schreiben (Drift-Guard).
+  function injectGeraetenameField() {
+    function tryInject() {
+      var panel = document.getElementById("sbkim-rdv-panel");
+      if (!panel) return false;
+      // Erkennungs-Marke statt fester id, und bewusst NUR im Panel gesucht: ein
+      // app-eigenes Feld an anderer Stelle bleibt erlaubt (es zieht per
+      // syncGeraetenameFields mit), aber im Panel steht nie ein zweites.
+      if (panel.querySelector("[data-sbkim-geraetename]")) return true;
+      var wrap = document.createElement("div");
+      wrap.style.cssText = "margin:8px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap";
+      var lab = document.createElement("span"); lab.textContent = "🏷️ Gerätename:"; lab.style.cssText = "color:#9aa7b6;font-size:.85rem";
+      var inp = document.createElement("input"); inp.id = "sbkim-geraetename"; inp.type = "text"; inp.maxLength = 40;
+      inp.setAttribute("data-sbkim-geraetename", "1");
+      inp.placeholder = "z. B. Klaus-Handy (frei wählbar)"; inp.value = geraetename();
+      inp.style.cssText = "flex:1;min-width:120px;padding:4px 6px;border-radius:6px;border:1px solid #33414f;background:#0d1520;color:#dfeaf2;font:inherit";
+      inp.title = "Nur ein Anzeige-Hinweis, kein Vertrauens-Beweis — die Kennung bleibt daneben.";
+      inp.addEventListener("input", function () {
+        try { localStorage.setItem("sbkim_geraetename", String(inp.value || "").trim().slice(0, 40)); } catch (_e) {}
+        try { window.dispatchEvent(new CustomEvent("sbkim:geraetename-changed")); } catch (_e) {}
+      });
+      wrap.appendChild(lab); wrap.appendChild(inp);
+      panel.insertBefore(wrap, panel.children[1] || null);
+      return true;
+    }
+    if (tryInject()) return;
+    try { var mo = new MutationObserver(function () { if (tryInject()) mo.disconnect(); }); mo.observe(document.body, { childList: true, subtree: true }); } catch (_e) {}
+  }
   function displayNodeName() { var g = geraetename(); return g ? (CFG.nodeName + " · " + g) : CFG.nodeName; }
 
   function createIdentity() {
@@ -154,7 +196,9 @@
     // Kopplung: ändert der Nutzer den Gerätenamen, den Anzeige-Namen im Raum
     // neu setzen (fail-soft, kein Re-Sign der Spore).
     try {
+      injectGeraetenameField();
       window.addEventListener("sbkim:geraetename-changed", function () {
+        syncGeraetenameFields();
         try { if (window.SbkimRendezvous && window.SbkimRendezvous.configure) window.SbkimRendezvous.configure({ nodeName: displayNodeName() }); } catch (_e) {}
       });
     } catch (_e) {}
