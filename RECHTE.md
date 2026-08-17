@@ -10,7 +10,7 @@ Zustimmung des Urhebers.
 **Rolle der KI-Werkzeuge.** An diesem Repo wurde mit KI-Werkzeugen gearbeitet.
 Sie sind Werkzeug, wie ein Compiler oder ein Zeichenprogramm — sie führen aus,
 was vorher festgelegt wurde. **Kein KI-Anbieter hält Rechte an dem, was hier
-entstanden ist**; die Anbieter treten ihre etwaigen Rechte an den Ausgaben
+entstanden ist**; die KI-Anbieter treten ihre etwaigen Rechte an den Ausgaben
 ausdrücklich an den Nutzer ab. Getragen wird der Schutz von der menschlichen
 Prägung: Entwurf, Auswahl und Anordnung, Nachbearbeitung, Dokumentation und die
 Git-Historie mit Datum.
