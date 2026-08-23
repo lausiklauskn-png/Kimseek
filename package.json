@@ -7,5 +7,5 @@
   "scripts": {
     "test": "node --test"
   },
-  "license": "SEE LICENSE IN LICENSE"
+  "license": "MIT"
 }
