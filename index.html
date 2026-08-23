@@ -148,30 +148,19 @@
     </details>
   </footer>
 
-  <!-- ── Eruda: In-Page-Konsole fürs Tablet (Debug, optionaler CDN) ──────
-       Klaus' akzeptiertes Tablet-Debug-Werkzeug (kein Terminal am Tablet).
-       Fail-soft: fehlt das CDN, läuft die Seite normal weiter. -->
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>
-  // Eruda standardmäßig VERBORGEN — kein schwebender Konsolen-Knopf auf der
-  // App-Oberfläche (Klaus 2026-07-12). Das SBKIM-Floating-Widget (Lampen/Siegel)
-  // bleibt UNBERÜHRT und sichtbar. Eruda nur auf ausdrücklichen Wunsch: URL-Hash
-  // #eruda ODER 5×-Tipp in die obere linke Ecke (60px). Fail-soft (kein CDN → App läuft).
-  (function () {
-    var on = false;
-    function enable() { if (on || !window.eruda) return; try { eruda.init(); on = true; } catch (e) {} }
-    function disable() { if (!on || !window.eruda) return; try { eruda.destroy(); on = false; } catch (e) {} }
-    function toggle() { on ? disable() : enable(); }
-    try { if (location.hash.indexOf('eruda') > -1) enable(); } catch (e) {}
-    var taps = [], ZONE = 60;
-    document.addEventListener('pointerdown', function (ev) {
-      if (ev.clientX > ZONE || ev.clientY > ZONE) return;
-      var now = Date.now(); taps.push(now);
-      taps = taps.filter(function (t) { return now - t < 2000; });
-      if (taps.length >= 5) { taps = []; toggle(); }
-    }, true);
-  })();
-  </script>
+  <!-- ⚠ ERUDA IST AM 2026-08-23 HERAUSGEFLOGEN, auf Klaus' Wort: „macht die
+       App nur größer als sie ist."
+       Hier stand ein festes Skript-Tag, das eruda von einem CDN nachlud.
+       Das kostete bei JEDEM Start rund ein halbes Megabyte von einem fremden
+       Server — für ein Werkzeug, das kein Besucher je hervorholt. Drei Folgen,
+       dieselben, die 2026-08-01 schon an Mein-Rezeptbuch und Mein-Mixarium
+       gemessen wurden:
+         · die App war beim ERSTEN Laden nicht offline-fähig (fremder Server nötig),
+         · jeder Besucher schickte eine Anfrage an einen Dritt-Anbieter,
+         · die Startzeit litt, ohne dass jemand etwas davon hatte.
+       Dort wurde es damals auf Nachladen umgestellt; hier ist es ganz weg.
+       Wer es zurück will: die Fassung steht in der Git-Historie dieser Datei. -->
+
 
   <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ── -->
   <!-- Identitäts-Isolierung (2026-07-11): App-Suffix GLOBAL + FRÜH setzen, damit
