@@ -4673,18 +4673,32 @@
       catch (_e) { reloadInFlight = false; }
     };
     var tasks = [];
+    /* ⚠ NUR EIGENE VORRAETE, NUR DER EIGENE WORKER (Befund 2026-09-08, Sage #950).
+       `caches` und `getRegistrations()` gehoeren dem URSPRUNG, nicht dem Pfad.
+       Auf lausiklauskn-png.github.io liegen rund zwanzig Apps; dieser Knopf
+       loeschte bis dahin ALLE ihre Vorraete und meldete ALLE ihre Worker ab —
+       und der abgemeldete Worker wiegt schwerer: die Geschwister-App ist
+       danach bis zum naechsten Online-Besuch nicht mehr offline-faehig.
+       Das Modul kennt den Vorrats-Namen seiner Traeger-App nicht. Deshalb
+       nennt die App ihn im <head>, wie SBKIM_DB_SUFFIX:
+         window.SBKIM_VORRAT_PRAEFIX = "kimseek-";   // oder eine Liste
+       Ohne die Angabe wird KEIN Vorrat geloescht (fail-soft: lieber ein
+       Vorrat zu viel als zwanzig fremde zu wenig); der Worker-Wechsel und die
+       geaenderte Adresse holen die Seite trotzdem frisch. */
+    var praefixe = [].concat(global.SBKIM_VORRAT_PRAEFIX || []).filter(function (x) { return typeof x === "string" && x; });
+    var eigener = function (k) { return praefixe.some(function (p) { return k.indexOf(p) === 0; }); };
     try {
-      if (global.caches && typeof global.caches.keys === "function") {
+      if (praefixe.length && global.caches && typeof global.caches.keys === "function") {
         tasks.push(Promise.resolve(global.caches.keys())
-          .then(function (keys) { return Promise.all((keys || []).map(function (k) { return global.caches.delete(k); })); })
+          .then(function (keys) { return Promise.all((keys || []).filter(eigener).map(function (k) { return global.caches.delete(k); })); })
           .catch(function () {}));
       }
     } catch (_e) { /* nb */ }
     try {
       var sw = global.navigator && global.navigator.serviceWorker;
-      if (sw && typeof sw.getRegistrations === "function") {
-        tasks.push(Promise.resolve(sw.getRegistrations())
-          .then(function (regs) { return Promise.all((regs || []).map(function (r) { return r.unregister ? r.unregister() : null; })); })
+      if (sw && typeof sw.getRegistration === "function") {
+        tasks.push(Promise.resolve(sw.getRegistration())
+          .then(function (r) { return r && r.unregister ? r.unregister() : null; })
           .catch(function () {}));
       }
     } catch (_e) { /* nb */ }
