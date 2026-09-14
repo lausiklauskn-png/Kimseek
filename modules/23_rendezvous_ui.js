@@ -43,7 +43,540 @@
 
   var VERSION = "0.2";
 
-  var cfg = { nodeName: "SBKIM-Knoten", createIdentity: null, dbSuffix: null, prepareCorpus: null, corner: "bl", accent: null, euOnly: false };
+  var cfg = { nodeName: "SBKIM-Knoten", createIdentity: null, dbSuffix: null, prepareCorpus: null, corner: "bl", accent: null, euOnly: false, lang: null };
+
+  /* ---- Sprache ------------------------------------------------------------
+   *
+   * Klaus' Befund am 2026-09-14: seine Apps haben einen DE/EN-Schalter, dieses
+   * Fenster hatte keinen. Wer die Seite auf Englisch stellte, bekam ein
+   * deutsches Verbinden-Fenster mitten in einer englischen Seite.
+   *
+   * DER DEUTSCHE TEXT BLEIBT IM CODE, und Englisch ist die Abweichung davon.
+   * `T("…")` nimmt den deutschen Satz und gibt die Uebersetzung zurueck, wenn
+   * es eine gibt. Kein Schluessel-System: ein Schluessel und sein Text laufen
+   * auseinander, sobald einer von beiden sich bewegt, und dann steht im
+   * Fenster ein Schluessel. So bleibt der Satz im Code lesbar — und wer ihn
+   * aendert, sieht sofort, was gesagt wird.
+   *
+   * FAIL-SOFT UND RUECKWAERTSKOMPATIBEL: fehlt ein Eintrag, bleibt es deutsch.
+   * Das ist der Zustand vor dieser Aenderung — sechzehn Apps tragen dieses
+   * Modul byte-1:1, und keine davon darf davon etwas merken, solange sie
+   * nichts einstellt.
+   *
+   * ⚠ DER PREIS: aendert jemand einen deutschen Satz, faellt seine
+   * Uebersetzung STILL auf Deutsch zurueck. Dagegen steht ein Waechter
+   * (tests/smoke_bau23_sprache.mjs): jeder Woerterbuch-Schluessel MUSS im Code
+   * vorkommen. Ohne ihn waere das Woerterbuch eine Sammlung von Saetzen, die
+   * niemand mehr sieht.
+   *
+   * WOHER DIE SPRACHE KOMMT: `init({lang})` sagt es ausdruecklich; sonst
+   * entscheidet `<html lang>`, das die Apps ohnehin setzen. Damit wirkt es in
+   * jeder App sofort, ohne dass ihr Klebstoff etwas tun muss.
+   */
+  /* Das englische Woerterbuch. Schluessel ist der DEUTSCHE Satz, so wie er im
+   * Code steht — kein Schluessel-System, siehe Begruendung unten bei T().
+   *
+   * Wer einen deutschen Satz aendert, aendert ihn HIER MIT. Sonst faellt seine
+   * Uebersetzung still auf Deutsch zurueck; `tests/smoke_bau23_sprache.mjs`
+   * faengt genau das. */
+  var TEXTE = { en: {
+      "   Server-loser Live-Cross-Knoten-Handshake — ihr seid verbunden.":
+        "   Server-less live cross-node handshake — you are connected.",
+      "  Dieses Fenster darfst du schließen und weiterarbeiten — nur die App-Seite offen lassen (eine ganz geschlossene Seite ist nicht erreichbar).":
+        "  You may close this window and carry on working — just leave the app page open (a fully closed page cannot be reached).",
+      "  — jetzt „🔎 Antwort holen“ drücken.":
+        "  — now press “🔎 Fetch answer”.",
+      " (nur hier vermerkt — die Datei selbst musst du aufbewahren).":
+        " (noted here only — you have to keep the file itself).",
+      " < 0.80 (kein Fehler, zu verschiedene Domänen).":
+        " < 0.80 (not an error, the domains are too different).",
+      " Fach/Fächer entfernt. Aktive Kennung unverändert: ":
+        " drawer(s) removed. Active identifier unchanged: ",
+      " Fach/Fächer …":
+        " drawer(s) …",
+      " Kennungs-Fächer belegt (":
+        " identifier drawers in use (",
+      " Knoten haben sich mit dir verbunden:":
+        " nodes have connected to you:",
+      " Knoten im Raum ist (im engen Maß) verwandt. Schalte „🧬 nur verwandte“ wieder auf „aus“, um alle zu sehen.":
+        " nodes in the room are related (by the narrow measure). Set “🧬 related only” back to “off” to see them all.",
+      " Knoten im Raum:":
+        " nodes in the room:",
+      " Knoten nach Passung zu deiner Frage (bester zuerst):":
+        " nodes by fit to your question (best first):",
+      " direkt — dort suchen, ohne zu warten.":
+        " directly — search there without waiting.",
+      " hat nicht geantwortet — ich frage den nächstbesten passenden Knoten (":
+        " did not answer — I am asking the next best matching node (",
+      " im Raum:":
+        " in the room:",
+      " offene Frage(n) erneut …":
+        " open question(s) again …",
+      " — warte auf Antwort (hole ich beim Öffnen ab).":
+        " — waiting for an answer (I fetch it when you open this).",
+      " — warte auf Antwort …":
+        " — waiting for an answer …",
+      "(kein Grund)":
+        "(no reason given)",
+      ") — Aufräumen behält das aktive.":
+        ") — tidying up keeps the active one.",
+      "). Fenster darf zu — nur die App-Seite offen lassen.":
+        "). The window may close — just leave the app page open.",
+      "<b style=\"color:#c7d2de\">🌐 Voll mitmachen</b> — einmal eine eigene Identität anlegen (bleibt in deinem Browser). Erst dann bist du auffindbar und kannst fragen &amp; dich verbinden. (Knopf „🌐 Mit dem Knotennetz verbinden“)":
+        "<b style=\"color:#c7d2de\">🌐 Join in fully</b> — create an identity of your own once (it stays in your browser). Only then can you be found, ask questions &amp; connect. (button “🌐 Connect to the node network”)",
+      "<b style=\"color:#c7d2de\">🔎 Nur stöbern</b> — anonym umsehen, wer im Raum ist. Kein Download, keine Identität, du wirst selbst nicht gefunden. (Knopf „👥 Wer ist im Raum?“)<br>":
+        "<b style=\"color:#c7d2de\">🔎 Just browse</b> — look around anonymously and see who is in the room. No download, no identity, you are not found yourself. (button “👥 Who is in the room?”)<br>",
+      "Aktives Fach BLEIBT: ":
+        "Active drawer STAYS: ",
+      "Alte Identitäts-Fächer entfernen, aktives behalten":
+        "Remove old identity drawers, keep the active one",
+      "Anderen Knoten antworten":
+        "Answer other nodes",
+      "Antworten konnte nicht eingeschaltet werden.":
+        "Answering could not be switched on.",
+      "App des Knotens öffnen (neuer Tab)":
+        "Open the node's app (new tab)",
+      "App öffnen (neuer Tab)":
+        "Open app (new tab)",
+      "Aufräumen ist in dieser Version noch nicht verfügbar (Modul 23 zu alt).":
+        "Tidying up is not available in this version yet (module 23 too old).",
+      "Ausblenden (kommt beim Neuladen zurück)":
+        "Hide (comes back on reload)",
+      "Beste Antwort automatisch holen":
+        "Fetch the best answer automatically",
+      "Das Siegel ist in dieser App nicht geladen.":
+        "The seal is not loaded in this app.",
+      "Das Siegel ließ sich nicht öffnen — bitte das Siegel-Abzeichen direkt anklicken.":
+        "The seal would not open — please click the seal badge directly.",
+      "Das ist keine lesbare JSON-Sicherung.":
+        "That is not a readable JSON backup.",
+      "Datei konnte nicht gelesen werden.":
+        "The file could not be read.",
+      "Den geteilten Alt-Speicher dieser Adresse leeren und neu im Raum anmelden — die eigene Kennung bleibt":
+        "Empty this address's shared old storage and sign in to the room again — your own identifier stays",
+      "Die beiden Passwörter sind nicht gleich.":
+        "The two passwords do not match.",
+      "Die lebende Karte des Netzes — zeigt in einem neuen Tab, wer gerade im Raum ist und was läuft":
+        "The living map of the network — opens a new tab showing who is in the room right now and what is going on",
+      "Dieser Browser kann keine Datei lesen (FileReader fehlt).":
+        "This browser cannot read a file (FileReader missing).",
+      "Ein Knoten hat sich verbunden — öffnen":
+        "A node has connected — open",
+      "Eine Räumung durch den Browser lässt sich nicht verhindern — nur unwahrscheinlicher machen (App auf den Startbildschirm legen) und der Verlust reparierbar halten (Sicherung).":
+        "A browser clear-out cannot be prevented — only made less likely (put the app on the home screen) and the loss kept repairable (a backup).",
+      "Eine neue Kennung ist NICHT dieselbe wie eine frühere — andere Knoten sehen dich danach als neuen Knoten.\n":
+        "A new identifier is NOT the same as an earlier one — other nodes will see you as a new node afterwards.\n",
+      "Einmal „🌐 Mit dem Knotennetz verbinden“ vervollständigt die Kennung — oder im Siegel Schritt 2 ":
+        "One press of “🌐 Connect to the node network” completes the identifier — or step 2 in the seal, ",
+      "Erst eine Datei wählen.":
+        "Choose a file first.",
+      "Erst einen Schlüssel eingeben, dann merken.":
+        "Enter a key first, then remember it.",
+      "Es wird nur deine öffentliche Visitenkarte (Spore) im Raum gezeigt — dein privater Schlüssel bleibt in diesem Browser.":
+        "Only your public calling card (spore) is shown in the room — your private key stays in this browser.",
+      "Frage einsprechen":
+        "Speak your question",
+      "Frage nach Bedeutung, z.B. kuchen …":
+        "Ask by meaning, e.g. cake …",
+      "Gemerkten Schlüssel holen":
+        "Fetch the remembered key",
+      "Gezielt diesen Knoten fragen":
+        "Ask this node in particular",
+      "Hast du eine Sicherung, spiel sie lieber ein.":
+        "If you have a backup, better play that back in.",
+      "Hier steht nur das Nötigste für den Alltag. Das ganze Werkzeug — Identität erzeugen, wechseln, sichern, zurückholen — liegt im Siegel.":
+        "Only the everyday essentials stand here. The whole tool — create an identity, switch it, back it up, fetch it back — lives in the seal.",
+      "Identität (eigene Schublade bleibt): ":
+        "Identity (own drawer stays): ",
+      "Identität vorhanden: ":
+        "Identity present: ",
+      "In diesem Browser ist für diese App noch KEINE Kennung hinterlegt.\n":
+        "In this browser there is NO identifier stored for this app yet.\n",
+      "In diesem Browser liegt schon eine Kennung. Einspielen ERSETZT sie durch die aus der Datei.\nDie jetzige Kennung ist danach weg — andere Knoten kennen wieder die alte.":
+        "There is already an identifier in this browser. Playing a backup in REPLACES it with the one from the file.\nThe present identifier is gone afterwards — other nodes will know the old one again.",
+      "KI bewertet die Antworten (eigener Schlüssel)":
+        "An AI judges the answers (your own key)",
+      "KI-Anbieter wählen":
+        "Choose an AI provider",
+      "Kein gemerkter Schlüssel oder falsches Passwort. ":
+        "No remembered key, or the wrong password. ",
+      "Keine Antwort — Knoten offline/nicht wach (Visitenkarte veraltet).":
+        "No answer — node offline or not awake (calling card out of date).",
+      "Keine Antwort — der Knoten ist gerade nicht offen/wach.":
+        "No answer — the node is not open/awake right now.",
+      "Keine Antwort.":
+        "No answer.",
+      "Keiner der ":
+        "None of the ",
+      "Kennung aus einer Sicherungs-Datei zurückholen":
+        "Fetch an identifier back from a backup file",
+      "Kennung in eine verschlüsselte Datei sichern":
+        "Back the identifier up into an encrypted file",
+      "Letzte Sicherung: ":
+        "Last backup: ",
+      "MODUL 23 UI RENDEZVOUS-KNOPF bereit (öffentlich, app-agnostisch), Funktionen: init/show/hide/isOpen":
+        "MODULE 23 UI RENDEZVOUS BUTTON ready (public, app-agnostic), functions: init/show/hide/isOpen",
+      "Meine Kennung: ":
+        "My identifier: ",
+      "Merkhilfe fürs Passwort (freiwillig, leer lassen möglich) — NICHT das Passwort selbst:":
+        "A reminder for the password (voluntary, may be left empty) — NOT the password itself:",
+      "Mit dem Knotennetz verbinden":
+        "Connect to the node network",
+      "Modul 02 (Identitäts-Fächer) ist in dieser App nicht geladen.":
+        "Module 02 (identity drawers) is not loaded in this app.",
+      "Modul 02 (Sicherung) ist in dieser App nicht geladen — Einspielen nicht möglich.":
+        "Module 02 (backup) is not loaded in this app — playing a backup in is not possible.",
+      "Modul 02 (Sicherung) ist in dieser App nicht geladen — Sicherung nicht möglich.":
+        "Module 02 (backup) is not loaded in this app — backing up is not possible.",
+      "Modul 02 (Sicherung) ist in dieser App nicht geladen.":
+        "Module 02 (backup) is not loaded in this app.",
+      "Modul 23 (SbkimRendezvous) nicht geladen.":
+        "Module 23 (SbkimRendezvous) not loaded.",
+      "Modul 23 mit Bau 23.B (askNode) nicht geladen.":
+        "Module 23 with build 23.B (askNode) not loaded.",
+      "Modul 23 mit Bau 23.B (enableAnswering) nicht geladen.":
+        "Module 23 with build 23.B (enableAnswering) not loaded.",
+      "Nichts aufzuräumen — es gibt nur ein Fach.":
+        "Nothing to tidy up — there is only one drawer.",
+      "Nichts aufzuräumen — nur das aktive Fach ist belegt.":
+        "Nothing to tidy up — only the active drawer is in use.",
+      "Niemand (Fremdes) im Raum. Lass den Gegenknoten zuerst „🌐 Mit dem Knotennetz verbinden“ drücken — dann hier nochmal „👥 Wer ist im Raum?“.":
+        "Nobody (from outside) in the room. Let the other node press “🌐 Connect to the node network” first — then press “👥 Who is in the room?” here again.",
+      "Noch keine Kennung in diesem Browser — „🌐 Mit dem Knotennetz verbinden“ fragt dich vorher.":
+        "No identifier in this browser yet — “🌐 Connect to the node network” asks you first.",
+      "Noch nichts zu sichern: der Schlüssel liegt hier, aber die Visitenkarte (Spore) fehlt.\n":
+        "Nothing to back up yet: the key is here, but the calling card (spore) is missing.\n",
+      "Nur verwandte Knoten zeigen":
+        "Show related nodes only",
+      "Passwort der Datei":
+        "Password of the file",
+      "Passwort fehlt (mindestens 8 Zeichen).":
+        "Password missing (at least 8 characters).",
+      "Passwort für die Sicherungs-Datei (mindestens 8 Zeichen). Ohne dieses Passwort ist die Datei wertlos — es wird nirgends gespeichert, auch nicht hier.":
+        "Password for the backup file (at least 8 characters). Without this password the file is worthless — it is stored nowhere, not even here.",
+      "Passwort vergessen? Kein Drama — hol dir beim Anbieter gratis einen neuen Schlüssel und leg ihn neu ab.":
+        "Forgotten the password? No drama — get a fresh key from the provider for free and store it again.",
+      "Passwort wiederholen":
+        "Repeat password",
+      "Passwort zu kurz — mindestens 8 Zeichen.":
+        "Password too short — at least 8 characters.",
+      "Schlüssel beim Anbieter holen":
+        "Get a key from the provider",
+      "Schlüssel sicher merken":
+        "Remember the key safely",
+      "Sicherungs-Datei wählen und ihr Passwort eingeben. Danach ist die Kennung aus der Datei wieder die deine.":
+        "Choose a backup file and enter its password. Afterwards the identifier from the file is yours again.",
+      "Siegel öffnen":
+        "Open the seal",
+      "Solange sie fehlt, lässt sich nichts sichern. Einmal „🌐 Mit dem Knotennetz verbinden“ ":
+        "While it is missing, nothing can be backed up. One press of “🌐 Connect to the node network” ",
+      "Speicher dauerhaft: ":
+        "Storage permanent: ",
+      "Tresor (Modul 20) nicht geladen.":
+        "Vault (module 20) not loaded.",
+      "Tresor-Passwort (min. 8 Zeichen) — verschlüsselt deinen KI-Schlüssel:":
+        "Vault password (min. 8 characters) — encrypts your AI key:",
+      "Tresor-Passwort — holt deinen gemerkten KI-Schlüssel:":
+        "Vault password — fetches your remembered AI key:",
+      "Triff andere SBKIM-Knoten im gemeinsamen Raum — server-los, direkt aus deinem Browser. Du kannst dieses Fenster schließen und normal weiterarbeiten; nur die App-Seite selbst offen lassen, damit du erreichbar bleibst.":
+        "Meet other SBKIM nodes in the shared room — server-less, straight from your browser. You may close this window and carry on working normally; just leave the app page itself open so you stay reachable.",
+      "Wie gut der Knoten zur Frage passt":
+        "How well the node fits the question",
+      "Wie verwandt die Domäne ist":
+        "How related the domain is",
+      "Ziehen zum Verschieben":
+        "Drag to move",
+      "Zur Pille minimieren":
+        "Minimise to the pill",
+      "Zurück an den festen Platz in der Leiste":
+        "Back to the fixed place in the bar",
+      "\n  (keine Treffer in seinem Buch — ehrlich leer)":
+        "\n  (no hits in its own book — honestly empty)",
+      "\n(Bei Netz-/Modell-Fehler: Verbindung prüfen und nochmal.)":
+        "\n(On a network or model error: check the connection and try again.)",
+      "\n(Du bist im Raum und erreichbar. „👥 Wer ist im Raum?“ zeigt sie, sobald ihre Karte frisch ist.)":
+        "\n(You are in the room and reachable. “👥 Who is in the room?” shows them as soon as their card is fresh.)",
+      "\n(Häufigster Grund: falsches Passwort oder eine Datei, die keine SBKIM-Sicherung ist.)":
+        "\n(Most common reason: the wrong password, or a file that is not an SBKIM backup.)",
+      "\n(Raum-Neulesen fehlgeschlagen.)":
+        "\n(Re-reading the room failed.)",
+      "\nBewahre die Datei getrennt vom Gerät auf. Mit ihr und dem Passwort ist eine verlorene Kennung wiederherstellbar.":
+        "\nKeep the file separate from the device. With it and the password, a lost identifier can be restored.",
+      "\nDas ist nicht umkehrbar. Wenn du unsicher bist: erst „💾 Sicherung anlegen“.":
+        "\nThis cannot be undone. If you are unsure: “💾 Make a backup” first.",
+      "\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen).":
+        "\nThe question stays open in your mailbox — I fetch the answer automatically next time you open this (or tap 📬 Fetch answers).",
+      "\nOder hol dir die Antwort selbst: „↗ App öffnen“ in der Karte oben öffnet ":
+        "\nOr fetch the answer yourself: “↗ Open app” on the card above opens ",
+      "\nSprach-Modell lädt  ":
+        "\nLanguage model loading  ",
+      "\n\n🧠 KI-Richter: kein Urteil":
+        "\n\n🧠 AI judge: no verdict",
+      "\n⚠ Nicht entfernt: ":
+        "\n⚠ Not removed: ",
+      "dein KI-Schlüssel — bleibt nur im Browser":
+        "your AI key — stays in the browser only",
+      "den Knoten":
+        "the node",
+      "noch keine (erst verbinden)":
+        "none yet (connect first)",
+      "vervollständigt sie — oder im Siegel Schritt 2 „Spore erzeugen“.":
+        "completes it — or step 2 in the seal, “Create spore”.",
+      "— Bedeutungs-Suche: sein Knoten hat in SEINEM Buch nach deinem Sinn gesucht.":
+        "— Search by meaning: its node searched ITS own book for your sense.",
+      "— Beurteilt nach Bedeutung (✓ = passt). Nur die Titel gingen an den KI-Anbieter; dein Schlüssel blieb im Browser.":
+        "— Judged by meaning (✓ = fits). Only the titles went to the AI provider; your key stayed in the browser.",
+      "„Spore erzeugen“. Danach lässt sie sich sichern.":
+        "“Create spore”. After that it can be backed up.",
+      "• Alt-Topf „sbkim“ gelöscht: ":
+        "• Old pot “sbkim” deleted: ",
+      "• Lokal abgelehnt — Bedeutungs-Ähnlichkeit ":
+        "• Rejected locally — meaning similarity ",
+      "… keine Antwort — Karte evtl. veraltet. Ich lese den Raum neu und frage die frischeste Karte …":
+        "… no answer — the card may be out of date. I am re-reading the room and asking the freshest card …",
+      "…":
+        "…",
+      "→ Der Browser darf diesen Speicher später aufräumen — dann wäre deine Kennung weg. Am sichersten: die App auf den Startbildschirm legen (installieren). Eine Sicherung deiner Identität schützt zusätzlich.":
+        "→ The browser may tidy this storage away later — your identifier would then be gone. Safest: put the app on the home screen (install it). A backup of your identity protects you on top of that.",
+      "→ Hefte deine Visitenkarte in den gemeinsamen Raum …":
+        "→ Pinning your calling card in the shared room …",
+      "→ Hefte deine Visitenkarte in den gemeinsamen Raum …\n":
+        "→ Pinning your calling card in the shared room …\n",
+      "→ Lese die Fächer …":
+        "→ Reading the drawers …",
+      "→ Spiele die Sicherung ein …":
+        "→ Playing the backup in …",
+      "→ Verbinde mit dem Netz …":
+        "→ Connecting to the network …",
+      "→ Verbinde mit dem Netz …\n":
+        "→ Connecting to the network …\n",
+      "→ Verschlüssele die Sicherung … (das dauert bewusst einen Moment)":
+        "→ Encrypting the backup … (this deliberately takes a moment)",
+      "↗ App öffnen":
+        "↗ Open app",
+      "⚠ Angefangene Kennung: der Schlüssel liegt hier, die Visitenkarte (Spore) fehlt noch.\n":
+        "⚠ Identifier only started: the key is here, the calling card (spore) is still missing.\n",
+      "⚠ Für diesen Knoten liegt hier noch KEINE Sicherung. Ohne sie ist ein Verlust nicht reparierbar.":
+        "⚠ There is NO backup here for this node yet. Without one, a loss cannot be repaired.",
+      "✓ ANDOCK ETABLIERT mit ":
+        "✓ DOCKING ESTABLISHED with ",
+      "✓ Antwort von ":
+        "✓ Answer from ",
+      "✓ Du bist im Raum (nodeId ":
+        "✓ You are in the room (nodeId ",
+      "✓ Du bist im Raum — deine Visitenkarte hängt, du lauschst.\n":
+        "✓ You are in the room — your calling card is pinned, you are listening.\n",
+      "✓ Frische Identität: ":
+        "✓ Fresh identity: ",
+      "✓ Identität erzeugt: ":
+        "✓ Identity created: ",
+      "✓ Neu im Raum angemeldet.\n":
+        "✓ Signed in to the room again.\n",
+      "✓ Sicherung eingespielt — die Kennung aus der Datei ist wieder aktiv.\nOben unter „Meine Kennung“ steht sie jetzt. Danach einmal „🌐 Mit dem Knotennetz verbinden“, damit die Visitenkarte wieder im Raum hängt.":
+        "✓ Backup played in — the identifier from the file is active again.\nIt now stands under “My identifier” above. After that, press “🌐 Connect to the node network” once so the calling card hangs in the room again.",
+      "✓ Sicherung erzeugt, aber der Download ging in diesem Browser nicht. Bitte nochmal versuchen.":
+        "✓ Backup created, but the download did not work in this browser. Please try again.",
+      "✓ Sicherung erzeugt: ":
+        "✓ Backup created: ",
+      "✗ Aufräumen fehlgeschlagen: ":
+        "✗ Tidying up failed: ",
+      "✗ Fächer lesen fehlgeschlagen: ":
+        "✗ Reading the drawers failed: ",
+      "✗ Raum-Lesen fehlgeschlagen: ":
+        "✗ Reading the room failed: ",
+      "✗ Sicherung fehlgeschlagen: ":
+        "✗ Backup failed: ",
+      "❓ Frage <":
+        "❓ Question <",
+      "❓ Zuerst oben eine Frage eintippen (z.B. kuchen), dann ❓ Fragen antippen.":
+        "❓ First type a question above (e.g. cake), then tap ❓ Ask.",
+      "🆕 Neue Kennung anlegen":
+        "🆕 Create a new identifier",
+      "🌐 Mit dem Knotennetz verbinden":
+        "🌐 Connect to the node network",
+      "🎤 Sprach-Engine braucht einen EU-Schlüssel — bitte tippen.":
+        "🎤 The speech engine needs an EU key — please type instead.",
+      "🎤 Sprache, in der du sprichst":
+        "🎤 The language you speak",
+      "🎤 Spracheingabe (Modul 21) nicht geladen — bitte tippen.":
+        "🎤 Speech input (module 21) not loaded — please type instead.",
+      "🎤 Sprich jetzt deine Frage in ":
+        "🎤 Speak your question now in ",
+      "🎤 nicht möglich — bitte tippen.":
+        "🎤 not possible — please type instead.",
+      "🏅 Werkstatt im Siegel öffnen":
+        "🏅 Open the workshop in the seal",
+      "👥 Lese den gemeinsamen Raum …":
+        "👥 Reading the shared room …",
+      "👥 Lese den gemeinsamen Raum …\n":
+        "👥 Reading the shared room …\n",
+      "👥 Wer ist im Raum?":
+        "👥 Who is in the room?",
+      "💬 Antworten AN — dein Knoten beantwortet jetzt Fragen anderer Knoten mit den Top-Treffern seiner Bedeutungs-Suche (nur Titel). App-Seite offen lassen (Fenster darf zu).":
+        "💬 Answering ON — your node now answers other nodes' questions with the top hits of its meaning search (titles only). Leave the app page open (the window may close).",
+      "💬 Antworten: an":
+        "💬 Answering: on",
+      "💾 Datei erzeugen":
+        "💾 Create the file",
+      "💾 Sicherung anlegen":
+        "💾 Make a backup",
+      "📥 Sicherung einspielen":
+        "📥 Play a backup in",
+      "📬 Dein Briefkasten (":
+        "📬 Your mailbox (",
+      "📬 Dein Briefkasten:":
+        "📬 Your mailbox:",
+      "📬 Keine offenen Fragen. Stelle über „🔎 Antwort holen“ eine Frage an einen Knoten — bleibt er stumm (z.B. gerade zu), bleibt die Frage hier offen und ich hole die Antwort automatisch beim nächsten Öffnen.":
+        "📬 No open questions. Ask a node something via “🔎 Fetch answer” — if it stays silent (closed right now, say), the question stays open here and I fetch the answer automatically next time you open this.",
+      "🔎 Antwort holen":
+        "🔎 Fetch answer",
+      "🔎 Diese Frage lief gerade — kurz warten, dann erneut.":
+        "🔎 That question was just running — wait a moment, then try again.",
+      "🔎 Frage-Passung ":
+        "🔎 Question fit ",
+      "🔎 Kein wirklich gut passender Knoten im Raum — ich frage trotzdem den nächstliegenden (":
+        "🔎 No really well-matching node in the room — I am asking the nearest one anyway (",
+      "🔎 Suche den passenden Knoten …":
+        "🔎 Looking for the matching node …",
+      "🔎 Suche im Raum den Knoten, der am besten zu deiner Frage passt …":
+        "🔎 Looking for the node in the room that best fits your question …",
+      "🔎 Suche läuft schon — einen Moment …":
+        "🔎 A search is already running — one moment …",
+      "🔎 Zuerst oben eine Frage eintippen, dann „🔎 Antwort holen“.":
+        "🔎 First type a question above, then “🔎 Fetch answer”.",
+      "🔑 Schlüssel holen ↗":
+        "🔑 Get a key ↗",
+      "🔒 Schlüssel verschlüsselt im Tresor gemerkt — beim nächsten Mal mit 🔓 entsperren. ":
+        "🔒 Key remembered encrypted in the vault — unlock it with 🔓 next time. ",
+      "🔓 Schlüssel aus dem Tresor geholt.":
+        "🔓 Key fetched from the vault.",
+      "🗂 Mehrfach-Kennungen aufräumen":
+        "🗂 Tidy up multiple identifiers",
+      "🤝 Ein Knoten hat sich gerade mit dir verbunden:":
+        "🤝 A node has just connected to you:",
+      "🤝 Handshake an ":
+        "🤝 Handshake to ",
+      "🧹 Alt-Speicher aufräumen & neu anmelden":
+        "🧹 Tidy up old storage & sign in again",
+      "🧹 Aufgeräumt & neu angemeldet:\n":
+        "🧹 Tidied up & signed in again:\n",
+      "🧹 Ja, alte Fächer entfernen":
+        "🧹 Yes, remove the old drawers",
+      "🧹 Räume auf & melde neu an …":
+        "🧹 Tidying up & signing in again …",
+      "🧹 Räume den geteilten Alt-Speicher dieser Adresse auf …\n":
+        "🧹 Tidying up this address's shared old storage …\n",
+      "🪪 Bitte einmal entscheiden — siehe „Kennung sichern“ oben.":
+        "🪪 Please decide once — see “Secure the identifier” above.",
+      "🪪 Kennung sichern":
+        "🪪 Secure the identifier",
+
+      // ── Nachgetragen 2026-09-14: Texte, die NICHT durch T() gingen.
+      // Gefunden nicht vom Woerterbuch-Waechter (der misst Woerterbuch↔T()),
+      // sondern von einem zweiten, der jede ANZEIGE-Stelle prueft.
+      "📬 Antworten abholen":
+        "📬 Fetch replies",
+      "🔁 Stelle ":
+        "🔁 Asking ",
+      "Eintrag entfernen":
+        "Remove entry",
+      "ja":
+        "yes",
+      "nein":
+        "no",
+      "unbekannt":
+        "unknown",
+      "Abbrechen":
+        "Cancel",
+      "📥 Ja, ersetzen":
+        "📥 Yes, replace",
+      "📥 Einspielen":
+        "📥 Play in",
+      "\nSprach-Modell geladen ✓":
+        "\nLanguage model loaded ✓",
+      "Tipps ausschalten":
+        "Turn tips off",
+      "Tipps einschalten":
+        "Turn tips on",
+      "🙋 Nur neu anmelden":
+        "🙋 Just re-announce",
+      "Antworten abholen":
+        "Fetch replies",
+      "🔁 offene nochmal fragen":
+        "🔁 ask the open ones again",
+      "Offene Fragen neu stellen":
+        "Ask the open questions again",
+      "🗑 leeren":
+        "🗑 empty",
+      "Briefkasten leeren":
+        "Empty the mailbox",
+      "🧬 nur verwandte: aus":
+        "🧬 related only: off",
+      "💬 Antworten: aus":
+        "💬 Replies: off",
+      "🧠 KI-Richter: aus":
+        "🧠 AI judge: off",
+      "🔒 im Tresor merken":
+        "🔒 keep in the vault",
+      "🔓 Tresor entsperren":
+        "🔓 Unlock the vault",
+      "🧬 nur verwandte: ":
+        "🧬 related only: ",
+      "an":
+        "on",
+      "aus":
+        "off",
+      "✗ Verbinden fehlgeschlagen: ":
+        "✗ Connecting failed: ",
+      "✗ Anmelden fehlgeschlagen: ":
+        "✗ Announcing failed: ",
+      "(unbekannt)":
+        "(unknown)",
+      "Knoten":
+        "node",
+      "angemeldet ":
+        "announced ",
+      "🤝 Andocken":
+        "🤝 Connect",
+      "❓ gezielt fragen":
+        "❓ ask directly",
+      "🧠 KI-Richter: ":
+        "🧠 AI judge: ",
+      "\n\n🧠 KI-Richter beurteilt nach Bedeutung …":
+        "\n\n🧠 The AI judge is ranking by meaning …",
+      " — rohe Reihenfolge bleibt.":
+        " — the raw order stays.",
+      "\n\n🧠 KI-Richter-Fehler: ":
+        "\n\n🧠 AI judge error: ",
+      "> an ":
+        "> to ",
+      "✗ Fehler: ":
+        "✗ Error: ",
+      "💬 Antworten ausgeschaltet.":
+        "💬 Replies turned off.",
+      " (lebende ID, max ~12 s) …":
+        " (live ID, max ~12 s) …",
+      "\n✗ Fehler: ":
+        "\n✗ Error: ",
+  } };
+
+  function sprache() {
+    if (cfg.lang === "de" || cfg.lang === "en") return cfg.lang;
+    try {
+      var d = doc();
+      var l = String((d && d.documentElement && d.documentElement.lang) || "").slice(0, 2).toLowerCase();
+      if (l === "en") return "en";
+    } catch (_e) {}
+    return "de";
+  }
+
+  /* Bei JEDEM Aufruf neu nachsehen, nicht einmal beim Laden merken: wer die
+   * Sprache umschaltet und danach das Fenster oeffnet, bekaeme sonst die alte. */
+  function T(de) {
+    if (sprache() !== "en") return de;
+    var w = TEXTE.en;
+    return (w && Object.prototype.hasOwnProperty.call(w, de)) ? w[de] : de;
+  }
   var mounted = false;
   var btnEl = null, panelEl = null, outEl = null, cardsEl = null, relOnlyBtn = null, incomingEl = null;
   // Stufe 0a (Identität haltbar machen) — zwei ehrliche Status-Zeilen im Panel.
@@ -64,11 +597,11 @@
     if (!incomingEl) return;
     if (!_incoming.length) { incomingEl.style.display = "none"; incomingEl.textContent = ""; return; }
     var title = _incoming.length === 1
-      ? "🤝 Ein Knoten hat sich gerade mit dir verbunden:"
-      : "🤝 " + _incoming.length + " Knoten haben sich mit dir verbunden:";
+      ? T("🤝 Ein Knoten hat sich gerade mit dir verbunden:")
+      : "🤝 " + _incoming.length + T(" Knoten haben sich mit dir verbunden:");
     var lines = _incoming.map(function (e) { return "  • " + _shortNodeId(e.id); }).join("\n");
     incomingEl.textContent = title + "\n" + lines +
-      "\n(Du bist im Raum und erreichbar. „👥 Wer ist im Raum?“ zeigt sie, sobald ihre Karte frisch ist.)";
+      T("\n(Du bist im Raum und erreichbar. „👥 Wer ist im Raum?“ zeigt sie, sobald ihre Karte frisch ist.)");
     incomingEl.style.display = "block";
   }
   function startIncomingWatch() {
@@ -82,7 +615,7 @@
       if (_incoming.length > 5) _incoming.length = 5;
       renderIncoming();
       // Auch minimiert wahrnehmbar: Blasen-Titel als Hinweis.
-      try { if (btnEl) btnEl.title = "Ein Knoten hat sich verbunden — öffnen"; } catch (_e) {}
+      try { if (btnEl) btnEl.title = T("Ein Knoten hat sich verbunden — öffnen"); } catch (_e) {}
     };
     try { global.addEventListener("sbkim:handshake", _hsHandler); } catch (_e) {}
   }
@@ -196,7 +729,7 @@
   function updateMailBadge() {
     var n = mailUnreadCount();
     if (btnEl) btnEl.textContent = RDV_BUBBLE_BASE + (n ? "  📬" + n : "");
-    if (mailBtn) mailBtn.textContent = "📬 Antworten abholen" + (n ? " (" + n + ")" : "");
+    if (mailBtn) mailBtn.textContent = T("📬 Antworten abholen") + (n ? " (" + n + ")" : "");
   }
   // Nachlesen über Modul 23 fetchAnswers (Lookback). silent → nur Badge updaten;
   // sonst zusätzlich die Briefkasten-Ansicht zeigen. Fail-soft.
@@ -229,10 +762,10 @@
   // aktivieren" (Marktplatz-Muster). Fail-soft; braucht toNodeId je Eintrag.
   function reAskOpen() {
     var r = rdv();
-    if (!r || typeof r.askNode !== "function") { setOut("Modul 23 mit Bau 23.B (askNode) nicht geladen."); return; }
+    if (!r || typeof r.askNode !== "function") { setOut(T("Modul 23 mit Bau 23.B (askNode) nicht geladen.")); return; }
     var toAsk = pruneMail().filter(function (e) { return e.status === "offen" || e.status === "abgelaufen"; });
     if (!toAsk.length) { renderMail(); return; }
-    if (outEl) outEl.textContent = "🔁 Stelle " + toAsk.length + " offene Frage(n) erneut …";
+    if (outEl) outEl.textContent = T("🔁 Stelle ") + toAsk.length + T(" offene Frage(n) erneut …");
     Promise.all(toAsk.map(function (e) {
       if (!e.toNodeId) return Promise.resolve();
       return Promise.resolve(r.askNode(e.toNodeId, e.text)).then(function (res) {
@@ -268,7 +801,7 @@
   }
   // Text-Fassung (fail-soft, wenn kein cardsEl da ist — z.B. sehr alter Mount).
   function mailLines(list) {
-    var lines = ["📬 Dein Briefkasten:"];
+    var lines = [T("📬 Dein Briefkasten:")];
     list.forEach(function (e) {
       var meta = (e.tries > 1 ? "×" + e.tries + " · " : "") + (timeAgo(e.ts) ? "zuletzt " + timeAgo(e.ts) : "");
       if (e.status === "beantwortet" && e.answer) {
@@ -277,7 +810,7 @@
       } else if (e.status === "abgelaufen") {
         lines.push("🕗 abgelaufen: „" + e.text + "“ an " + e.toName + (meta ? "  (" + meta + ")" : "") + " — „🔁 nochmal fragen“ stellt sie neu.");
       } else {
-        lines.push("⏳ offen: „" + e.text + "“ an " + e.toName + (meta ? "  (" + meta + ")" : "") + " — warte auf Antwort (hole ich beim Öffnen ab).");
+        lines.push("⏳ offen: „" + e.text + "“ an " + e.toName + (meta ? "  (" + meta + ")" : "") + T(" — warte auf Antwort (hole ich beim Öffnen ab)."));
       }
     });
     return lines.join("\n");
@@ -291,7 +824,7 @@
     var list = pruneMail();
     if (cardsEl) clear(cardsEl);
     if (!list.length) {
-      if (outEl) outEl.textContent = "📬 Keine offenen Fragen. Stelle über „🔎 Antwort holen“ eine Frage an einen Knoten — bleibt er stumm (z.B. gerade zu), bleibt die Frage hier offen und ich hole die Antwort automatisch beim nächsten Öffnen.";
+      if (outEl) outEl.textContent = T("📬 Keine offenen Fragen. Stelle über „🔎 Antwort holen“ eine Frage an einen Knoten — bleibt er stumm (z.B. gerade zu), bleibt die Frage hier offen und ich hole die Antwort automatisch beim nächsten Öffnen.");
       return;
     }
     // Fail-soft ohne cardsEl: Text-Fassung in outEl (wie zuvor).
@@ -300,7 +833,7 @@
     var ac = accent();
     var bs = "padding:4px 9px;border-radius:8px;border:1px solid " + ac + ";" +
       "background:rgba(110,231,211,.12);color:#eef2f8;cursor:pointer;font:inherit;font-size:.72rem";
-    cardsEl.appendChild(el("div", "color:#9ff7df;margin-bottom:6px", "📬 Dein Briefkasten (" + list.length + "):"));
+    cardsEl.appendChild(el("div", "color:#9ff7df;margin-bottom:6px", T("📬 Dein Briefkasten (") + list.length + "):"));
     list.forEach(function (e) {
       var rowEl = el("div", "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0;padding:6px 8px;" +
         "border:1px solid var(--line,#2a3340);border-radius:8px");
@@ -320,7 +853,7 @@
         info.appendChild(el("b", null, "⏳ „" + e.text + "“"));
         info.appendChild(el("br"));
         info.appendChild(el("span", "font-size:.72rem;color:#9aa7b6",
-          "an " + e.toName + " — warte auf Antwort (hole ich beim Öffnen ab)."));
+          "an " + e.toName + T(" — warte auf Antwort (hole ich beim Öffnen ab).")));
       }
       // Zähler + Zeit: „×N · zuletzt vor …“ (nur was da ist).
       var metaTxt = (e.tries > 1 ? "×" + e.tries + " · " : "") + (timeAgo(e.ts) ? "zuletzt " + timeAgo(e.ts) : "");
@@ -329,14 +862,14 @@
       // ↗ App öffnen (falls Adresse bekannt) — Selbst-Suche ohne Warten.
       var ep = (typeof e.endpoint === "string") ? e.endpoint.trim() : "";
       if (/^https?:\/\//i.test(ep)) {
-        var link = el("a", bs + ";text-decoration:none;display:inline-block", "↗ App öffnen");
+        var link = el("a", bs + ";text-decoration:none;display:inline-block", T("↗ App öffnen"));
         link.href = ep; link.target = "_blank"; link.rel = "noopener noreferrer";
-        link.title = "App öffnen (neuer Tab)";
+        link.title = T("App öffnen (neuer Tab)");
         rowEl.appendChild(link);
       }
       // 🗑 nur diese Gruppe entfernen.
       var del = el("button", bs, "🗑"); del.type = "button";
-      del.title = "Eintrag entfernen";
+      del.title = T("Eintrag entfernen");
       (function (qid) { del.addEventListener("click", function () { deleteMailEntry(qid); }); })(e.qid);
       rowEl.appendChild(del);
       cardsEl.appendChild(rowEl);
@@ -411,28 +944,28 @@
       var p = null;
       try { var st = global.SbkimStorage; p = (st && st._meta) ? st._meta.storagePersisted : null; } catch (_e) { p = null; }
       if (p === true) {
-        persistValEl.textContent = "ja"; persistValEl.style.color = "#8fe0b0";
+        persistValEl.textContent = T("ja"); persistValEl.style.color = "#8fe0b0";
         if (persistHintEl) persistHintEl.style.display = "none";
       } else if (p === false) {
-        persistValEl.textContent = "nein"; persistValEl.style.color = "#e6b980";
+        persistValEl.textContent = T("nein"); persistValEl.style.color = "#e6b980";
         if (persistHintEl) {
-          persistHintEl.textContent = "→ Der Browser darf diesen Speicher später aufräumen — dann wäre deine Kennung weg. Am sichersten: die App auf den Startbildschirm legen (installieren). Eine Sicherung deiner Identität schützt zusätzlich.";
+          persistHintEl.textContent = T("→ Der Browser darf diesen Speicher später aufräumen — dann wäre deine Kennung weg. Am sichersten: die App auf den Startbildschirm legen (installieren). Eine Sicherung deiner Identität schützt zusätzlich.");
           persistHintEl.style.display = "block";
         }
       } else {
-        persistValEl.textContent = "unbekannt"; persistValEl.style.color = "#9aa7b6";
+        persistValEl.textContent = T("unbekannt"); persistValEl.style.color = "#9aa7b6";
         if (persistHintEl) persistHintEl.style.display = "none";
       }
     }
     // „Meine Kennung" — aus Modul 02 getOwnSpore() (async, fail-soft).
     if (idValEl) {
       var sp = sporeMod();
-      if (!sp) { idValEl.textContent = "noch keine (erst verbinden)"; return; }
+      if (!sp) { idValEl.textContent = T("noch keine (erst verbinden)"); return; }
       try {
         Promise.resolve(sp.getOwnSpore()).then(function (own) {
-          if (idValEl) idValEl.textContent = (own && own.id) ? own.id : "noch keine (erst verbinden)";
-        }).catch(function () { if (idValEl) idValEl.textContent = "noch keine (erst verbinden)"; });
-      } catch (_e) { idValEl.textContent = "noch keine (erst verbinden)"; }
+          if (idValEl) idValEl.textContent = (own && own.id) ? own.id : T("noch keine (erst verbinden)");
+        }).catch(function () { if (idValEl) idValEl.textContent = T("noch keine (erst verbinden)"); });
+      } catch (_e) { idValEl.textContent = T("noch keine (erst verbinden)"); }
     }
   }
   // ==== Stufe 0b — die Identität REPARIERBAR machen (2026-07-30) ====
@@ -510,29 +1043,29 @@
       var stamp = loadBackupStamp();
       var lines = [], warn = false;
       if (st.known && !st.nodeId) {
-        lines.push("Noch keine Kennung in diesem Browser — „🌐 Mit dem Knotennetz verbinden“ fragt dich vorher.");
+        lines.push(T("Noch keine Kennung in diesem Browser — „🌐 Mit dem Knotennetz verbinden“ fragt dich vorher."));
         warn = true;
       } else if (st.known && st.nodeId && !st.hasSpore) {
         // Halbe Kennung: Schlüssel da, Visitenkarte fehlt. Kein Fehler, aber
         // auch nicht sicherbar — und der Weg heraus gehört dazu, nicht nur die
         // Feststellung.
-        lines.push("⚠ Angefangene Kennung: der Schlüssel liegt hier, die Visitenkarte (Spore) fehlt noch.\n" +
-          "Solange sie fehlt, lässt sich nichts sichern. Einmal „🌐 Mit dem Knotennetz verbinden“ " +
-          "vervollständigt sie — oder im Siegel Schritt 2 „Spore erzeugen“.");
+        lines.push(T("⚠ Angefangene Kennung: der Schlüssel liegt hier, die Visitenkarte (Spore) fehlt noch.\n") +
+          T("Solange sie fehlt, lässt sich nichts sichern. Einmal „🌐 Mit dem Knotennetz verbinden“ ") +
+          T("vervollständigt sie — oder im Siegel Schritt 2 „Spore erzeugen“."));
         warn = true;
       } else if (!stamp) {
-        lines.push("⚠ Für diesen Knoten liegt hier noch KEINE Sicherung. Ohne sie ist ein Verlust nicht reparierbar.");
+        lines.push(T("⚠ Für diesen Knoten liegt hier noch KEINE Sicherung. Ohne sie ist ein Verlust nicht reparierbar."));
         warn = true;
       } else {
-        lines.push("Letzte Sicherung: " + stamp + " (nur hier vermerkt — die Datei selbst musst du aufbewahren).");
+        lines.push(T("Letzte Sicherung: ") + stamp + T(" (nur hier vermerkt — die Datei selbst musst du aufbewahren)."));
       }
       // Der Aufräum-Knopf erscheint NUR, wenn es mehr als ein Fach gibt. Sonst
       // stünde ein Knopf da, der nichts zu tun hat — und der sich mit dem
       // Alt-Speicher-Aufräumen weiter unten verwechseln ließe.
       if (slotsBtnEl) slotsBtnEl.style.display = (st.slots.length > 1) ? "" : "none";
       if (st.slots.length > 1) {
-        lines.push("🗂 " + st.slots.length + " Kennungs-Fächer belegt (" + st.slots.join(", ") +
-          ") — Aufräumen behält das aktive.");
+        lines.push("🗂 " + st.slots.length + T(" Kennungs-Fächer belegt (") + st.slots.join(", ") +
+          T(") — Aufräumen behält das aktive."));
         warn = true;
       }
       idHintEl.textContent = lines.join("\n");
@@ -572,7 +1105,7 @@
     }
   }
   function idCancelBtn() {
-    var b = el("button", idBtnCss(false), "Abbrechen");
+    var b = el("button", idBtnCss(false), T("Abbrechen"));
     b.type = "button";
     b.addEventListener("click", function () { setIdForm(null); });
     return b;
@@ -607,15 +1140,15 @@
   // ---- Teil 1: Sicherung anlegen ----
   function openBackupForm() {
     var s = backupMod();
-    if (!s) { setIdForm(idNote("Modul 02 (Sicherung) ist in dieser App nicht geladen — Sicherung nicht möglich.", true)); return; }
+    if (!s) { setIdForm(idNote(T("Modul 02 (Sicherung) ist in dieser App nicht geladen — Sicherung nicht möglich."), true)); return; }
     // Erst prüfen, dann fragen: ohne Visitenkarte (Spore) kann Modul 02 gar kein
     // Backup schreiben. Es dem Nutzer VOR der Passwort-Eingabe sagen, statt ihn
     // zweimal tippen zu lassen und dann zu scheitern (Klaus' Sichttest 2026-07-30).
     readIdentityState().then(function (st) {
       if (st.known && st.nodeId && !st.hasSpore) {
-        setIdForm(idNote("Noch nichts zu sichern: der Schlüssel liegt hier, aber die Visitenkarte (Spore) fehlt.\n" +
-          "Einmal „🌐 Mit dem Knotennetz verbinden“ vervollständigt die Kennung — oder im Siegel Schritt 2 " +
-          "„Spore erzeugen“. Danach lässt sie sich sichern.", true));
+        setIdForm(idNote(T("Noch nichts zu sichern: der Schlüssel liegt hier, aber die Visitenkarte (Spore) fehlt.\n") +
+          T("Einmal „🌐 Mit dem Knotennetz verbinden“ vervollständigt die Kennung — oder im Siegel Schritt 2 ") +
+          T("„Spore erzeugen“. Danach lässt sie sich sichern."), true));
         return;
       }
       buildBackupForm(s);
@@ -624,32 +1157,32 @@
   function buildBackupForm(s) {
     var box = el("div", "");
     box.appendChild(el("div", "font-size:.72rem;color:#9aa7b6;line-height:1.45",
-      "Passwort für die Sicherungs-Datei (mindestens 8 Zeichen). Ohne dieses Passwort ist die Datei wertlos — es wird nirgends gespeichert, auch nicht hier."));
+      T("Passwort für die Sicherungs-Datei (mindestens 8 Zeichen). Ohne dieses Passwort ist die Datei wertlos — es wird nirgends gespeichert, auch nicht hier.")));
     var row = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
-    var p1 = idField("Passwort"), p2 = idField("Passwort wiederholen");
+    var p1 = idField("Passwort"), p2 = idField(T("Passwort wiederholen"));
     row.appendChild(p1); row.appendChild(p2);
     box.appendChild(row);
     var row2 = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
-    var go = el("button", idBtnCss(true), "💾 Datei erzeugen"); go.type = "button";
+    var go = el("button", idBtnCss(true), T("💾 Datei erzeugen")); go.type = "button";
     row2.appendChild(go); row2.appendChild(idCancelBtn());
     box.appendChild(row2);
     go.addEventListener("click", function () {
       var pw = String(p1.value || "");
-      if (pw.length < 8) { box.appendChild(idNote("Passwort zu kurz — mindestens 8 Zeichen.", true)); return; }
-      if (pw !== String(p2.value || "")) { box.appendChild(idNote("Die beiden Passwörter sind nicht gleich.", true)); return; }
+      if (pw.length < 8) { box.appendChild(idNote(T("Passwort zu kurz — mindestens 8 Zeichen."), true)); return; }
+      if (pw !== String(p2.value || "")) { box.appendChild(idNote(T("Die beiden Passwörter sind nicht gleich."), true)); return; }
       go.disabled = true;
-      box.appendChild(idNote("→ Verschlüssele die Sicherung … (das dauert bewusst einen Moment)", false));
+      box.appendChild(idNote(T("→ Verschlüssele die Sicherung … (das dauert bewusst einen Moment)"), false));
       Promise.resolve(s.exportBackup(pw)).then(function (blob) {
         var name = "sbkim-sicherung-" + (cfg.dbSuffix || "knoten") + "-" + isoDay() + ".json";
         var ok = downloadJson(blob, name);
         saveBackupStamp(isoDay());
         refreshIdentityBox();
         setIdForm(idNote(ok
-          ? "✓ Sicherung erzeugt: " + name + "\nBewahre die Datei getrennt vom Gerät auf. Mit ihr und dem Passwort ist eine verlorene Kennung wiederherstellbar."
-          : "✓ Sicherung erzeugt, aber der Download ging in diesem Browser nicht. Bitte nochmal versuchen.", !ok));
+          ? T("✓ Sicherung erzeugt: ") + name + T("\nBewahre die Datei getrennt vom Gerät auf. Mit ihr und dem Passwort ist eine verlorene Kennung wiederherstellbar.")
+          : T("✓ Sicherung erzeugt, aber der Download ging in diesem Browser nicht. Bitte nochmal versuchen."), !ok));
       }).catch(function (e) {
         go.disabled = false;
-        box.appendChild(idNote("✗ Sicherung fehlgeschlagen: " + errText(e), true));
+        box.appendChild(idNote(T("✗ Sicherung fehlgeschlagen: ") + errText(e), true));
       });
     });
     setIdForm(box);
@@ -658,20 +1191,20 @@
   // ---- Teil 2: Sicherung einspielen ----
   function runImport(blob, pw, force) {
     var s = backupMod();
-    if (!s) { setIdForm(idNote("Modul 02 (Sicherung) ist in dieser App nicht geladen.", true)); return; }
-    setIdForm(idNote("→ Spiele die Sicherung ein …", false));
+    if (!s) { setIdForm(idNote(T("Modul 02 (Sicherung) ist in dieser App nicht geladen."), true)); return; }
+    setIdForm(idNote(T("→ Spiele die Sicherung ein …"), false));
     Promise.resolve(s.importBackup(blob, pw, force ? { force: true } : undefined)).then(function () {
       refreshStatus();
       refreshIdentityBox();
-      setIdForm(idNote("✓ Sicherung eingespielt — die Kennung aus der Datei ist wieder aktiv.\nOben unter „Meine Kennung“ steht sie jetzt. Danach einmal „🌐 Mit dem Knotennetz verbinden“, damit die Visitenkarte wieder im Raum hängt.", false));
+      setIdForm(idNote(T("✓ Sicherung eingespielt — die Kennung aus der Datei ist wieder aktiv.\nOben unter „Meine Kennung“ steht sie jetzt. Danach einmal „🌐 Mit dem Knotennetz verbinden“, damit die Visitenkarte wieder im Raum hängt."), false));
     }).catch(function (e) {
       if (e && e.name === "BackupOverwriteError") {
         // Der Normalfall nach einem Verlust: es liegt bereits eine (neue)
         // Kennung im Fach. Ersetzen ist gewollt — aber nur ausdrücklich.
         var box = el("div", "");
-        box.appendChild(idNote("In diesem Browser liegt schon eine Kennung. Einspielen ERSETZT sie durch die aus der Datei.\nDie jetzige Kennung ist danach weg — andere Knoten kennen wieder die alte.", true));
+        box.appendChild(idNote(T("In diesem Browser liegt schon eine Kennung. Einspielen ERSETZT sie durch die aus der Datei.\nDie jetzige Kennung ist danach weg — andere Knoten kennen wieder die alte."), true));
         var row = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
-        var yes = el("button", idBtnCss(true), "📥 Ja, ersetzen"); yes.type = "button";
+        var yes = el("button", idBtnCss(true), T("📥 Ja, ersetzen")); yes.type = "button";
         yes.addEventListener("click", function () { runImport(blob, pw, true); });
         row.appendChild(yes); row.appendChild(idCancelBtn());
         box.appendChild(row);
@@ -679,14 +1212,14 @@
         return;
       }
       setIdForm(idNote("✗ Einspielen fehlgeschlagen: " + errText(e) +
-        "\n(Häufigster Grund: falsches Passwort oder eine Datei, die keine SBKIM-Sicherung ist.)", true));
+        T("\n(Häufigster Grund: falsches Passwort oder eine Datei, die keine SBKIM-Sicherung ist.)"), true));
     });
   }
   function openImportForm() {
-    if (!backupMod()) { setIdForm(idNote("Modul 02 (Sicherung) ist in dieser App nicht geladen — Einspielen nicht möglich.", true)); return; }
+    if (!backupMod()) { setIdForm(idNote(T("Modul 02 (Sicherung) ist in dieser App nicht geladen — Einspielen nicht möglich."), true)); return; }
     var box = el("div", "");
     box.appendChild(el("div", "font-size:.72rem;color:#9aa7b6;line-height:1.45",
-      "Sicherungs-Datei wählen und ihr Passwort eingeben. Danach ist die Kennung aus der Datei wieder die deine."));
+      T("Sicherungs-Datei wählen und ihr Passwort eingeben. Danach ist die Kennung aus der Datei wieder die deine.")));
     var fileIn = idField("", "file");
     fileIn.accept = ".json,application/json";
     fileIn.style.cssText += ";padding:4px";
@@ -694,28 +1227,28 @@
     frow.appendChild(fileIn);
     box.appendChild(frow);
     var prow = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
-    var pw = idField("Passwort der Datei");
+    var pw = idField(T("Passwort der Datei"));
     prow.appendChild(pw);
     box.appendChild(prow);
     var row2 = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
-    var go = el("button", idBtnCss(true), "📥 Einspielen"); go.type = "button";
+    var go = el("button", idBtnCss(true), T("📥 Einspielen")); go.type = "button";
     row2.appendChild(go); row2.appendChild(idCancelBtn());
     box.appendChild(row2);
     go.addEventListener("click", function () {
       var f = (fileIn.files && fileIn.files[0]) ? fileIn.files[0] : null;
-      if (!f) { box.appendChild(idNote("Erst eine Datei wählen.", true)); return; }
-      if (String(pw.value || "").length < 8) { box.appendChild(idNote("Passwort fehlt (mindestens 8 Zeichen).", true)); return; }
+      if (!f) { box.appendChild(idNote(T("Erst eine Datei wählen."), true)); return; }
+      if (String(pw.value || "").length < 8) { box.appendChild(idNote(T("Passwort fehlt (mindestens 8 Zeichen)."), true)); return; }
       var FR = global.FileReader;
-      if (!FR) { box.appendChild(idNote("Dieser Browser kann keine Datei lesen (FileReader fehlt).", true)); return; }
+      if (!FR) { box.appendChild(idNote(T("Dieser Browser kann keine Datei lesen (FileReader fehlt)."), true)); return; }
       var r = new FR();
-      r.onerror = function () { box.appendChild(idNote("Datei konnte nicht gelesen werden.", true)); };
+      r.onerror = function () { box.appendChild(idNote(T("Datei konnte nicht gelesen werden."), true)); };
       r.onload = function () {
         var blob;
         try { blob = JSON.parse(String(r.result || "")); }
-        catch (_e) { box.appendChild(idNote("Das ist keine lesbare JSON-Sicherung.", true)); return; }
+        catch (_e) { box.appendChild(idNote(T("Das ist keine lesbare JSON-Sicherung."), true)); return; }
         runImport(blob, String(pw.value || ""), false);
       };
-      try { r.readAsText(f); } catch (_e) { box.appendChild(idNote("Datei konnte nicht gelesen werden.", true)); }
+      try { r.readAsText(f); } catch (_e) { box.appendChild(idNote(T("Datei konnte nicht gelesen werden."), true)); }
     });
     setIdForm(box);
   }
@@ -725,24 +1258,24 @@
     var s = global.SbkimSpore;
     if (!s || typeof s.listIdentities !== "function" || typeof s.removeIdentity !== "function" ||
         typeof s.getActiveIdentityKey !== "function") {
-      setIdForm(idNote("Modul 02 (Identitäts-Fächer) ist in dieser App nicht geladen.", true));
+      setIdForm(idNote(T("Modul 02 (Identitäts-Fächer) ist in dieser App nicht geladen."), true));
       return;
     }
-    setIdForm(idNote("→ Lese die Fächer …", false));
+    setIdForm(idNote(T("→ Lese die Fächer …"), false));
     Promise.resolve(s.listIdentities()).then(function (slots) {
       slots = Array.isArray(slots) ? slots : [];
-      if (slots.length < 2) { setIdForm(idNote("Nichts aufzuräumen — es gibt nur ein Fach.", false)); return null; }
+      if (slots.length < 2) { setIdForm(idNote(T("Nichts aufzuräumen — es gibt nur ein Fach."), false)); return null; }
       return Promise.resolve(s.getActiveIdentityKey()).then(function (active) {
         var others = slots.filter(function (k) { return k !== active; });
-        if (others.length === 0) { setIdForm(idNote("Nichts aufzuräumen — nur das aktive Fach ist belegt.", false)); return; }
+        if (others.length === 0) { setIdForm(idNote(T("Nichts aufzuräumen — nur das aktive Fach ist belegt."), false)); return; }
         var box = el("div", "");
-        box.appendChild(idNote("Aktives Fach BLEIBT: " + active +
+        box.appendChild(idNote(T("Aktives Fach BLEIBT: ") + active +
           "\nEntfernt werden: " + others.join(", ") +
-          "\nDas ist nicht umkehrbar. Wenn du unsicher bist: erst „💾 Sicherung anlegen“.", true));
+          T("\nDas ist nicht umkehrbar. Wenn du unsicher bist: erst „💾 Sicherung anlegen“."), true));
         var row = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
-        var yes = el("button", idBtnCss(true), "🧹 Ja, alte Fächer entfernen"); yes.type = "button";
+        var yes = el("button", idBtnCss(true), T("🧹 Ja, alte Fächer entfernen")); yes.type = "button";
         yes.addEventListener("click", function () {
-          setIdForm(idNote("→ Entferne " + others.length + " Fach/Fächer …", false));
+          setIdForm(idNote("→ Entferne " + others.length + T(" Fach/Fächer …"), false));
           var chain = Promise.resolve(), removed = 0, failed = [];
           others.forEach(function (k) {
             chain = chain.then(function () {
@@ -753,15 +1286,15 @@
           chain.then(function () {
             refreshStatus();
             refreshIdentityBox();
-            setIdForm(idNote("✓ " + removed + " Fach/Fächer entfernt. Aktive Kennung unverändert: " + active +
-              (failed.length ? "\n⚠ Nicht entfernt: " + failed.join(", ") : ""), failed.length > 0));
+            setIdForm(idNote("✓ " + removed + T(" Fach/Fächer entfernt. Aktive Kennung unverändert: ") + active +
+              (failed.length ? T("\n⚠ Nicht entfernt: ") + failed.join(", ") : ""), failed.length > 0));
           });
         });
         row.appendChild(yes); row.appendChild(idCancelBtn());
         box.appendChild(row);
         setIdForm(box);
       });
-    }).catch(function (e) { setIdForm(idNote("✗ Fächer lesen fehlgeschlagen: " + errText(e), true)); });
+    }).catch(function (e) { setIdForm(idNote(T("✗ Fächer lesen fehlgeschlagen: ") + errText(e), true)); });
   }
 
   // ---- Werkstatt-Verweis (Klaus' Arbeitsteilung 2026-07-30) ----
@@ -783,14 +1316,14 @@
     if (!badge) { row.style.display = "none"; return; }
     row.style.display = "block";
     row.appendChild(el("div", "color:#7e8b9a;font-size:.7rem;line-height:1.45",
-      "Hier steht nur das Nötigste für den Alltag. Das ganze Werkzeug — Identität erzeugen, wechseln, sichern, zurückholen — liegt im Siegel."));
-    var b = el("button", idBtnCss(false) + ";margin-top:5px", "🏅 Werkstatt im Siegel öffnen");
+      T("Hier steht nur das Nötigste für den Alltag. Das ganze Werkzeug — Identität erzeugen, wechseln, sichern, zurückholen — liegt im Siegel.")));
+    var b = el("button", idBtnCss(false) + ";margin-top:5px", T("🏅 Werkstatt im Siegel öffnen"));
     b.type = "button";
-    b.title = "Siegel öffnen";
+    b.title = T("Siegel öffnen");
     b.addEventListener("click", function () {
       var t = siegelBadge();
-      if (!t) { setIdForm(idNote("Das Siegel ist in dieser App nicht geladen.", true)); return; }
-      try { t.click(); } catch (_e) { setIdForm(idNote("Das Siegel ließ sich nicht öffnen — bitte das Siegel-Abzeichen direkt anklicken.", true)); }
+      if (!t) { setIdForm(idNote(T("Das Siegel ist in dieser App nicht geladen."), true)); return; }
+      try { t.click(); } catch (_e) { setIdForm(idNote(T("Das Siegel ließ sich nicht öffnen — bitte das Siegel-Abzeichen direkt anklicken."), true)); }
     });
     row.appendChild(b);
   }
@@ -798,13 +1331,13 @@
   // ---- Teil 3: keine stumme Neu-Anlage — erst fragen ----
   function askBeforeCreate() {
     var box = el("div", "");
-    box.appendChild(idNote("In diesem Browser ist für diese App noch KEINE Kennung hinterlegt.\n" +
-      "Eine neue Kennung ist NICHT dieselbe wie eine frühere — andere Knoten sehen dich danach als neuen Knoten.\n" +
-      "Hast du eine Sicherung, spiel sie lieber ein.", true));
+    box.appendChild(idNote(T("In diesem Browser ist für diese App noch KEINE Kennung hinterlegt.\n") +
+      T("Eine neue Kennung ist NICHT dieselbe wie eine frühere — andere Knoten sehen dich danach als neuen Knoten.\n") +
+      T("Hast du eine Sicherung, spiel sie lieber ein."), true));
     var row = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
-    var neu = el("button", idBtnCss(true), "🆕 Neue Kennung anlegen"); neu.type = "button";
+    var neu = el("button", idBtnCss(true), T("🆕 Neue Kennung anlegen")); neu.type = "button";
     neu.addEventListener("click", function () { setIdForm(null); onConnect({ skipIdentityGate: true }); });
-    var imp = el("button", idBtnCss(false), "📥 Sicherung einspielen"); imp.type = "button";
+    var imp = el("button", idBtnCss(false), T("📥 Sicherung einspielen")); imp.type = "button";
     imp.addEventListener("click", function () { openImportForm(); });
     row.appendChild(neu); row.appendChild(imp); row.appendChild(idCancelBtn());
     box.appendChild(row);
@@ -959,10 +1492,10 @@
         var pct = Math.max(0, Math.min(100, Math.round(dd.progress)));
         var filled = Math.round(pct / 5);
         var bar = new Array(filled + 1).join("█") + new Array(20 - filled + 1).join("░");
-        outEl.textContent = _progBase + "\nSprach-Modell lädt  " + bar + "  " + pct + " %" +
+        outEl.textContent = _progBase + T("\nSprach-Modell lädt  ") + bar + "  " + pct + " %" +
           "\n(einmalig ~30 MB — kann am Tablet 1–2 Min dauern, bitte offen lassen)";
       } else if (dd.status === "done" || dd.status === "ready") {
-        outEl.textContent = _progBase + "\nSprach-Modell geladen ✓";
+        outEl.textContent = _progBase + T("\nSprach-Modell geladen ✓");
       }
     };
     try { global.addEventListener("sbkim:embedding-progress", _progHandler); } catch (_e) {}
@@ -1024,6 +1557,13 @@
   }
   function applyPos(node, p) {
     if (!node || !p) return;
+    /* ⚠ WER EINE FREIE LAGE BEKOMMT, GEHOERT NICHT MEHR IN DIE LEISTE
+       (Klaus 2026-09-08). Ein angedockter Knopf steht `position:static` im
+       Fluss — `left`/`top` waeren dort wirkungslos, und der Knopf bliebe
+       kleben, obwohl der Finger ihn zieht. Das Loesen steht deshalb HIER und
+       nicht nur im Zieh-Weg: jede Stelle, die eine Lage setzt (Ziehen,
+       Minimieren, gemerkte Lage beim Laden), meint eine freie Lage. */
+    if (node === btnEl && angedockt) abdocken();
     node.style.left = p.x + "px"; node.style.top = p.y + "px";
     node.style.right = "auto"; node.style.bottom = "auto";
     // ⚠ Und das Ecken-Merkmal abnehmen (Klaus 2026-08-11, zweiter Befund:
@@ -1046,6 +1586,83 @@
     // ohne gemerkte Position — dann steht der Knopf wieder in der Ecke.
     try { if (node.removeAttribute) node.removeAttribute("data-ecke-unten"); } catch (_e) {}
   }
+  /*
+   * ══ EIN FESTER PLATZ IN DER LEISTE (Klaus 2026-09-08) ════════════════════
+   *
+   * „Das ist dir auch schon aufgefallen, dass die Mycelkarte immer irgendwo
+   *  rumliegt, wenn ich die App öffne. Setz sie bitte an eine feste Stelle in
+   *  der Navileiste oben. Und wenn ich sie mit der Maus anklicke und bewegen
+   *  möchte, dann kann ich die wie ein Flying Widget in den freien Raum
+   *  stellen. … und das in jeder App, denn es taucht immer wieder auf, dass
+   *  diese Mycelkarte irgendwo was abdeckt."
+   *
+   * Bis hierher war der Knopf IMMER `position:fixed` in einer Ecke — er lag
+   * also über allem, was dort stand. In PWA Toolpoint verdeckte er den
+   * Markennamen: zu lesen war „…A Toolpoint".
+   *
+   * ⚠ DIE SEITE BIETET DEN PLATZ AN, DAS MODUL SUCHT IHN SICH NICHT.
+   * Ein Modul, das sich selbst eine Stelle in einer fremden Leiste aussucht
+   * („das erste <nav>", „das Element mit der Klasse …"), rät — und rät in der
+   * nächsten App falsch. Die Seite setzt `data-sbkim-mycel-platz` an die
+   * Stelle, an der sie ihn haben will; findet das Modul keine, bleibt alles
+   * wie bisher. **Fail-soft: eine App ohne Leiste merkt von dieser Änderung
+   * nichts.**
+   *
+   * ⚠ UND EINE GEMERKTE LAGE GEWINNT. Wer den Knopf einmal gezogen hat, will
+   * ihn dort haben — sonst spränge er beim nächsten Laden in die Leiste
+   * zurück, und das Ziehen wäre folgenlos.
+   */
+  var ANKER_WAHL = "[data-sbkim-mycel-platz]";
+  var angedockt = false;
+  var dockSichtbar = function () {};   /* wird beim Bau des Panels gesetzt */
+
+  function findeAnker() {
+    try { var d = doc(); return d && d.querySelector ? d.querySelector(ANKER_WAHL) : null; }
+    catch (_e) { return null; }
+  }
+
+  /* In die Leiste hängen: im Fluss stehen, nicht darüber schweben. */
+  function andocken() {
+    var platz = findeAnker();
+    if (!platz || !btnEl) return false;
+    try {
+      btnEl.style.position = "static";
+      btnEl.style.left = ""; btnEl.style.top = "";
+      btnEl.style.right = ""; btnEl.style.bottom = "";
+      /* Der Schatten trug die Blase über der Seite — im Fluss wäre er nur
+         Ballast, und die Leiste hat ihren eigenen Grund. */
+      btnEl.style.boxShadow = "none";
+      btnEl.removeAttribute("data-ecke-unten");
+      btnEl.setAttribute("data-sbkim-angedockt", "1");
+      platz.appendChild(btnEl);
+      angedockt = true;
+      dockSichtbar();
+      return true;
+    } catch (_e) { return false; }
+  }
+
+  /* Aus der Leiste lösen: zurück in den <body>, wieder frei fliegend.
+     ⚠ DIE LAGE WIRD VORHER GEMESSEN, sonst springt der Knopf beim ersten
+     Ziehen an eine fremde Stelle: `getBoundingClientRect` liefert danach die
+     Lage im Body, nicht die in der Leiste. */
+  function abdocken() {
+    if (!angedockt || !btnEl) return null;
+    var r = null;
+    try { r = btnEl.getBoundingClientRect(); } catch (_e) {}
+    try {
+      var d = doc();
+      btnEl.style.position = "fixed";
+      btnEl.style.boxShadow = "0 4px 14px rgba(0,0,0,.35)";
+      btnEl.removeAttribute("data-sbkim-angedockt");
+      if (d && d.body) d.body.appendChild(btnEl);
+      angedockt = false;
+      if (r) { btnEl.style.left = r.left + "px"; btnEl.style.top = r.top + "px";
+               btnEl.style.right = "auto"; btnEl.style.bottom = "auto"; }
+    } catch (_e) {}
+    dockSichtbar();
+    return r;
+  }
+
   function makeDraggable(node, handle) {
     handle = handle || node;
     handle.style.touchAction = "none";
@@ -1062,7 +1679,32 @@
     handle.addEventListener("pointermove", function (ev) {
       if (!dragging) return;
       var dx = ev.clientX - sx, dy = ev.clientY - sy;
-      if (!moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) moved = true;
+      if (!moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        moved = true;
+        /*
+         * ⚠ DAS UMHAENGEN IM DOM ZERSTOERT DEN POINTER-CAPTURE (gemessen
+         * 2026-09-08). Der angedockte Knopf steht in der Leiste; ihn zu loesen
+         * heisst, ihn per `appendChild` in den <body> zu verschieben — und ein
+         * Element, das aus dem DOM genommen und neu eingehaengt wird, verliert
+         * seinen Capture. Gemessen am Ereignis-Mitschnitt: nach `pointerdown`
+         * kam genau EIN `pointermove`, danach nichts mehr, kein `pointerup`.
+         *
+         * Die Folge war still und teuer: der Knopf blieb dort liegen, wo der
+         * erste Schritt ihn hinsetzte, und `end()` lief nie — die Lage wurde
+         * NIE GEMERKT. Beim naechsten Laden sprang er in die Leiste zurueck,
+         * und das Ziehen war folgenlos. Genau die Zusicherung, die eine Zeile
+         * weiter oben steht („eine gemerkte Lage gewinnt").
+         *
+         * Deshalb: erst loesen, DANN den Capture erneuern — und beides hier,
+         * beim ersten echten Schritt. Ein Loesen schon im `pointerdown` waere
+         * falsch: ein blosser Klick soll das Panel oeffnen, nicht den Knopf
+         * aus der Leiste reissen.
+         */
+        if (node === btnEl && angedockt) {
+          abdocken();
+          try { handle.setPointerCapture(ev.pointerId); } catch (_e) {}
+        }
+      }
       if (!moved) return;
       applyPos(node, clampInts(ox + dx, oy + dy, node));
       ev.preventDefault();
@@ -1116,7 +1758,7 @@
       "backdrop-filter:blur(6px);box-shadow:0 4px 14px rgba(0,0,0,.35)", RDV_BUBBLE_BASE);
     btnEl.type = "button";
     btnEl.id = "sbkim-rdv-btn";
-    btnEl.title = "Mit dem Knotennetz verbinden";
+    btnEl.title = T("Mit dem Knotennetz verbinden");
     // Nur die unteren Ecken koennen mit der Lampen-Leiste kollidieren.
     if (cfg.corner !== "tl" && cfg.corner !== "tr") btnEl.setAttribute("data-ecke-unten", "1");
     stilEinhaengen();
@@ -1129,8 +1771,8 @@
     panelEl.id = "sbkim-rdv-panel";
 
     var head = el("div", "display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;cursor:move");
-    head.title = "Ziehen zum Verschieben";
-    head.appendChild(el("strong", "color:" + ac, "🌐 Mit dem Knotennetz verbinden"));
+    head.title = T("Ziehen zum Verschieben");
+    head.appendChild(el("strong", "color:" + ac, T("🌐 Mit dem Knotennetz verbinden")));
     var headBtns = el("div", "display:flex;align-items:center;gap:2px");
     var tipBtn = el("button", "background:none;border:none;color:#9aa7b6;font-size:1rem;cursor:pointer;padding:0 5px", "💬");
     tipBtn.type = "button";
@@ -1139,7 +1781,7 @@
       tipBtn.style.opacity = on ? "1" : ".38";
       tipBtn.setAttribute("data-sbtip", on ? "Tipps ausschalten" : "Tipps einschalten");
     }
-    tipBtn.title = tipsEnabled() ? "Tipps ausschalten" : "Tipps einschalten";  // adoptTips verdrahtet den Hover
+    tipBtn.title = tipsEnabled() ? T("Tipps ausschalten") : T("Tipps einschalten");  // adoptTips verdrahtet den Hover
     tipBtn.style.opacity = tipsEnabled() ? "1" : ".38";
     tipBtn.addEventListener("click", function () {
       setTipsOff(tipsEnabled());   // an → aus, aus → an
@@ -1147,13 +1789,45 @@
       hideTip();
     });
     headBtns.appendChild(tipBtn);
+    /*
+     * ⚠ EIN LOESEN OHNE RUECKWEG WAERE EINE FALLE. Wer den Knopf einmal
+     * gezogen hat, kaeme sonst nie wieder in die Leiste zurueck — die Lage
+     * liegt im Speicher, und ein Nutzer weiss nicht, dass er ihn dort loeschen
+     * muesste. Derselbe Grund, aus dem das ✕ rueckgaengig zu machen sein muss.
+     *
+     * Der Knopf steht nur da, wenn die Seite ueberhaupt einen Platz anbietet
+     * UND der Knopf gerade frei fliegt. Sonst waere er ein toter Knopf.
+     */
+    var dockBtn = el("button", "background:none;border:none;color:#9aa7b6;font-size:1rem;cursor:pointer;padding:0 5px", "⤺");
+    dockBtn.type = "button";
+    dockBtn.title = T("Zurück an den festen Platz in der Leiste");
+    dockBtn.setAttribute("data-sbkim-andocken", "");
+    dockBtn.addEventListener("click", function () {
+      try { global.localStorage.removeItem(POS_KEY); } catch (_e) {}
+      close();
+      /* Die Ecken-Vorgabe zurueckholen, falls die Seite doch keinen Platz hat
+         — sonst stuende der Knopf danach ohne jede Lage da. */
+      if (!andocken() && btnEl) {
+        btnEl.style.position = "fixed";
+        btnEl.style.cssText += ";" + cornerCss(cfg.corner, false);
+        if (cfg.corner !== "tl" && cfg.corner !== "tr") btnEl.setAttribute("data-ecke-unten", "1");
+      }
+      dockSichtbar();
+    });
+    headBtns.appendChild(dockBtn);
+    /* Eine Stelle entscheidet, ob er dasteht — zwei liefen auseinander. */
+    dockSichtbar = function () {
+      try { dockBtn.hidden = !(findeAnker() && !angedockt); } catch (_e) {}
+    };
+    dockSichtbar();
+
     var minBtn = el("button", "background:none;border:none;color:#9aa7b6;font-size:1.4rem;line-height:.6;cursor:pointer;padding:0 6px", "–");
     minBtn.type = "button";
-    minBtn.title = "Zur Pille minimieren";
+    minBtn.title = T("Zur Pille minimieren");
     headBtns.appendChild(minBtn);
     var closeBtn = el("button", "background:none;border:none;color:#9aa7b6;font-size:1.1rem;cursor:pointer", "✕");
     closeBtn.type = "button";
-    closeBtn.title = "Ausblenden (kommt beim Neuladen zurück)";
+    closeBtn.title = T("Ausblenden (kommt beim Neuladen zurück)");
     headBtns.appendChild(closeBtn);
     head.appendChild(headBtns);
     panelEl.appendChild(head);
@@ -1168,7 +1842,7 @@
     renderIncoming();   // falls schon vor mount ein Handshake ankam
 
     panelEl.appendChild(el("p", "margin:0 0 10px;color:#9aa7b6",
-      "Triff andere SBKIM-Knoten im gemeinsamen Raum — server-los, direkt aus deinem Browser. Du kannst dieses Fenster schließen und normal weiterarbeiten; nur die App-Seite selbst offen lassen, damit du erreichbar bleibst."));
+      T("Triff andere SBKIM-Knoten im gemeinsamen Raum — server-los, direkt aus deinem Browser. Du kannst dieses Fenster schließen und normal weiterarbeiten; nur die App-Seite selbst offen lassen, damit du erreichbar bleibst.")));
 
     // Stufe 0a — zwei ehrliche Status-Zeilen: „Meine Kennung" (aus Modul 02
     // getOwnSpore) und „Speicher dauerhaft" (aus Modul 01 _meta.storagePersisted).
@@ -1179,13 +1853,13 @@
     var statusBox = el("div", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
       "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
     var idRow = el("div", "color:#9aa7b6;margin-bottom:2px");
-    idRow.appendChild(el("span", "color:#c7d2de", "Meine Kennung: "));
+    idRow.appendChild(el("span", "color:#c7d2de", T("Meine Kennung: ")));
     idValEl = el("span", "font:.68rem/1.3 var(--mono,monospace);color:#cfe0ff;word-break:break-all", "…");
     idValEl.id = "sbkim-rdv-myid";
     idRow.appendChild(idValEl);
     statusBox.appendChild(idRow);
     var persistRow = el("div", "color:#9aa7b6");
-    persistRow.appendChild(el("span", "color:#c7d2de", "Speicher dauerhaft: "));
+    persistRow.appendChild(el("span", "color:#c7d2de", T("Speicher dauerhaft: ")));
     persistValEl = el("span", "color:#cfe0ff", "…");
     persistValEl.id = "sbkim-rdv-persist";
     persistRow.appendChild(persistValEl);
@@ -1201,22 +1875,22 @@
     idBoxEl = el("div", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
       "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
     idBoxEl.id = "sbkim-rdv-idbox";
-    idBoxEl.appendChild(el("div", "color:#c7d2de;margin-bottom:4px", "🪪 Kennung sichern"));
+    idBoxEl.appendChild(el("div", "color:#c7d2de;margin-bottom:4px", T("🪪 Kennung sichern")));
     idHintEl = el("div", "color:#9aa7b6;font-size:.72rem;line-height:1.45;white-space:pre-wrap", "…");
     idHintEl.id = "sbkim-rdv-idhint";
     idBoxEl.appendChild(idHintEl);
     var idRow2 = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
-    var backupBtn = el("button", idBtnCss(false), "💾 Sicherung anlegen"); backupBtn.type = "button";
-    backupBtn.title = "Kennung in eine verschlüsselte Datei sichern";
-    var restoreBtn = el("button", idBtnCss(false), "📥 Sicherung einspielen"); restoreBtn.type = "button";
-    restoreBtn.title = "Kennung aus einer Sicherungs-Datei zurückholen";
+    var backupBtn = el("button", idBtnCss(false), T("💾 Sicherung anlegen")); backupBtn.type = "button";
+    backupBtn.title = T("Kennung in eine verschlüsselte Datei sichern");
+    var restoreBtn = el("button", idBtnCss(false), T("📥 Sicherung einspielen")); restoreBtn.type = "button";
+    restoreBtn.title = T("Kennung aus einer Sicherungs-Datei zurückholen");
     // Eigenes Symbol (🗂) + eindeutiger Name — NICHT 🧹 wie der Alt-Speicher-Knopf
     // weiter unten. Klaus' Befund 2026-07-30: zwei Knöpfe, die beide „🧹 aufräumen"
     // heißen, aber Verschiedenes tun, sind eine Doppelung im Kopf des Nutzers,
     // auch wenn sie es im Code nicht sind. Zusätzlich: dieser Knopf erscheint nur,
     // wenn es wirklich mehr als ein Fach gibt — im Normalfall steht er gar nicht da.
-    var slotsBtn = el("button", idBtnCss(false) + ";display:none", "🗂 Mehrfach-Kennungen aufräumen"); slotsBtn.type = "button";
-    slotsBtn.title = "Alte Identitäts-Fächer entfernen, aktives behalten";
+    var slotsBtn = el("button", idBtnCss(false) + ";display:none", T("🗂 Mehrfach-Kennungen aufräumen")); slotsBtn.type = "button";
+    slotsBtn.title = T("Alte Identitäts-Fächer entfernen, aktives behalten");
     slotsBtnEl = slotsBtn;
     backupBtn.addEventListener("click", function () { openBackupForm(); });
     restoreBtn.addEventListener("click", function () { openImportForm(); });
@@ -1229,7 +1903,7 @@
     // Die ehrliche Grenze — sie gehört sichtbar in die Oberfläche, nicht nur
     // in die Doku: verhindern kann man eine Räumung nicht.
     idBoxEl.appendChild(el("div", "margin-top:6px;color:#7e8b9a;font-size:.7rem;line-height:1.45",
-      "Eine Räumung durch den Browser lässt sich nicht verhindern — nur unwahrscheinlicher machen (App auf den Startbildschirm legen) und der Verlust reparierbar halten (Sicherung)."));
+      T("Eine Räumung durch den Browser lässt sich nicht verhindern — nur unwahrscheinlicher machen (App auf den Startbildschirm legen) und der Verlust reparierbar halten (Sicherung).")));
     werkstattRowEl = el("div", "display:none;margin-top:7px;padding-top:7px;border-top:1px solid rgba(154,167,182,.14)");
     werkstattRowEl.id = "sbkim-rdv-werkstatt";
     idBoxEl.appendChild(werkstattRowEl);
@@ -1245,20 +1919,20 @@
     var stageNote = el("div", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
       "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);color:#9aa7b6;font-size:.74rem;line-height:1.5");
     stageNote.innerHTML =
-      "<b style=\"color:#c7d2de\">🔎 Nur stöbern</b> — anonym umsehen, wer im Raum ist. Kein Download, keine Identität, du wirst selbst nicht gefunden. (Knopf „👥 Wer ist im Raum?“)<br>" +
-      "<b style=\"color:#c7d2de\">🌐 Voll mitmachen</b> — einmal eine eigene Identität anlegen (bleibt in deinem Browser). Erst dann bist du auffindbar und kannst fragen &amp; dich verbinden. (Knopf „🌐 Mit dem Knotennetz verbinden“)";
+      T("<b style=\"color:#c7d2de\">🔎 Nur stöbern</b> — anonym umsehen, wer im Raum ist. Kein Download, keine Identität, du wirst selbst nicht gefunden. (Knopf „👥 Wer ist im Raum?“)<br>") +
+      T("<b style=\"color:#c7d2de\">🌐 Voll mitmachen</b> — einmal eine eigene Identität anlegen (bleibt in deinem Browser). Erst dann bist du auffindbar und kannst fragen &amp; dich verbinden. (Knopf „🌐 Mit dem Knotennetz verbinden“)");
     panelEl.appendChild(stageNote);
 
     var row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
-    var connectBtn = el("button", bs, "🌐 Mit dem Knotennetz verbinden"); connectBtn.type = "button";
-    var discoverBtn = el("button", bsGhost, "👥 Wer ist im Raum?"); discoverBtn.type = "button";
-    var announceBtn = el("button", bsGhost, "🙋 Nur neu anmelden"); announceBtn.type = "button";
-    mailBtn = el("button", bsGhost, "📬 Antworten abholen"); mailBtn.type = "button";
-    mailBtn.title = "Antworten abholen";
-    reAskBtn = el("button", bsGhost + ";font-size:.74rem", "🔁 offene nochmal fragen"); reAskBtn.type = "button";
-    reAskBtn.title = "Offene Fragen neu stellen";
-    clearMailBtn = el("button", bsGhost + ";font-size:.74rem", "🗑 leeren"); clearMailBtn.type = "button";
-    clearMailBtn.title = "Briefkasten leeren";
+    var connectBtn = el("button", bs, T("🌐 Mit dem Knotennetz verbinden")); connectBtn.type = "button";
+    var discoverBtn = el("button", bsGhost, T("👥 Wer ist im Raum?")); discoverBtn.type = "button";
+    var announceBtn = el("button", bsGhost, T("🙋 Nur neu anmelden")); announceBtn.type = "button";
+    mailBtn = el("button", bsGhost, T("📬 Antworten abholen")); mailBtn.type = "button";
+    mailBtn.title = T("Antworten abholen");
+    reAskBtn = el("button", bsGhost + ";font-size:.74rem", T("🔁 offene nochmal fragen")); reAskBtn.type = "button";
+    reAskBtn.title = T("Offene Fragen neu stellen");
+    clearMailBtn = el("button", bsGhost + ";font-size:.74rem", T("🗑 leeren")); clearMailBtn.type = "button";
+    clearMailBtn.title = T("Briefkasten leeren");
     row.appendChild(connectBtn); row.appendChild(discoverBtn); row.appendChild(announceBtn); row.appendChild(mailBtn);
     row.appendChild(reAskBtn); row.appendChild(clearMailBtn);
     panelEl.appendChild(row);
@@ -1267,9 +1941,9 @@
     // Verwandte (zentrierter Score, Modul 04 via Modul 23). Gatet NICHTS, der
     // 0.80-Andock-Riegel bleibt unberührt. Default aus.
     var filterRow = el("div", "margin-top:8px");
-    relOnlyBtn = el("button", bsGhost + ";font-size:.74rem;padding:5px 10px", "🧬 nur verwandte: aus");
+    relOnlyBtn = el("button", bsGhost + ";font-size:.74rem;padding:5px 10px", T("🧬 nur verwandte: aus"));
     relOnlyBtn.type = "button";
-    relOnlyBtn.title = "Nur verwandte Knoten zeigen";
+    relOnlyBtn.title = T("Nur verwandte Knoten zeigen");
     filterRow.appendChild(relOnlyBtn);
 
     /* ── Weg zur Mycel-Karte (Klaus 2026-08-16) ────────────────────────────
@@ -1298,7 +1972,7 @@
     karteLink.href = "https://lausiklauskn-png.github.io/mycel-karte/";
     karteLink.target = "_blank";
     karteLink.rel = "noopener noreferrer";
-    karteLink.title = "Die lebende Karte des Netzes — zeigt in einem neuen Tab, wer gerade im Raum ist und was läuft";
+    karteLink.title = T("Die lebende Karte des Netzes — zeigt in einem neuen Tab, wer gerade im Raum ist und was läuft");
     filterRow.appendChild(karteLink);
 
     panelEl.appendChild(filterRow);
@@ -1310,8 +1984,8 @@
     var repairRow = el("div", "margin-top:8px");
     var repairBtn = el("button", "padding:6px 11px;border-radius:8px;border:1px dashed var(--line,#5a4a3a);" +
       "background:transparent;color:#e6b980;cursor:pointer;font:inherit;font-size:.74rem",
-      "🧹 Alt-Speicher aufräumen & neu anmelden"); repairBtn.type = "button";
-    repairBtn.title = "Den geteilten Alt-Speicher dieser Adresse leeren und neu im Raum anmelden — die eigene Kennung bleibt";
+      T("🧹 Alt-Speicher aufräumen & neu anmelden")); repairBtn.type = "button";
+    repairBtn.title = T("Den geteilten Alt-Speicher dieser Adresse leeren und neu im Raum anmelden — die eigene Kennung bleibt");
     repairBtn.addEventListener("click", function () { onRepair(); });
     repairRow.appendChild(repairBtn);
     panelEl.appendChild(repairRow);
@@ -1324,25 +1998,25 @@
       "background:rgba(10,16,24,.6);color:#e8eef6;font-size:.78rem");
     askInputEl.id = "sbkim-rdv-q";
     askInputEl.type = "text";
-    askInputEl.placeholder = "Frage nach Bedeutung, z.B. kuchen …";
+    askInputEl.placeholder = T("Frage nach Bedeutung, z.B. kuchen …");
     // 🎤 Spracheingabe (Modul 21). Fremdnutzer-sicher: ohne Modul 21 bleibt das
     // Textfeld voll nutzbar (der Knopf gibt dann nur eine ehrliche Notiz).
     voiceBtnEl = el("button", bsGhost + ";font-size:.9rem;padding:5px 8px", "🎤");
     voiceBtnEl.type = "button";
-    voiceBtnEl.title = "Frage einsprechen";
+    voiceBtnEl.title = T("Frage einsprechen");
     voiceLangEl = buildVoiceLangPicker();
-    answerBtn = el("button", bsGhost + ";font-size:.74rem;padding:5px 10px", "💬 Antworten: aus");
+    answerBtn = el("button", bsGhost + ";font-size:.74rem;padding:5px 10px", T("💬 Antworten: aus"));
     answerBtn.type = "button";
-    answerBtn.title = "Anderen Knoten antworten";
+    answerBtn.title = T("Anderen Knoten antworten");
     // A11 — Primär-Knopf „🔎 Antwort holen": rankt alle Raum-Knoten nach Passung
     // zur getippten Frage und fragt den bestpassenden AUTOMATISCH (Klaus: „ich
     // weiß nicht, wer von hundert am besten passt"). Solide Akzent-Optik, direkt
     // neben dem Frage-Feld. Reine Auswahl/Anzeige — der 0.80-Andock-Riegel bleibt
     // unberührt; das per-Karte „❓ gezielt fragen" bleibt als manueller Override.
     answerFetchBtn = el("button", "padding:6px 12px;border-radius:8px;border:1px solid " + accent() + ";" +
-      "background:" + accent() + ";color:#0a1018;cursor:pointer;font:inherit;font-size:.78rem;font-weight:600", "🔎 Antwort holen");
+      "background:" + accent() + ";color:#0a1018;cursor:pointer;font:inherit;font-size:.78rem;font-weight:600", T("🔎 Antwort holen"));
     answerFetchBtn.type = "button";
-    answerFetchBtn.title = "Beste Antwort automatisch holen";
+    answerFetchBtn.title = T("Beste Antwort automatisch holen");
     askRow.appendChild(askInputEl);
     askRow.appendChild(answerFetchBtn);
     askRow.appendChild(voiceBtnEl);
@@ -1358,16 +2032,16 @@
     // kostet (eigener Schlüssel), Schlüssel bleibt NUR im Browser, und die
     // Antwort-TITEL gehen an den gewählten KI-Anbieter (Daten-Abfluss benannt).
     var kiRow = el("div", "margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center");
-    kiToggleEl = el("button", bsGhost + ";font-size:.72rem;padding:4px 9px", "🧠 KI-Richter: aus");
+    kiToggleEl = el("button", bsGhost + ";font-size:.72rem;padding:4px 9px", T("🧠 KI-Richter: aus"));
     kiToggleEl.type = "button";
-    kiToggleEl.title = "KI bewertet die Antworten (eigener Schlüssel)";
+    kiToggleEl.title = T("KI bewertet die Antworten (eigener Schlüssel)");
     kiProvSelEl = doc().createElement("select");
     kiProvSelEl.style.cssText = "display:none;font-size:.72rem;padding:4px 6px;border-radius:8px;border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#e8eef6";
-    kiProvSelEl.title = "KI-Anbieter wählen";
+    kiProvSelEl.title = T("KI-Anbieter wählen");
     kiKeyEl = el("input", "display:none;flex:1;min-width:120px;padding:4px 8px;border-radius:8px;border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#e8eef6;font-size:.72rem");
     kiKeyEl.type = "password";
     kiKeyEl.autocomplete = "off";
-    kiKeyEl.placeholder = "dein KI-Schlüssel — bleibt nur im Browser";
+    kiKeyEl.placeholder = T("dein KI-Schlüssel — bleibt nur im Browser");
     // „🔑 Schlüssel holen ↗" — Direktlink zur Schlüsselseite des gewählten
     // Anbieters. Sichtbar nur, wenn KI-Richter an ist UND noch KEIN Schlüssel
     // eingegeben wurde (dann braucht man ihn ja gerade). Neuer Tab, fail-soft.
@@ -1381,20 +2055,20 @@
     // (unbekannter Anbieter → kein Link, fail-soft) — hier wird nur verhindert,
     // dass ein verborgenes <a> ohne Ziel im Dokument steht.
     kiKeyLinkEl.href = KI_KEY_URLS[kiProvider] || KI_KEY_URLS[Object.keys(KI_KEY_URLS)[0]] || "";
-    kiKeyLinkEl.textContent = "🔑 Schlüssel holen ↗";
+    kiKeyLinkEl.textContent = T("🔑 Schlüssel holen ↗");
     kiKeyLinkEl.target = "_blank"; kiKeyLinkEl.rel = "noopener noreferrer";
-    kiKeyLinkEl.title = "Schlüssel beim Anbieter holen";
+    kiKeyLinkEl.title = T("Schlüssel beim Anbieter holen");
     kiKeyLinkEl.style.cssText = "display:none;font-size:.72rem;padding:4px 8px;border-radius:8px;border:1px solid rgba(154,167,182,.35);color:#9fd2ff;text-decoration:none;white-space:nowrap";
     // 🔒 im Tresor merken / 🔓 entsperren (Modul 20 Safe). Nur sichtbar, wenn
     // der Safe geladen ist (fail-soft für Forker ohne Modul 20). Sicher: der
     // Schlüssel wird verschlüsselt abgelegt (PBKDF2+AES-GCM), nie im Klartext.
-    kiSaveBtnEl = el("button", bsGhost + ";font-size:.72rem;padding:4px 8px", "🔒 im Tresor merken");
+    kiSaveBtnEl = el("button", bsGhost + ";font-size:.72rem;padding:4px 8px", T("🔒 im Tresor merken"));
     kiSaveBtnEl.type = "button";
-    kiSaveBtnEl.title = "Schlüssel sicher merken";
+    kiSaveBtnEl.title = T("Schlüssel sicher merken");
     kiSaveBtnEl.style.display = "none";
-    kiUnlockBtnEl = el("button", bsGhost + ";font-size:.72rem;padding:4px 8px", "🔓 Tresor entsperren");
+    kiUnlockBtnEl = el("button", bsGhost + ";font-size:.72rem;padding:4px 8px", T("🔓 Tresor entsperren"));
     kiUnlockBtnEl.type = "button";
-    kiUnlockBtnEl.title = "Gemerkten Schlüssel holen";
+    kiUnlockBtnEl.title = T("Gemerkten Schlüssel holen");
     kiUnlockBtnEl.style.display = "none";
     kiRow.appendChild(kiToggleEl);
     kiRow.appendChild(kiProvSelEl);
@@ -1419,7 +2093,7 @@
     panelEl.appendChild(outEl);
 
     panelEl.appendChild(el("p", "margin:8px 0 0;color:#9aa7b6;font-size:.72rem",
-      "Es wird nur deine öffentliche Visitenkarte (Spore) im Raum gezeigt — dein privater Schlüssel bleibt in diesem Browser."));
+      T("Es wird nur deine öffentliche Visitenkarte (Spore) im Raum gezeigt — dein privater Schlüssel bleibt in diesem Browser.")));
 
     d.body.appendChild(btnEl);
     d.body.appendChild(panelEl);
@@ -1440,7 +2114,7 @@
     clearMailBtn.addEventListener("click", function () { clearMail(); });
     relOnlyBtn.addEventListener("click", function () {
       relatedOnly = !relatedOnly;
-      relOnlyBtn.textContent = "🧬 nur verwandte: " + (relatedOnly ? "an" : "aus");
+      relOnlyBtn.textContent = T("🧬 nur verwandte: ") + (relatedOnly ? T("an") : T("aus"));
       renderCards(lastCards); // ohne Neu-Lesen umsortieren/filtern
     });
     answerBtn.addEventListener("click", function () { onToggleAnswering(); });
@@ -1463,6 +2137,10 @@
       var sicher = clampInts(savedPos.x, savedPos.y, btnEl);
       applyPos(btnEl, sicher);
       if (sicher.x !== savedPos.x || sicher.y !== savedPos.y) savePos(sicher.x, sicher.y);
+    } else {
+      /* Kein gemerkter Platz → in die Leiste, wenn die Seite eine anbietet.
+         Sonst bleibt es bei der Ecke, wie bisher (fail-soft). */
+      andocken();
     }
     makeDraggable(btnEl, btnEl);   // Blase direkt ziehbar
     makeDraggable(panelEl, head);  // Panel an der Kopfzeile ziehbar
@@ -1496,7 +2174,7 @@
 
   function ensureRdv() {
     var r = rdv();
-    if (!r) { setOut("Modul 23 (SbkimRendezvous) nicht geladen."); return null; }
+    if (!r) { setOut(T("Modul 23 (SbkimRendezvous) nicht geladen.")); return null; }
     configModule();
     return r;
   }
@@ -1506,30 +2184,30 @@
     var r = ensureRdv();
     if (!r) return;
     if (typeof r.repairAndReconnect !== "function") {
-      setOut("Aufräumen ist in dieser Version noch nicht verfügbar (Modul 23 zu alt).");
+      setOut(T("Aufräumen ist in dieser Version noch nicht verfügbar (Modul 23 zu alt)."));
       return;
     }
-    setOut("🧹 Räume den geteilten Alt-Speicher dieser Adresse auf …\n");
-    startModelProgress("🧹 Räume auf & melde neu an …");
+    setOut(T("🧹 Räume den geteilten Alt-Speicher dieser Adresse auf …\n"));
+    startModelProgress(T("🧹 Räume auf & melde neu an …"));
     r.repairAndReconnect().then(function (res) {
-      stopModelProgress(); if (outEl) outEl.textContent = "🧹 Aufgeräumt & neu angemeldet:\n";
+      stopModelProgress(); if (outEl) outEl.textContent = T("🧹 Aufgeräumt & neu angemeldet:\n");
       refreshStatus();   // Stufe 0a: Identität kann sich geändert haben
       refreshIdentityBox();   // Stufe 0b: Fächer/Sicherungs-Hinweis frisch
       var c = res && res.cleaned;
       if (c) {
-        appendOut("• Alt-Topf „sbkim“ gelöscht: " + (c.dbDeleted ? "ja" : "nein") + "\n");
+        appendOut(T("• Alt-Topf „sbkim“ gelöscht: ") + (c.dbDeleted ? "ja" : "nein") + "\n");
         appendOut("• Service-Worker abgemeldet: " + (c.swUnregistered || 0) + "\n");
         appendOut("• Caches geleert: " + (c.cachesDeleted || 0) + "\n");
       }
       if (res && res.ok) {
-        if (res.created) appendOut("✓ Frische Identität: " + res.nodeId + "\n");
-        else appendOut("Identität (eigene Schublade bleibt): " + res.nodeId + "\n");
-        appendOut("✓ Neu im Raum angemeldet.\n");
+        if (res.created) appendOut(T("✓ Frische Identität: ") + res.nodeId + "\n");
+        else appendOut(T("Identität (eigene Schublade bleibt): ") + res.nodeId + "\n");
+        appendOut(T("✓ Neu im Raum angemeldet.\n"));
       } else {
         appendOut("✗ " + ((res && res.reason) || "Neu-Anmelden fehlgeschlagen.") + "\n");
       }
       if (res && res.reloadHint) appendOut("\nℹ️ " + res.reloadHint);
-    }).catch(function (e) { stopModelProgress(); setOut("✗ Aufräumen fehlgeschlagen: " + (e && e.message ? e.message : e)); });
+    }).catch(function (e) { stopModelProgress(); setOut(T("✗ Aufräumen fehlgeschlagen: ") + (e && e.message ? e.message : e)); });
   }
 
   function onConnect(opts) {
@@ -1543,7 +2221,7 @@
     if (!(opts && opts.skipIdentityGate)) {
       readIdentityState().then(function (st) {
         if (st.known && !st.nodeId) {
-          setOut("🪪 Bitte einmal entscheiden — siehe „Kennung sichern“ oben.");
+          setOut(T("🪪 Bitte einmal entscheiden — siehe „Kennung sichern“ oben."));
           askBeforeCreate();
           return;
         }
@@ -1551,48 +2229,48 @@
       });
       return;
     }
-    setOut("→ Verbinde mit dem Netz …\n");
-    startModelProgress("→ Verbinde mit dem Netz …");
+    setOut(T("→ Verbinde mit dem Netz …\n"));
+    startModelProgress(T("→ Verbinde mit dem Netz …"));
     r.connectAndAnnounce({ createIdentity: cfg.createIdentity || undefined }).then(function (res) {
       stopModelProgress(); if (outEl) outEl.textContent = "";
       refreshStatus();   // Stufe 0a: Kennung kann gerade erst entstanden sein
       refreshIdentityBox();   // Stufe 0b
       if (res.ok) {
-        if (res.created) appendOut("✓ Identität erzeugt: " + res.nodeId + "\n");
-        else appendOut("Identität vorhanden: " + res.nodeId + "\n");
-        appendOut("✓ Du bist im Raum — deine Visitenkarte hängt, du lauschst.\n");
-        appendOut("  Dieses Fenster darfst du schließen und weiterarbeiten — nur die App-Seite offen lassen (eine ganz geschlossene Seite ist nicht erreichbar).");
+        if (res.created) appendOut(T("✓ Identität erzeugt: ") + res.nodeId + "\n");
+        else appendOut(T("Identität vorhanden: ") + res.nodeId + "\n");
+        appendOut(T("✓ Du bist im Raum — deine Visitenkarte hängt, du lauschst.\n"));
+        appendOut(T("  Dieses Fenster darfst du schließen und weiterarbeiten — nur die App-Seite offen lassen (eine ganz geschlossene Seite ist nicht erreichbar)."));
       } else {
         appendOut("✗ " + (res.reason || "Verbinden fehlgeschlagen.") +
-          (cfg.createIdentity ? "\n(Bei Netz-/Modell-Fehler: Verbindung prüfen und nochmal.)" : ""));
+          (cfg.createIdentity ? T("\n(Bei Netz-/Modell-Fehler: Verbindung prüfen und nochmal.)") : ""));
       }
-    }).catch(function (e) { stopModelProgress(); setOut("✗ Verbinden fehlgeschlagen: " + (e && e.message ? e.message : e)); });
+    }).catch(function (e) { stopModelProgress(); setOut(T("✗ Verbinden fehlgeschlagen: ") + (e && e.message ? e.message : e)); });
   }
 
   function onAnnounce() {
     var r = ensureRdv();
     if (!r) return;
-    setOut("→ Hefte deine Visitenkarte in den gemeinsamen Raum …\n");
-    startModelProgress("→ Hefte deine Visitenkarte in den gemeinsamen Raum …");
+    setOut(T("→ Hefte deine Visitenkarte in den gemeinsamen Raum …\n"));
+    startModelProgress(T("→ Hefte deine Visitenkarte in den gemeinsamen Raum …"));
     r.announce().then(function (res) {
       stopModelProgress(); if (outEl) outEl.textContent = "";
       refreshStatus();   // Stufe 0a
       refreshIdentityBox();   // Stufe 0b
-      if (res.ok) appendOut("✓ Du bist im Raum (nodeId " + res.nodeId + "). Fenster darf zu — nur die App-Seite offen lassen.");
+      if (res.ok) appendOut(T("✓ Du bist im Raum (nodeId ") + res.nodeId + T("). Fenster darf zu — nur die App-Seite offen lassen."));
       else appendOut("✗ " + (res.reason || "Anmelden fehlgeschlagen."));
-    }).catch(function (e) { stopModelProgress(); setOut("✗ Anmelden fehlgeschlagen: " + (e && e.message ? e.message : e)); });
+    }).catch(function (e) { stopModelProgress(); setOut(T("✗ Anmelden fehlgeschlagen: ") + (e && e.message ? e.message : e)); });
   }
 
   function onDiscover() {
     var r = ensureRdv();
     if (!r) return;
-    setOut("👥 Lese den gemeinsamen Raum …\n");
-    startModelProgress("👥 Lese den gemeinsamen Raum …");
+    setOut(T("👥 Lese den gemeinsamen Raum …\n"));
+    startModelProgress(T("👥 Lese den gemeinsamen Raum …"));
     r.discover().then(function (res) {
       stopModelProgress();
-      if (!res.ok) { setOut("✗ Raum-Lesen fehlgeschlagen: " + (res.reason || "(unbekannt)")); return; }
+      if (!res.ok) { setOut(T("✗ Raum-Lesen fehlgeschlagen: ") + (res.reason || T("(unbekannt)"))); return; }
       renderCards(res.cards);
-    }).catch(function (e) { stopModelProgress(); setOut("✗ Raum-Lesen fehlgeschlagen: " + (e && e.message ? e.message : e)); });
+    }).catch(function (e) { stopModelProgress(); setOut(T("✗ Raum-Lesen fehlgeschlagen: ") + (e && e.message ? e.message : e)); });
   }
 
   // A11 — „🔎 Antwort holen": bestpassenden Knoten AUTOMATISCH wählen + fragen.
@@ -1604,23 +2282,23 @@
   function onAutoAsk() {
     var r = ensureRdv();
     if (!r) return;
-    if (typeof r.askNode !== "function") { setOut("Modul 23 mit Bau 23.B (askNode) nicht geladen."); return; }
+    if (typeof r.askNode !== "function") { setOut(T("Modul 23 mit Bau 23.B (askNode) nicht geladen.")); return; }
     var text = askInputEl ? String(askInputEl.value || "").trim() : "";
-    if (!text) { setOut("🔎 Zuerst oben eine Frage eintippen, dann „🔎 Antwort holen“."); return; }
+    if (!text) { setOut(T("🔎 Zuerst oben eine Frage eintippen, dann „🔎 Antwort holen“.")); return; }
     // Last-Schoner: laufende Suche sperrt weitere Klicks (kein Stapeln auf dem
     // einkernigen Browser-Tab); identische Frage im Cooldown nicht neu einbetten.
-    if (autoAskBusy) { setOut("🔎 Suche läuft schon — einen Moment …"); return; }
+    if (autoAskBusy) { setOut(T("🔎 Suche läuft schon — einen Moment …")); return; }
     var nowMs = Date.now();
     if (text === lastAutoAskText && (nowMs - lastAutoAskTs) < AUTOASK_COOLDOWN_MS) {
-      setOut("🔎 Diese Frage lief gerade — kurz warten, dann erneut."); return;
+      setOut(T("🔎 Diese Frage lief gerade — kurz warten, dann erneut.")); return;
     }
     autoAskBusy = true; lastAutoAskText = text; lastAutoAskTs = nowMs;
     if (answerFetchBtn) answerFetchBtn.disabled = true;
     function autoAskDone() { autoAskBusy = false; if (answerFetchBtn) answerFetchBtn.disabled = false; }
     // Fail-soft: älteres Modul 23 ohne A11 → wie „Wer ist im Raum?" (manuell fragen).
     var canRank = typeof r.rankCardsByQuery === "function";
-    setOut("🔎 Suche im Raum den Knoten, der am besten zu deiner Frage passt …");
-    startModelProgress("🔎 Suche den passenden Knoten …");
+    setOut(T("🔎 Suche im Raum den Knoten, der am besten zu deiner Frage passt …"));
+    startModelProgress(T("🔎 Suche den passenden Knoten …"));
     var emb = embedMod();
     var qvP = (canRank && emb)
       ? Promise.resolve().then(function () { return emb.embedQuery(text); }).catch(function () { return null; })
@@ -1628,7 +2306,7 @@
     qvP.then(function (qv) {
       return r.discover().then(function (res) {
         stopModelProgress();
-        if (!res || !res.ok) { setOut("✗ Raum-Lesen fehlgeschlagen: " + ((res && res.reason) || "(unbekannt)")); return; }
+        if (!res || !res.ok) { setOut(T("✗ Raum-Lesen fehlgeschlagen: ") + ((res && res.reason) || T("(unbekannt)"))); return; }
         var cards = Array.isArray(res.cards) ? res.cards : [];
         if (cards.length === 0) { renderCards(cards); return; }   // „niemand im Raum"-Notiz
         var ranked = canRank ? r.rankCardsByQuery(cards, qv) : cards;
@@ -1636,7 +2314,7 @@
         var best = ranked[0];
         // Ehrliche Grenze: sehr schwache Passung benennen (aber NICHT gaten).
         if (qv && typeof best.queryFit === "number" && best.queryFit < 0.15) {
-          setOut("🔎 Kein wirklich gut passender Knoten im Raum — ich frage trotzdem den nächstliegenden (" +
+          setOut(T("🔎 Kein wirklich gut passender Knoten im Raum — ich frage trotzdem den nächstliegenden (") +
             (best.nodeName || "Knoten") + ") …");
         }
         askWithRetry(r, best, text, true, ranked.slice(1));
@@ -1652,7 +2330,7 @@
     if (!cardsEl) return;
     clear(cardsEl);
     if (lastCards.length === 0) {
-      if (outEl) outEl.textContent = "Niemand (Fremdes) im Raum. Lass den Gegenknoten zuerst „🌐 Mit dem Knotennetz verbinden“ drücken — dann hier nochmal „👥 Wer ist im Raum?“.";
+      if (outEl) outEl.textContent = T("Niemand (Fremdes) im Raum. Lass den Gegenknoten zuerst „🌐 Mit dem Knotennetz verbinden“ drücken — dann hier nochmal „👥 Wer ist im Raum?“.");
       return;
     }
     var ac = accent();
@@ -1663,26 +2341,26 @@
     // womöglich genau den frage-besten Knoten.
     var shown = (relatedOnly && !queryRanked) ? lastCards.filter(function (c) { return c.isRelated === true; }) : lastCards;
     if (shown.length === 0) {
-      cardsEl.appendChild(el("div", "color:#9aa7b6", "Keiner der " + lastCards.length +
-        " Knoten im Raum ist (im engen Maß) verwandt. Schalte „🧬 nur verwandte“ wieder auf „aus“, um alle zu sehen."));
+      cardsEl.appendChild(el("div", "color:#9aa7b6", T("Keiner der ") + lastCards.length +
+        T(" Knoten im Raum ist (im engen Maß) verwandt. Schalte „🧬 nur verwandte“ wieder auf „aus“, um alle zu sehen.")));
       return;
     }
     var head = queryRanked
-      ? ("🔎 " + shown.length + " Knoten nach Passung zu deiner Frage (bester zuerst):")
+      ? ("🔎 " + shown.length + T(" Knoten nach Passung zu deiner Frage (bester zuerst):"))
       : (relatedOnly
-        ? ("🧬 " + shown.length + " verwandte von " + lastCards.length + " im Raum:")
-        : ("👥 " + lastCards.length + " Knoten im Raum:"));
+        ? ("🧬 " + shown.length + " verwandte von " + lastCards.length + T(" im Raum:"))
+        : ("👥 " + lastCards.length + T(" Knoten im Raum:")));
     cardsEl.appendChild(el("div", "color:#9ff7df;margin-bottom:6px", head));
     shown.forEach(function (c) {
       var ageTxt = c.ageSec < 60 ? "gerade eben" : (Math.floor(c.ageSec / 60) + " min");
       var rowEl = el("div", "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0;padding:6px 8px;" +
         "border:1px solid var(--line,#2a3340);border-radius:8px");
       var info = el("span", "flex:1;min-width:150px");
-      info.appendChild(el("b", null, c.nodeName || "Knoten"));
+      info.appendChild(el("b", null, c.nodeName || T("Knoten")));
       info.appendChild(el("br"));
       info.appendChild(el("span", "font:.66rem/1.3 var(--mono,monospace);color:#9aa7b6;word-break:break-all", c.nodeId));
       info.appendChild(el("br"));
-      info.appendChild(el("span", "font-size:.7rem;color:#9aa7b6", "angemeldet " + ageTxt));
+      info.appendChild(el("span", "font-size:.7rem;color:#9aa7b6", T("angemeldet ") + ageTxt));
       // Verwandtschafts-Badge (reine Anzeige; nur wenn Modul 04 einen Score lieferte).
       if (typeof c.relatedness === "number" && isFinite(c.relatedness)) {
         info.appendChild(el("br"));
@@ -1693,23 +2371,23 @@
              "background:rgba(154,167,182,.14);color:#9aa7b6");
         var badgeTxt = (c.isRelated ? "🧬 verwandt " : "· verbunden ") + c.relatedness.toFixed(2);
         var badge = el("span", badgeCss, badgeTxt);
-        badge.title = "Wie verwandt die Domäne ist";
+        badge.title = T("Wie verwandt die Domäne ist");
         info.appendChild(badge);
       }
       // A11 — Passung zur getippten Frage (nur wenn rankCardsByQuery einen Score lieferte).
       if (typeof c.queryFit === "number" && isFinite(c.queryFit)) {
         info.appendChild(el("br"));
         var qBadge = el("span", "display:inline-block;margin-top:3px;padding:1px 7px;border-radius:6px;font-size:.68rem;" +
-          "background:rgba(159,210,255,.16);color:#9fd2ff", "🔎 Frage-Passung " + c.queryFit.toFixed(2));
-        qBadge.title = "Wie gut der Knoten zur Frage passt";
+          "background:rgba(159,210,255,.16);color:#9fd2ff", T("🔎 Frage-Passung ") + c.queryFit.toFixed(2));
+        qBadge.title = T("Wie gut der Knoten zur Frage passt");
         info.appendChild(qBadge);
       }
       rowEl.appendChild(info);
-      var b = el("button", bs, "🤝 Andocken"); b.type = "button";
+      var b = el("button", bs, T("🤝 Andocken")); b.type = "button";
       b.addEventListener("click", function () { onHandshake(c); });
       rowEl.appendChild(b);
-      var qb = el("button", bs + ";margin-left:6px;opacity:.72;font-size:.72rem", "❓ gezielt fragen"); qb.type = "button";
-      qb.title = "Gezielt diesen Knoten fragen";
+      var qb = el("button", bs + ";margin-left:6px;opacity:.72;font-size:.72rem", T("❓ gezielt fragen")); qb.type = "button";
+      qb.title = T("Gezielt diesen Knoten fragen");
       qb.addEventListener("click", function () { onAsk(c); });
       rowEl.appendChild(qb);
       // Partner-Link (Klaus 2026-07-12): direkt die App/PWA des Knotens öffnen,
@@ -1718,9 +2396,9 @@
       // aus der Spore (endpoint). Fail-soft: ohne endpoint kein Link.
       var ep = (c.spore && typeof c.spore.endpoint === "string") ? c.spore.endpoint.trim() : "";
       if (/^https?:\/\//i.test(ep)) {
-        var link = el("a", bs + ";margin-left:6px;font-size:.72rem;text-decoration:none;display:inline-block", "↗ App öffnen");
+        var link = el("a", bs + ";margin-left:6px;font-size:.72rem;text-decoration:none;display:inline-block", T("↗ App öffnen"));
         link.href = ep; link.target = "_blank"; link.rel = "noopener noreferrer";
-        link.title = "App des Knotens öffnen (neuer Tab)";
+        link.title = T("App des Knotens öffnen (neuer Tab)");
         rowEl.appendChild(link);
       }
       cardsEl.appendChild(rowEl);
@@ -1730,9 +2408,9 @@
   // Bau 23.B — Cross-Knoten-Frage per Knopf (nutzt das Frage-Feld oben).
   function onAsk(card) {
     var r = rdv();
-    if (!r || typeof r.askNode !== "function") { setOut("Modul 23 mit Bau 23.B (askNode) nicht geladen."); return; }
+    if (!r || typeof r.askNode !== "function") { setOut(T("Modul 23 mit Bau 23.B (askNode) nicht geladen.")); return; }
     var text = askInputEl ? String(askInputEl.value || "").trim() : "";
-    if (!text) { if (outEl) outEl.textContent = "❓ Zuerst oben eine Frage eintippen (z.B. kuchen), dann ❓ Fragen antippen."; return; }
+    if (!text) { if (outEl) outEl.textContent = T("❓ Zuerst oben eine Frage eintippen (z.B. kuchen), dann ❓ Fragen antippen."); return; }
     askWithRetry(r, card, text, true);
   }
 
@@ -1771,7 +2449,7 @@
   }
   // Ehrlicher Vergessen-Hinweis: der KI-Schlüssel ist BYOK (jeder holt seinen
   // eigenen, gratis) — Passwort vergessen ist kein Datenverlust.
-  var FORGOT_HINT = "Passwort vergessen? Kein Drama — hol dir beim Anbieter gratis einen neuen Schlüssel und leg ihn neu ab.";
+  var FORGOT_HINT = T("Passwort vergessen? Kein Drama — hol dir beim Anbieter gratis einen neuen Schlüssel und leg ihn neu ab.");
   // Tresor-Knöpfe: „merken" wenn KI an + Schlüssel getippt + Safe da;
   // „entsperren" wenn KI an + KEIN Schlüssel getippt + Safe da.
   function updateKiVaultButtons() {
@@ -1783,27 +2461,27 @@
   }
   function onKiSaveToVault() {
     var safe = safeMod();
-    if (!safe) { setVoiceHint("Tresor (Modul 20) nicht geladen."); return; }
-    if (!(kiKey && kiKey.length)) { setVoiceHint("Erst einen Schlüssel eingeben, dann merken."); return; }
-    var pw = askVaultPassword("Tresor-Passwort (min. 8 Zeichen) — verschlüsselt deinen KI-Schlüssel:");
+    if (!safe) { setVoiceHint(T("Tresor (Modul 20) nicht geladen.")); return; }
+    if (!(kiKey && kiKey.length)) { setVoiceHint(T("Erst einen Schlüssel eingeben, dann merken.")); return; }
+    var pw = askVaultPassword(T("Tresor-Passwort (min. 8 Zeichen) — verschlüsselt deinen KI-Schlüssel:"));
     if (!pw) return;
     // Optionale Merkhilfe (leer lassen erlaubt). NICHT das Passwort selbst
     // hier eintragen — die Merkhilfe ist unverschlüsselt lesbar.
-    var hintRaw = askVaultHint("Merkhilfe fürs Passwort (freiwillig, leer lassen möglich) — NICHT das Passwort selbst:");
+    var hintRaw = askVaultHint(T("Merkhilfe fürs Passwort (freiwillig, leer lassen möglich) — NICHT das Passwort selbst:"));
     var opts = (hintRaw && hintRaw.trim()) ? { hint: hintRaw.trim() } : undefined;
     return Promise.resolve().then(function () { return safe.putSecret(kiSecretName(), kiKey, pw, opts); })
-      .then(function () { setVoiceHint("🔒 Schlüssel verschlüsselt im Tresor gemerkt — beim nächsten Mal mit 🔓 entsperren. " + FORGOT_HINT); })
+      .then(function () { setVoiceHint(T("🔒 Schlüssel verschlüsselt im Tresor gemerkt — beim nächsten Mal mit 🔓 entsperren. ") + FORGOT_HINT); })
       .catch(function (e) { setVoiceHint("Tresor-Fehler: " + (e && e.message ? e.message : e)); });
   }
   function onKiUnlockVault() {
     var safe = safeMod();
-    if (!safe) { setVoiceHint("Tresor (Modul 20) nicht geladen."); return; }
+    if (!safe) { setVoiceHint(T("Tresor (Modul 20) nicht geladen.")); return; }
     var name = kiSecretName();
     // Erst die (unverschlüsselte) Merkhilfe holen und in die Passwort-Frage
     // einblenden, damit der Nutzer eine Erinnerungsstütze hat.
     var getHint = (typeof safe.getSecretHint === "function") ? safe.getSecretHint(name) : Promise.resolve(null);
     return Promise.resolve(getHint).catch(function () { return null; }).then(function (hint) {
-      var prompt = "Tresor-Passwort — holt deinen gemerkten KI-Schlüssel:";
+      var prompt = T("Tresor-Passwort — holt deinen gemerkten KI-Schlüssel:");
       if (hint) prompt = "Merkhilfe: " + hint + "\n\n" + prompt;
       var pw = askVaultPassword(prompt);
       if (!pw) return;
@@ -1812,8 +2490,8 @@
           if (v) {
             kiKey = v; if (kiKeyEl) kiKeyEl.value = v;
             updateKiKeyLink(); updateKiVaultButtons(); renderAnswer();
-            setVoiceHint("🔓 Schlüssel aus dem Tresor geholt.");
-          } else { setVoiceHint("Kein gemerkter Schlüssel oder falsches Passwort. " + FORGOT_HINT); }
+            setVoiceHint(T("🔓 Schlüssel aus dem Tresor geholt."));
+          } else { setVoiceHint(T("Kein gemerkter Schlüssel oder falsches Passwort. ") + FORGOT_HINT); }
         })
         .catch(function (e) { setVoiceHint("Tresor-Fehler: " + (e && e.message ? e.message : e)); });
     });
@@ -1835,7 +2513,7 @@
     var show = kiOn ? "" : "none";
     if (kiProvSelEl) kiProvSelEl.style.display = show;
     if (kiKeyEl) kiKeyEl.style.display = show;
-    if (kiToggleEl) kiToggleEl.textContent = "🧠 KI-Richter: " + (kiOn ? "an" : "aus");
+    if (kiToggleEl) kiToggleEl.textContent = T("🧠 KI-Richter: ") + (kiOn ? T("an") : T("aus"));
     updateKiKeyLink();
     updateKiVaultButtons();
     renderAnswer();   // vorhandene Antwort sofort neu beurteilen/zurückstufen
@@ -1848,9 +2526,9 @@
   function renderAnswer() {
     if (!outEl || !lastAnswer) return;
     var card = lastAnswer.card, res = lastAnswer.res, text = lastAnswer.text;
-    var head = "✓ Antwort von " + (card.nodeName || "Knoten") + " (" + Math.round((res.tookMs || 0) / 100) / 10 + " s):";
+    var head = T("✓ Antwort von ") + (card.nodeName || "Knoten") + " (" + Math.round((res.tookMs || 0) / 100) / 10 + " s):";
     if (!res.results || !res.results.length) {
-      outEl.textContent = head + "\n  (keine Treffer in seinem Buch — ehrlich leer)";
+      outEl.textContent = head + T("\n  (keine Treffer in seinem Buch — ehrlich leer)");
       return;
     }
     function cosineLines() {
@@ -1858,7 +2536,7 @@
       res.results.forEach(function (h, i) {
         lines.push("  " + (i + 1) + ". " + h.label + (typeof h.score === "number" ? "  (" + h.score.toFixed(2) + ")" : ""));
       });
-      lines.push("— Bedeutungs-Suche: sein Knoten hat in SEINEM Buch nach deinem Sinn gesucht.");
+      lines.push(T("— Bedeutungs-Suche: sein Knoten hat in SEINEM Buch nach deinem Sinn gesucht."));
       return lines.join("\n");
     }
     var m = matchMod();
@@ -1869,7 +2547,7 @@
     // KI-Richter-Pfad (opt-in, BYOK). Erst Cosinus zeigen + „urteilt …", dann
     // ersetzen, wenn das Urteil da ist. Race-Schutz über answerSeq.
     var seq = ++answerSeq;
-    outEl.textContent = cosineLines() + "\n\n🧠 KI-Richter beurteilt nach Bedeutung …";
+    outEl.textContent = cosineLines() + T("\n\n🧠 KI-Richter beurteilt nach Bedeutung …");
     // Cross-Knoten-Antworten tragen nur TITEL (keine Inhalte, Datenschutz) — der
     // Richter (Modul 04 hybridMatch) verlangt aber pro Kandidat einen nicht-leeren
     // `text`. Also den Titel als Bedeutungs-Text durchreichen; leere überspringen.
@@ -1888,7 +2566,7 @@
         if (seq !== answerSeq) return;            // veraltet — neue Frage/Antwort
         if (!v || v.available === false || !Array.isArray(v.verdicts)) {
           var why = (v && v.reason) ? " (" + v.reason + ")" : "";
-          outEl.textContent = cosineLines() + "\n\n🧠 KI-Richter: kein Urteil" + why + " — rohe Reihenfolge bleibt.";
+          outEl.textContent = cosineLines() + T("\n\n🧠 KI-Richter: kein Urteil") + why + T(" — rohe Reihenfolge bleibt.");
           return;
         }
         // Nach KI-Score absteigend sortieren (Bedeutungs-Urteil), stabil.
@@ -1902,12 +2580,12 @@
           lines.push("  " + (i + 1) + "." + mark + " " + (r.label != null ? r.label : "?") + sc);
           if (r.begruendung) lines.push("      – " + r.begruendung);
         });
-        lines.push("— Beurteilt nach Bedeutung (✓ = passt). Nur die Titel gingen an den KI-Anbieter; dein Schlüssel blieb im Browser.");
+        lines.push(T("— Beurteilt nach Bedeutung (✓ = passt). Nur die Titel gingen an den KI-Anbieter; dein Schlüssel blieb im Browser."));
         outEl.textContent = lines.join("\n");
       })
       .catch(function (e) {
         if (seq !== answerSeq) return;
-        outEl.textContent = cosineLines() + "\n\n🧠 KI-Richter-Fehler: " + (e && e.message ? e.message : e) + " — rohe Reihenfolge bleibt.";
+        outEl.textContent = cosineLines() + T("\n\n🧠 KI-Richter-Fehler: ") + (e && e.message ? e.message : e) + T(" — rohe Reihenfolge bleibt.");
       });
   }
 
@@ -1955,7 +2633,7 @@
     if (!langs || langs.length < 2) return null;
     var sel = global.document.createElement("select");
     sel.id = "sbkim-rdv-miclang";
-    sel.title = "🎤 Sprache, in der du sprichst";
+    sel.title = T("🎤 Sprache, in der du sprichst");
     sel.setAttribute("aria-label", sel.title);
     sel.style.cssText = "padding:5px 6px;border-radius:8px;border:1px solid rgba(154,167,182,.35);" +
       "background:rgba(10,16,24,.6);color:#e8eef6;font:inherit;font-size:.72rem;max-width:9.5rem";
@@ -1991,12 +2669,12 @@
   function onVoiceClick() {
     var speech = global.SbkimSpeech;
     if (!speech || typeof speech.pickEngine !== "function") {
-      setVoiceHint("🎤 Spracheingabe (Modul 21) nicht geladen — bitte tippen.");
+      setVoiceHint(T("🎤 Spracheingabe (Modul 21) nicht geladen — bitte tippen."));
       return;
     }
     var engine;
     try { engine = speech.pickEngine(cfg.euOnly ? "bindend" : "frei"); }
-    catch (e) { setVoiceHint(speech.speechErrorHint ? speech.speechErrorHint(e) : "🎤 nicht möglich — bitte tippen."); return; }
+    catch (e) { setVoiceHint(speech.speechErrorHint ? speech.speechErrorHint(e) : T("🎤 nicht möglich — bitte tippen.")); return; }
     if (engine === "browser" && typeof speech.isBrowserSupported === "function" && speech.isBrowserSupported()) {
       var lang = voiceLang();
       var label = (typeof speech.languageLabel === "function") ? speech.languageLabel(lang) : lang;
@@ -2014,19 +2692,19 @@
             var schief = (typeof speech.scriptMismatchHint === "function")
               ? speech.scriptMismatchHint(t, lang) : null;
             setVoiceHint(schief ? ("🎤 " + schief)
-              : ("Erkannt: " + t + "  — jetzt „🔎 Antwort holen“ drücken."));
+              : ("Erkannt: " + t + T("  — jetzt „🔎 Antwort holen“ drücken.")));
           },
           onError: function (h) { setVoiceHint("🎤 " + h); },
           onEnd: function () { activeRecognizer = null; },
         });
         activeRecognizer.start();
-        setVoiceHint("🎤 Sprich jetzt deine Frage in " + label + " …");
+        setVoiceHint(T("🎤 Sprich jetzt deine Frage in ") + label + " …");
       } catch (e) {
-        setVoiceHint(speech.speechErrorHint ? speech.speechErrorHint(e) : "🎤 nicht möglich — bitte tippen.");
+        setVoiceHint(speech.speechErrorHint ? speech.speechErrorHint(e) : T("🎤 nicht möglich — bitte tippen."));
       }
       return;
     }
-    setVoiceHint("🎤 Sprach-Engine braucht einen EU-Schlüssel — bitte tippen.");
+    setVoiceHint(T("🎤 Sprach-Engine braucht einen EU-Schlüssel — bitte tippen."));
   }
 
   function renderAskSuccess(card, res, text) {
@@ -2051,26 +2729,26 @@
       if (rest[i] && (rest[i].nodeId || "") !== (card.nodeId || "")) { next = rest[i]; tail = rest.slice(i + 1); break; }
     }
     if (next) {
-      outEl.textContent = "… " + (card.nodeName || "Knoten") + " hat nicht geantwortet — ich frage den nächstbesten passenden Knoten (" +
+      outEl.textContent = "… " + (card.nodeName || T("Knoten")) + T(" hat nicht geantwortet — ich frage den nächstbesten passenden Knoten (") +
         (next.nodeName || "Knoten") + ") …";
       askWithRetry(r, next, text, true, tail);
       return;
     }
     recordOpenQuestion(res, card, text);   // A12: Frage bleibt „offen"
     var epHint = (card && card.spore && typeof card.spore.endpoint === "string" && /^https?:\/\//i.test(card.spore.endpoint))
-      ? "\nOder hol dir die Antwort selbst: „↗ App öffnen“ in der Karte oben öffnet " + (card.nodeName || "den Knoten") + " direkt — dort suchen, ohne zu warten."
+      ? T("\nOder hol dir die Antwort selbst: „↗ App öffnen“ in der Karte oben öffnet ") + (card.nodeName || T("den Knoten")) + T(" direkt — dort suchen, ohne zu warten.")
       : "";
-    outEl.textContent = "📭 " + (res && res.reason ? res.reason : "Keine Antwort — der Knoten ist gerade nicht offen/wach.") +
-      "\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen)." + epHint;
+    outEl.textContent = "📭 " + (res && res.reason ? res.reason : T("Keine Antwort — der Knoten ist gerade nicht offen/wach.")) +
+      T("\nDie Frage bleibt in deinem Briefkasten offen — ich hole die Antwort automatisch beim nächsten Öffnen (oder tippe 📬 Antworten abholen).") + epHint;
   }
 
   function askWithRetry(r, card, text, allowRetry, fallbackCards) {
-    if (outEl) outEl.textContent = "❓ Frage <" + text + "> an " + (card.nodeName || "Knoten") + " — warte auf Antwort …";
+    if (outEl) outEl.textContent = T("❓ Frage <") + text + T("> an ") + (card.nodeName || T("Knoten")) + T(" — warte auf Antwort …");
     r.askNode(card, text).then(function (res) {
       if (!outEl) return;
       if (res && res.ok) { renderAskSuccess(card, res, text); return; }
       if (allowRetry && typeof r.discover === "function") {
-        outEl.textContent = "… keine Antwort — Karte evtl. veraltet. Ich lese den Raum neu und frage die frischeste Karte …";
+        outEl.textContent = T("… keine Antwort — Karte evtl. veraltet. Ich lese den Raum neu und frage die frischeste Karte …");
         r.discover().then(function (d) {
           var fresh = null;
           if (d && d.ok && Array.isArray(d.cards)) {
@@ -2084,54 +2762,54 @@
             giveUpOrFallback(r, res, card, text, fallbackCards);  // A11: nächstbester Knoten, sonst Briefkasten
           }
         }).catch(function () {
-          if (outEl) outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Keine Antwort.") + "\n(Raum-Neulesen fehlgeschlagen.)";
+          if (outEl) outEl.textContent = "✗ " + (res && res.reason ? res.reason : T("Keine Antwort.")) + T("\n(Raum-Neulesen fehlgeschlagen.)");
         });
         return;
       }
       giveUpOrFallback(r, res, card, text, fallbackCards);   // A11: nächstbester Knoten, sonst A12-Briefkasten
-    }).catch(function (e) { if (outEl) outEl.textContent = "✗ Fehler: " + (e && e.message ? e.message : e); });
+    }).catch(function (e) { if (outEl) outEl.textContent = T("✗ Fehler: ") + (e && e.message ? e.message : e); });
   }
 
   // Bau 23.B — Antwortrecht bewusst an/aus (Default aus, nicht persistiert).
   function onToggleAnswering() {
     var r = rdv();
-    if (!r || typeof r.enableAnswering !== "function") { setOut("Modul 23 mit Bau 23.B (enableAnswering) nicht geladen."); return; }
+    if (!r || typeof r.enableAnswering !== "function") { setOut(T("Modul 23 mit Bau 23.B (enableAnswering) nicht geladen.")); return; }
     if (r._meta && r._meta.answering) {
       try { r.disableAnswering(); } catch (_e) {}
-      if (answerBtn) answerBtn.textContent = "💬 Antworten: aus";
-      if (outEl) outEl.textContent = "💬 Antworten ausgeschaltet.";
+      if (answerBtn) answerBtn.textContent = T("💬 Antworten: aus");
+      if (outEl) outEl.textContent = T("💬 Antworten ausgeschaltet.");
       return;
     }
     r.enableAnswering().then(function (res) {
       if (res && res.ok) {
-        if (answerBtn) answerBtn.textContent = "💬 Antworten: an";
-        if (outEl) outEl.textContent = "💬 Antworten AN — dein Knoten beantwortet jetzt Fragen anderer Knoten mit den Top-Treffern seiner Bedeutungs-Suche (nur Titel). App-Seite offen lassen (Fenster darf zu).";
+        if (answerBtn) answerBtn.textContent = T("💬 Antworten: an");
+        if (outEl) outEl.textContent = T("💬 Antworten AN — dein Knoten beantwortet jetzt Fragen anderer Knoten mit den Top-Treffern seiner Bedeutungs-Suche (nur Titel). App-Seite offen lassen (Fenster darf zu).");
       } else {
-        if (outEl) outEl.textContent = "✗ " + (res && res.reason ? res.reason : "Antworten konnte nicht eingeschaltet werden.");
+        if (outEl) outEl.textContent = "✗ " + (res && res.reason ? res.reason : T("Antworten konnte nicht eingeschaltet werden."));
       }
-    }).catch(function (e) { if (outEl) outEl.textContent = "✗ Fehler: " + (e && e.message ? e.message : e); });
+    }).catch(function (e) { if (outEl) outEl.textContent = T("✗ Fehler: ") + (e && e.message ? e.message : e); });
   }
 
   function onHandshake(card) {
     var r = rdv();
-    if (!r) { setOut("Modul 23 (SbkimRendezvous) nicht geladen."); return; }
-    if (outEl) outEl.textContent = "🤝 Handshake an " + (card.nodeName || "Knoten") + " (lebende ID, max ~12 s) …";
+    if (!r) { setOut(T("Modul 23 (SbkimRendezvous) nicht geladen.")); return; }
+    if (outEl) outEl.textContent = T("🤝 Handshake an ") + (card.nodeName || T("Knoten")) + T(" (lebende ID, max ~12 s) …");
     r.handshakeCard(card).then(function (res) {
       var oc = res && res.outcome;
       function line(s) { if (outEl) outEl.textContent += "\n" + s; }
       if (oc === "established") {
-        line("✓ ANDOCK ETABLIERT mit " + (card.nodeName || "Knoten") + "! 🎉");
-        line("   Server-loser Live-Cross-Knoten-Handshake — ihr seid verbunden.");
+        line(T("✓ ANDOCK ETABLIERT mit ") + (card.nodeName || "Knoten") + "! 🎉");
+        line(T("   Server-loser Live-Cross-Knoten-Handshake — ihr seid verbunden."));
       } else if (oc === "rejected-local") {
-        line("• Lokal abgelehnt — Bedeutungs-Ähnlichkeit " + (res.score != null ? Number(res.score).toFixed(4) : "?") + " < 0.80 (kein Fehler, zu verschiedene Domänen).");
+        line(T("• Lokal abgelehnt — Bedeutungs-Ähnlichkeit ") + (res.score != null ? Number(res.score).toFixed(4) : "?") + T(" < 0.80 (kein Fehler, zu verschiedene Domänen)."));
       } else if (oc === "rejected") {
-        line("• Vom Gegenknoten abgelehnt: " + (res.reason || "(kein Grund)"));
+        line("• Vom Gegenknoten abgelehnt: " + (res.reason || T("(kein Grund)")));
       } else if (oc === "timeout") {
-        line("✗ " + (res.reason || "Keine Antwort — Knoten offline/nicht wach (Visitenkarte veraltet)."));
+        line("✗ " + (res.reason || T("Keine Antwort — Knoten offline/nicht wach (Visitenkarte veraltet).")));
       } else {
         line("✗ Fehler: " + (res && res.reason ? res.reason : JSON.stringify(res)));
       }
-    }).catch(function (e) { if (outEl) outEl.textContent += "\n✗ Fehler: " + (e && e.message ? e.message : e); });
+    }).catch(function (e) { if (outEl) outEl.textContent += T("\n✗ Fehler: ") + (e && e.message ? e.message : e); });
   }
 
   function show() {
@@ -2179,6 +2857,8 @@
     // EU-Politik (Fremdnutzer-klar): euOnly:true → der KI-Richter bietet NUR
     // EU-Anbieter (z.B. Mistral) an. Default false (freie Anbieter-Wahl).
     if (typeof opts.euOnly === "boolean") cfg.euOnly = opts.euOnly;
+    // Sprache: "de" | "en". Ohne Angabe entscheidet <html lang>.
+    if (opts.lang === "de" || opts.lang === "en") cfg.lang = opts.lang;
     // A12: Briefkasten-Obergrenze per App/Browser einstellbar (Marktplatz-Muster —
     // jeder entscheidet, wie viel gespeichert wird). Default 20.
     if (typeof opts.mailboxMax === "number" && isFinite(opts.mailboxMax) && opts.mailboxMax >= 1) RDV_MAILBOX_MAX = Math.floor(opts.mailboxMax);
@@ -2203,6 +2883,7 @@
     get _meta() {
       return {
         version: VERSION, mounted: mounted, open: isOpen(), nodeName: cfg.nodeName,
+        lang: sprache(), langKeys: Object.keys(TEXTE.en).length,
         hasRendezvous: rdv() !== null, relatedOnly: relatedOnly, euOnly: cfg.euOnly,
         kiRichter: { on: kiOn, provider: kiProvider, hasKey: !!(kiKey && kiKey.length) },
         // Stufe 0b — Sicherungs-/Fächer-Fläche vorhanden + ob in DIESEM Browser
@@ -2274,6 +2955,6 @@
   global.SbkimRendezvousUI = api;
 
   if (typeof console !== "undefined" && console.info) {
-    console.info("MODUL 23 UI RENDEZVOUS-KNOPF bereit (öffentlich, app-agnostisch), Funktionen: init/show/hide/isOpen");
+    console.info(T("MODUL 23 UI RENDEZVOUS-KNOPF bereit (öffentlich, app-agnostisch), Funktionen: init/show/hide/isOpen"));
   }
 })(typeof window !== "undefined" ? window : globalThis);
