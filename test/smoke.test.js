@@ -59,7 +59,8 @@ test("App-Schale ist vollständig (self-contained PWA)", () => {
   for (const f of ["index.html", "manifest.json", "sbkim-sw.js", "impressum.html", "sicherheit.html",
                    "icon-192.png", "icon-512.png",
                    "assets/storage-init.js", "assets/rendezvous-init.js", "assets/nostr-listen-init.js",
-                   "assets/schutz-init.js", "assets/siegel-inhalt.js"]) {
+                   "assets/schutz-init.js", "assets/siegel-inhalt.js",
+                   "assets/sbkim-andock-wizard.js"]) {
     assert.ok(readFileSync(join(ROOT, f)).length > 0, `${f} vorhanden + nicht leer`);
   }
   const html = readFileSync(join(ROOT, "index.html"), "utf8");
