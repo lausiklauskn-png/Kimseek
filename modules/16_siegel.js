@@ -210,6 +210,188 @@
 
   // ---- Konstanten ----
 
+  /* ── SPRACHE (Klaus 2026-09-14) ────────────────────────────────────────
+   *
+   * WARUM. Nach dem Modul-23-UI-Rollout stand Klaus' Seite auf Englisch — und
+   * das Siegel daneben auf Deutsch. Ein Voll-Knoten war damit
+   * gemischtsprachig: das Verbinden-Fenster englisch, die Lampe „siegel" und
+   * das ganze Modal dahinter deutsch.
+   *
+   * WIE. Byte-gleiches Verfahren wie Modul 23 UI: SCHLUESSELLOS. `T("…")`
+   * nimmt den deutschen Satz und gibt die Uebersetzung zurueck, wenn es eine
+   * gibt. Kein Schluessel-System — ein Schluessel und sein Text laufen
+   * auseinander, sobald einer von beiden sich bewegt, und dann steht im Modal
+   * ein Schluessel statt eines Satzes.
+   *
+   * FAIL-SOFT UND RUECKWAERTSKOMPATIBEL: fehlt ein Eintrag, bleibt es deutsch.
+   * Das ist der Zustand vor dieser Aenderung — neunzehn Apps tragen dieses
+   * Modul byte-1:1, und keine davon darf davon etwas merken, solange sie
+   * nichts einstellt.
+   *
+   * ⚠ DIE ASPEKTE-LISTE BLEIBT DEUTSCH IM CODE. `ZERTIFIKAT_ASPEKTE` ist
+   * netzweiter Protokoll-Bestand; ihr deutscher Wortlaut ist die Urkunde.
+   * Uebersetzt wird erst an der ANZEIGE-Stelle (T(a.aspect) /
+   * T(a.description)). Wer einen Aspekt ERGAENZT (CLAUDE.md § Sicherheits-
+   * Module pflegen Aspekte), traegt seine englische Fassung hier mit ein —
+   * `tests/smoke_bau1617_sprache.mjs` besteht darauf.
+   *
+   * ⚠ KEIN ZERTIFIKAT_ASPEKTE-EINTRAG FUER DIESE AENDERUNG, obwohl 16 ein
+   * Schutz-Modul ist und die Konvention sonst greift: eine Uebersetzung ist
+   * Render-Schicht. Sie ruehrt weder die Selbst-Pruefung noch die
+   * Anti-Greenwashing-Klausel noch die Bronze/Gold-Stufung an. Ein Eintrag
+   * „spricht jetzt Englisch" behauptete einen Sicherheits-Fortschritt, den es
+   * nicht gibt — und verwaesserte die Liste, die Sicherheits-Updates sichtbar
+   * machen soll. Begruendung ausgeschrieben in INTERFACES § Modul 16 SPRACHE.
+   */
+  var TEXTE = { en: {
+      /* Modal-Rahmen */
+      "SBKIM-Siegel — was bedeutet das?":
+        "The SBKIM seal — what does it mean?",
+      "Schließen":
+        "Close",
+      "Pflicht-Module":
+        "Required modules",
+      "SBKIM-Protokoll — Sicherheits-Aspekte (gemeinsam, netzweit)":
+        "SBKIM protocol — security aspects (shared, network-wide)",
+      "Historie der SBKIM-Sicherheits-Bausteine — für alle Knoten gleich. Das sind Protokoll-Daten, keine app-eigenen Zertifizierungs-Daten dieser App.":
+        "History of the SBKIM security building blocks — the same for every node. These are protocol dates, not this app's own certification dates.",
+      "pending":
+        "pending",
+
+      /* Badge */
+      "SBKIM-Siegel · im Mycel, ruhend":
+        "SBKIM seal · in the mycelium, dormant",
+      "SBKIM-Siegel · im Mycel, aktiv":
+        "SBKIM seal · in the mycelium, active",
+
+      /* Bezeugt-Zeile. „ Uhr." hat im Englischen keine Entsprechung — dort
+       * endet der Satz schlicht mit einem Punkt. */
+      "Bezeugt seit ":
+        "Attested since ",
+      " Uhr.":
+        ".",
+      "Bezeugt: —":
+        "Attested: —",
+
+      /* Status-Etiketten der Pflicht-Modul-Liste */
+      "bereit":         "ready",
+      "bereit (lazy)":  "ready (lazy)",
+      "fehlt":          "missing",
+      "defekt":         "broken",
+
+      /* Die deutschen Modul-NAMEN aus PFLICHT_MODULE. Storage, Spore,
+       * Embedding und Match stehen nicht hier: sie sind in beiden Sprachen
+       * dasselbe Wort, und eine „Uebersetzung", die eine Kopie des Deutschen
+       * ist, ist keine. */
+      "Relais-Client": "Relay client",
+      "Anastomose":    "Anastomosis",
+      "Apoptose":      "Apoptosis",
+      "Membran":       "Membrane",
+
+      /* Bronze-Hinweis */
+      "Im Mycel · ruhend":
+        "In the mycelium · dormant",
+      " — diese Zelle trägt das SBKIM-Siegel und ist damit Teil des Mycels, so klein sie auch ist. In dieser Sitzung gab es noch keinen Hyphen-Verkehr (Handshake). Über den Knopf „🔑 Eigene Identität & Spore erzeugen / verwalten →“ oben knüpfst du aktiv einen Faden zu einem Geschwister-Knoten.":
+        " — this cell carries the SBKIM seal and is therefore part of the mycelium, however small it may be. There has been no hyphal traffic (handshake) in this session yet. Use the “🔑 Create / manage your own identity & spore →” button above to actively spin a thread to a sibling node.",
+
+      /* Aussteller-Klaerung */
+      "Dieses Siegel ist ":
+        "This seal is ",
+      "self-inscribing":
+        "self-inscribing",
+      ": die App hat sich beim Boot selbst geprüft.":
+        ": the app checked itself at boot time.",
+      "Vertrauen kommt vom Repo, in dem sie gehostet ist: ":
+        "Trust comes from the repository it is hosted in: ",
+
+      /* Andock-Block */
+      "Fremden Knoten verbinden — ohne KI, direkt im Browser: Repo-/App-URL eingeben → Spore prüfen → Match → Handshake.":
+        "Connect a foreign node — no AI, straight in the browser: enter the repo/app URL → check the spore → match → handshake.",
+      "🔌 Fremden Knoten andocken →":
+        "🔌 Dock a foreign node →",
+      "Andock-Werkzeug (Modul 18 SbkimToolPwa) ist nicht geladen — bitte src/modules/18_tool_pwa.js einbinden und SbkimToolPwa.init({…}) aufrufen.":
+        "The docking tool (module 18 SbkimToolPwa) is not loaded — please include src/modules/18_tool_pwa.js and call SbkimToolPwa.init({…}).",
+      "Andock-Werkzeug nicht bereit: ":
+        "Docking tool not ready: ",
+
+      /* ── ZERTIFIKAT_ASPEKTE ───────────────────────────────────────────
+       * Die Daten oben bleiben deutsch; hier steht ihre englische Fassung.
+       * Wer einen Aspekt ergaenzt, ergaenzt ihn HIER MIT. */
+      "Grund-Siegel-Bezeugung (Protokoll)":
+        "Foundational seal attestation (protocol)",
+      "Grundlage jedes SBKIM-Siegels: Beim Start prüft die App selbst, ob die Pflicht-Module 01/02/03/04/05/07/15 geladen sind — nur dann entsteht das Siegel. Protokoll-Baustein, kein app-eigenes Datum (was DIESE App gerade lädt, steht oben unter „Pflicht-Module“).":
+        "The basis of every SBKIM seal: at start-up the app checks for itself whether the required modules 01/02/03/04/05/07/15 are loaded — only then does the seal come into being. A protocol building block, not a date of this app's own (what THIS app is loading right now is listed above under “Required modules”).",
+      "Sub (a) Read-API + Sub (b) postMessage-Brücke":
+        "Sub (a) read API + sub (b) postMessage bridge",
+      "Finale Bedien-Pfade: MembraneSnapshot mit Siegel-Hook, vier op-Werte (sporeRef/query/hint/queryResult) mit Nonce-Pflicht, fail-soft Allowlist, Rate-Limit-Hook für Modul 11.":
+        "Final operating paths: MembraneSnapshot with a seal hook, four op values (sporeRef/query/hint/queryResult) requiring a nonce, a fail-soft allowlist, and a rate-limit hook for module 11.",
+      "Floating-Widget mit Vier-Slot-Live-Status":
+        "Floating widget with four-lamp live status",
+      "Live-Status-Dashboard (LEBT/VERKEHR/FREMD/SIEGEL) als Endknoten-Standard; macht den SBKIM-Lauf sichtbar ohne Navleisten-Mount-Pflicht. Render-Schicht ohne Protokoll-Eingriff.":
+        "A live status dashboard (ALIVE/TRAFFIC/FOREIGN/SEAL) as the end-node standard; it makes SBKIM visibly running without requiring a nav-bar mount. Render layer, no interference with the protocol.",
+      "Mycel-Aktivität (erster Hyphen-Verkehr)":
+        "Mycelium activity (first hyphal traffic)",
+      "Diese Zelle hatte in dieser Sitzung mindestens einen Hyphen-Verkehr (erfolgreicher Cross-Knoten-Handshake) — Leben im Mycel. SIEGEL-Stufe Gold.":
+        "In this session this cell had at least one instance of hyphal traffic (a successful cross-node handshake) — life in the mycelium. Seal tier: gold.",
+      "Semantische Selbst-Beschreibung im Siegel":
+        "Semantic self-description inside the seal",
+      "Direkt im Siegel lässt sich die App in eigenen Worten (oder per eingefügter README) beschreiben; der Text wird per Modul 03 (e5-small, 384-dim, L2-normalisiert) zum Domain-Vektor und mit dem vorhandenen Schlüssel neu in die Spore signiert — gleiche nodeId, treffenderer verified-match. Ein einziger, sauberer Identitäts-/Andock-Pfad ohne Modul-18-Verweis.":
+        "The app can be described in its own words (or by pasting in a README) straight inside the seal; module 03 (e5-small, 384-dim, L2-normalised) turns that text into the domain vector and signs it back into the spore with the existing key — same nodeId, a more accurate verified match. One single clean identity/docking path, with no reference to module 18.",
+      "Schlüssel-Tresor (Identitäts-Sicherung)":
+        "Key safe (identity backup)",
+      "Die SBKIM-Identität (nodeId + privater Knotenschlüssel + Spore) wird lokal verschlüsselt gesichert (Modul-02-Krypto-Kern: PBKDF2-SHA256 ≥600k + AES-GCM-256), mit Shamir-Recovery 2 von 3 über das Passwort — gegen Identitäts-Verlust/-Wandern. Nur Identität/Schlüssel, kein PII, nie übers Netz.":
+        "The SBKIM identity (nodeId + private node key + spore) is backed up locally in encrypted form (module 02 crypto core: PBKDF2-SHA256 ≥600k + AES-GCM-256), with 2-of-3 Shamir recovery over the password — against losing or drifting the identity. Identity and keys only, no personal data, never over the network.",
+      "KI-Richter im Cross-Knoten-Antwort-Pfad (opt-in)":
+        "AI judge in the cross-node reply path (opt-in)",
+      "Der op:\"query\"-Empfänger (Membran Sub b) kann eingehende Fremd-Anfragen optional durch den KI-Richter (Modul 04 queryLocalJudged, BYOK) nach Bedeutung beurteilen und sortieren, statt nur nach rohem Cosinus. Default AUS (roher Vorfilter), Schlüssel RAM-only/nie im Code, fail-soft; der 0.80-Andock-Riegel bleibt unberührt.":
+        "The op:\"query\" receiver (membrane sub b) can optionally have incoming foreign requests judged and ranked by meaning through the AI judge (module 04 queryLocalJudged, BYOK) instead of by raw cosine alone. Off by default (raw pre-filter), the key stays in RAM and never in the code, fail-soft; the 0.80 docking bar is untouched.",
+      "Ehrliche Aspekt-Darstellung (protokoll-weit, eingeklappt)":
+        "Honest presentation of the aspects (protocol-wide, collapsed)",
+      "Die Aspekte-Historie wird jetzt eingeklappt gezeigt und ausdrücklich als gemeinsame, netzweite SBKIM-Protokoll-Historie beschriftet — NICHT als app-eigenes Zertifizierungsdatum (Klaus-Befund: eine frisch zertifizierte App darf keine fremden Bau-Daten als ihre eigene Historie ausgeben). Die app-eigene, aktuelle Aussage bleibt die Pflicht-Modul-Selbstprüfung oben plus der lokale Start-Zeitpunkt.":
+        "The aspect history is now shown collapsed and labelled explicitly as the shared, network-wide SBKIM protocol history — NOT as a certification date of this app's own (Klaus's finding: a freshly certified app must not present other people's build dates as its own history). What this app itself currently states remains the required-module self-check above plus the local start time.",
+      "Verschlüsselte Geheimnis-Ablage im Safe (putSecret/getSecret)":
+        "Encrypted secret storage in the safe (putSecret/getSecret)",
+      "Der Safe kann jetzt beliebige kleine Geheimnisse (z.B. einen KI-Richter-API-Schlüssel) verschlüsselt ablegen — PBKDF2-SHA256 600k → AES-GCM-256, frisches Salt/IV je Geheimnis, kein Klartext in localStorage/IndexedDB. So überlebt ein Schlüssel Reload/App-Schließen, ohne dass eine andere App auf der geteilten Adresse ihn lesen kann (Fremdnutzer-/Marktplatz-Leitsatz). Falsches Passwort/Manipulation → fail-soft (null).":
+        "The safe can now store arbitrary small secrets (an AI-judge API key, say) in encrypted form — PBKDF2-SHA256 600k → AES-GCM-256, a fresh salt/IV per secret, no plain text in localStorage/IndexedDB. A key therefore survives a reload or closing the app, without another app on the shared address being able to read it (the outside-user/marketplace principle). A wrong password or tampering → fail-soft (null).",
+      "Echtheit der Karten im gemeinsamen Raum":
+        "Authenticity of the cards in the shared room",
+      "Jede Visitenkarte im Rendezvous-Raum wird jetzt geprüft, bevor sie angezeigt wird: die Karte muss ihre eigene Spore tragen (spore.id === nodeId) und deren Ed25519-Signatur muss über Modul 02 (verifyForeignSpore) halten. Damit kann sich niemand mehr unter fremder Identität ins Brett hängen. Dazu Mengen-Deckel je Durchlauf (200 Karten) und je Nostr-Absender (3 Identitäten) gegen Flutung. Fehlt der Prüfer, läuft der Raum weiter, meldet die Karten aber ehrlich als UNGEPRÜFT statt sie still durchzuwinken. Reine Vor-Prüfung — der 0.80-Andock-Riegel bleibt unberührt.":
+        "Every calling card in the rendezvous room is now checked before it is shown: the card has to carry its own spore (spore.id === nodeId) and that spore's Ed25519 signature has to hold up under module 02 (verifyForeignSpore). Nobody can hang themselves on the board under a foreign identity any more. On top of that there are volume caps per pass (200 cards) and per Nostr sender (3 identities) against flooding. If the verifier is missing, the room carries on but honestly reports the cards as UNCHECKED instead of waving them through in silence. A pure pre-check — the 0.80 docking bar is untouched.",
+      "Nachvollziehbares Fremdzugriff-Protokoll":
+        "A foreign-access log you can actually follow",
+      "Anlass war ein echter Fund im Feld: die FREMD-Lampe stand auf Rot, das Fenster sagte nur „ignored“ — die Membran hatte etwas abgewiesen, aber WER gesendet hatte, war nicht zu erkennen. Jeder Eintrag führt jetzt mit, welcher der vier gleich aussehenden Abweis-Gründe zutraf (fremder Typ / nicht erlaubt / fehlende Kennung / unbekannter Wunsch / gedrosselt), wer abgeschickt hat (Fenster, eingebetteter Rahmen, öffnendes Fenster), wofür sich die Nachricht ausgab, wie lange nach dem Laden sie kam und ob der Tab dabei vorn war. Das Fenster erklärt das in ganzen Sätzen. PII-Tabu bleibt hart: keine Werte aus fremden Objekten, nur Feld-Namen, Text-Auszug gekappt und Ziffernfolgen maskiert, alles RAM-only und nie übers Netz.":
+        "The trigger was a real finding in the field: the FOREIGN lamp stood red, the window said only “ignored” — the membrane had turned something away, but WHO had sent it was impossible to tell. Every entry now carries which of the four identical-looking rejection reasons applied (foreign type / not allowed / missing identifier / unknown request / throttled), who sent it (window, embedded frame, opening window), what the message claimed to be, how long after loading it arrived, and whether the tab was in the foreground at the time. The window explains all that in whole sentences. The ban on personal data stays hard: no values out of foreign objects, field names only, text excerpts truncated and digit sequences masked, everything RAM-only and never over the network.",
+      "Fachworte der App beim Antworten (abschaltbar, standardmäßig aus)":
+        "The app's own terminology when answering (switchable, off by default)",
+      "Ehrlich vorweg: das ist keine Schutz-Verbesserung, sondern eine Erweiterung am Antwort-Pfad der Membran — sie steht hier, weil jede Änderung an einem Schutz-Modul sichtbar bleiben soll, auch die harmlose. Fragt ein anderer Knoten etwas an, konnte bisher nur die reine Bedeutungs-Suche antworten; wer nach „Faktura“ fragte, fand nichts über „Rechnung“. Eine App kann jetzt ihre eigenen Fachworte mitgeben, dann wird die Frage vor dem Suchen aufgefächert und zusätzlich nach Wörtern gesucht. Herkunft: BookLedgerPro hatte das seit dem 2026-07-11 in seiner eigenen Kopie stehen — an der falschen Stelle, weil eine Kopie nicht geändert werden darf; die Mechanik ist deshalb in den Kanon gewandert, die Fachworte bleiben bei der App. Standardmäßig AUS: wer nichts einstellt, bekommt exakt den bisherigen Weg. Es werden nur zusätzliche Treffer AUFGENOMMEN — der 0.80-Andock-Riegel bleibt unberührt, hier wird geantwortet, nicht angedockt.":
+        "Honestly, up front: this is not an improvement in protection but an extension to the membrane's reply path — it is listed here because every change to a protective module should stay visible, the harmless ones included. When another node asks something, only the pure meaning search could answer until now; ask for “invoicing” and you found nothing filed under “invoice”. An app can now supply its own terminology, and the question is then fanned out before the search and additionally searched for by word. Origin: BookLedgerPro had this in its own copy since 2026-07-11 — in the wrong place, because a copy must not be modified; the mechanism has therefore moved into the canon while the terminology stays with the app. Off by default: change nothing and you get exactly the previous path. Only ADDITIONAL hits are taken in — the 0.80 docking bar is untouched, this is about answering, not about docking.",
+      "Relais-Client gehört zur Selbst-Prüfung":
+        "The relay client belongs to the self-check",
+      "Das Siegel prüft ab jetzt auch den Relais-Client (Modul 05b). Vorher konnte es golden leuchten, während der Knoten den gemeinsamen Raum gar nicht lesen konnte. Geprüft wird die Fläche subscribe: wer nur senden, aber nichts empfangen kann, nimmt nicht teil.":
+        "From now on the seal also checks the relay client (module 05b). Before, it could shine gold while the node could not read the shared room at all. The surface checked is subscribe: anyone who can only send but receive nothing is not taking part.",
+  } };
+
+  /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */
+  var optLang = null;
+
+  function sprache() {
+    if (optLang === "de" || optLang === "en") return optLang;
+    try {
+      var d = global.document;
+      var l = String((d && d.documentElement && d.documentElement.lang) || "").slice(0, 2).toLowerCase();
+      if (l === "en") return "en";
+    } catch (_e) { /* nb */ }
+    return "de";
+  }
+
+  /* Bei JEDEM Aufruf neu nachsehen, nicht einmal beim Laden merken: wer die
+   * Sprache umschaltet und danach das Modal oeffnet, bekaeme sonst die alte. */
+  function T(de) {
+    if (sprache() !== "en") return de;
+    var w = TEXTE.en;
+    return (w && Object.prototype.hasOwnProperty.call(w, de)) ? w[de] : de;
+  }
+
   var DEFAULT_BADGE_SELECTOR = ".lamps";      // Container; Option β
   var BADGE_ID = "sbkim-siegel-badge";
   var MODAL_ID = "sbkim-siegel-modal";
@@ -325,7 +507,7 @@
       badgeElement.setAttribute("data-stufe", stufe);
       badgeElement.setAttribute(
         "aria-label",
-        stufe === STUFE_GOLD ? ARIA_LABEL_GOLD : ARIA_LABEL_BRONZE,
+        T(stufe === STUFE_GOLD ? ARIA_LABEL_GOLD : ARIA_LABEL_BRONZE),
       );
       if (typeof badgeElement.removeAttribute === "function") {
         badgeElement.removeAttribute("title");
@@ -590,7 +772,7 @@
     // aria-label wird in applyStufeToBadge() je nach Sub-(e)-Stufe gesetzt
     // (Bronze/Gold). KEIN title-Attribut — Pflege 17 Tooltips 2026-05-26:
     // Doppel-Tooltip-Problem auf DeX-Chrome.
-    span.setAttribute("aria-label", ARIA_LABEL_BRONZE);
+    span.setAttribute("aria-label", T(ARIA_LABEL_BRONZE));
     // SVG-Wappen: Ritterschild-Siegel mit Akkretions-Disk-Korona
     // (source of truth: `assets/sbkim-siegel-wappen.svg`; inlined als
     // `WAPPEN_SVG`-Konstante oben im Modul). Skaliert via viewBox auf
@@ -754,10 +936,7 @@
   function onAndockClick() {
     var tp = global.SbkimToolPwa;
     if (!tp || typeof tp.openAndockTab !== "function") {
-      showAndockHint(
-        "Andock-Werkzeug (Modul 18 SbkimToolPwa) ist nicht geladen — " +
-        "bitte src/modules/18_tool_pwa.js einbinden und SbkimToolPwa.init({…}) aufrufen.",
-      );
+      showAndockHint(T("Andock-Werkzeug (Modul 18 SbkimToolPwa) ist nicht geladen — bitte src/modules/18_tool_pwa.js einbinden und SbkimToolPwa.init({…}) aufrufen."));
       warn("Andock-Knopf geklickt, aber Modul 18 (SbkimToolPwa) ist nicht geladen.");
       return;
     }
@@ -777,7 +956,7 @@
       }
     } catch (err) {
       warn("Andock-Werkzeug-Start fehlgeschlagen.", err);
-      showAndockHint("Andock-Werkzeug nicht bereit: " + (err && err.message ? err.message : String(err)));
+      showAndockHint(T("Andock-Werkzeug nicht bereit: ") + (err && err.message ? err.message : String(err)));
     }
   }
 
@@ -800,14 +979,12 @@
       "line-height:1.5",
       "color:rgba(245,245,255,0.86)",
     ].join(";");
-    lead.textContent =
-      "Fremden Knoten verbinden — ohne KI, direkt im Browser: Repo-/App-URL " +
-      "eingeben → Spore prüfen → Match → Handshake.";
+    lead.textContent = T("Fremden Knoten verbinden — ohne KI, direkt im Browser: Repo-/App-URL eingeben → Spore prüfen → Match → Handshake.");
 
     var btn = doc.createElement("button");
     btn.type = "button";
     btn.setAttribute("data-siegel-andock-tool-btn", "");
-    btn.textContent = "🔌 Fremden Knoten andocken →";
+    btn.textContent = T("🔌 Fremden Knoten andocken →");
     btn.style.cssText = [
       "display:inline-block",
       "background:var(--siegel-gold, #C9A961)",
@@ -890,7 +1067,7 @@
 
     var title = doc.createElement("h2");
     title.id = MODAL_ID + "-title";
-    title.textContent = MODAL_TITLE;
+    title.textContent = T(MODAL_TITLE);
     // Serif für Titel (Karte 16 § Sub (c) wertigere Typografie).
     title.style.cssText = [
       "margin:0",
@@ -905,7 +1082,7 @@
     var closeBtn = doc.createElement("button");
     closeBtn.type = "button";
     closeBtn.setAttribute("data-siegel-close", "");
-    closeBtn.setAttribute("aria-label", "Schließen");
+    closeBtn.setAttribute("aria-label", T("Schließen"));
     closeBtn.textContent = "✕";
     closeBtn.style.cssText = [
       "background:transparent",
@@ -945,7 +1122,7 @@
     dateLine.style.cssText = "margin:0 0 1rem;font-size:0.86rem;color:rgba(245,245,255,0.78);";
 
     var modulesHeader = doc.createElement("h3");
-    modulesHeader.textContent = "Pflicht-Module";
+    modulesHeader.textContent = T("Pflicht-Module");
     modulesHeader.style.cssText = [
       "margin:0 0 0.5rem",
       "font-family:'Geist', system-ui, sans-serif",
@@ -977,11 +1154,11 @@
     aspectsDetails.style.cssText = "margin:0 0 1.2rem;";
 
     var aspectsSummary = doc.createElement("summary");
-    aspectsSummary.textContent = "SBKIM-Protokoll — Sicherheits-Aspekte (gemeinsam, netzweit)";
+    aspectsSummary.textContent = T("SBKIM-Protokoll — Sicherheits-Aspekte (gemeinsam, netzweit)");
     aspectsSummary.style.cssText = modulesHeader.style.cssText + ";cursor:pointer;";
 
     var aspectsIntro = doc.createElement("p");
-    aspectsIntro.textContent = "Historie der SBKIM-Sicherheits-Bausteine — für alle Knoten gleich. Das sind Protokoll-Daten, keine app-eigenen Zertifizierungs-Daten dieser App.";
+    aspectsIntro.textContent = T("Historie der SBKIM-Sicherheits-Bausteine — für alle Knoten gleich. Das sind Protokoll-Daten, keine app-eigenen Zertifizierungs-Daten dieser App.");
     aspectsIntro.style.cssText = "margin:0.5rem 0 0.7rem;font-size:0.8rem;color:rgba(245,245,255,0.6);line-height:1.5;";
 
     var aspectsList = doc.createElement("ul");
@@ -1073,15 +1250,14 @@
     var p = doc.createElement("p");
     p.style.cssText = "margin:0;";
     var strong = doc.createElement("strong");
-    strong.textContent = "Im Mycel · ruhend";
+    strong.textContent = T("Im Mycel · ruhend");
     strong.style.cssText = "color:var(--siegel-bronze, #8C6E2F);font-weight:600;";
     p.appendChild(strong);
-    p.appendChild(doc.createTextNode(
-      " — diese Zelle trägt das SBKIM-Siegel und ist damit Teil des Mycels, so klein sie auch ist. " +
-      "In dieser Sitzung gab es noch keinen Hyphen-Verkehr (Handshake). Über den Knopf " +
-      "„🔑 Eigene Identität & Spore erzeugen / verwalten →“ oben knüpfst du aktiv einen Faden " +
-      "zu einem Geschwister-Knoten.",
-    ));
+    // EINE Zeile, keine Konkatenation: der Woerterbuch-Schluessel ist der
+    // GANZE Satz, und ein zusammengesetzter Ausdruck steht nirgends als
+    // Zeichenkette in der Datei. Der Waechter faende ihn dann nicht und
+    // meldete den Eintrag zu Recht als tot.
+    p.appendChild(doc.createTextNode(T(" — diese Zelle trägt das SBKIM-Siegel und ist damit Teil des Mycels, so klein sie auch ist. In dieser Sitzung gab es noch keinen Hyphen-Verkehr (Handshake). Über den Knopf „🔑 Eigene Identität & Spore erzeugen / verwalten →“ oben knüpfst du aktiv einen Faden zu einem Geschwister-Knoten.")));
     block.appendChild(p);
   }
 
@@ -1107,17 +1283,17 @@
         // (Aspekte-since-Feld, Übergabeprotokoll-Dateinamen).
         var date = new Date(snap.certifiedAt);
         if (isNaN(date.getTime())) {
-          dateLine.textContent = "Bezeugt seit " + snap.certifiedAt;
+          dateLine.textContent = T("Bezeugt seit ") + snap.certifiedAt;
         } else {
           var yyyy = date.getFullYear();
           var mm = String(date.getMonth() + 1).padStart(2, "0");
           var dd = String(date.getDate()).padStart(2, "0");
           var HH = String(date.getHours()).padStart(2, "0");
           var MM = String(date.getMinutes()).padStart(2, "0");
-          dateLine.textContent = "Bezeugt seit " + yyyy + "-" + mm + "-" + dd + ", " + HH + ":" + MM + " Uhr.";
+          dateLine.textContent = T("Bezeugt seit ") + yyyy + "-" + mm + "-" + dd + ", " + HH + ":" + MM + T(" Uhr.");
         }
       } else {
-        dateLine.textContent = "Bezeugt: —";
+        dateLine.textContent = T("Bezeugt: —");
       }
     }
 
@@ -1134,9 +1310,9 @@
           '<span style="font-family:\'Geist Mono\',ui-monospace,monospace;color:rgba(245,245,255,0.86);">' +
           escapeAttr(m.id) + '</span>' +
           ' <span style="margin:0 0.5rem;color:rgba(245,245,255,0.45);">·</span> ' +
-          '<span style="color:#F5F5FF;">' + escapeAttr(m.name) + '</span>' +
+          '<span style="color:#F5F5FF;">' + escapeAttr(T(m.name)) + '</span>' +
           ' <span style="margin:0 0.5rem;color:rgba(245,245,255,0.45);">·</span> ' +
-          '<span style="color:rgba(245,245,255,0.62);">' + escapeAttr(statusLabel(m.status)) + '</span>';
+          '<span style="color:rgba(245,245,255,0.62);">' + escapeAttr(T(statusLabel(m.status))) + '</span>';
         modulesList.appendChild(li);
       }
     }
@@ -1164,7 +1340,7 @@
         var head = doc.createElement("div");
         head.style.cssText = "display:flex;gap:0.5rem;align-items:baseline;margin-bottom:0.2rem;";
         var since = doc.createElement("span");
-        since.textContent = isPendingAspect4 ? "pending" : a.since;
+        since.textContent = isPendingAspect4 ? T("pending") : a.since;
         since.style.cssText = isPendingAspect4
           ? "font-family:'Geist Mono',ui-monospace,monospace;color:rgba(245,245,255,0.45);font-size:0.82rem;font-style:italic;"
           : "font-family:'Geist Mono',ui-monospace,monospace;color:var(--siegel-gold, #C9A961);font-size:0.82rem;";
@@ -1172,13 +1348,13 @@
         moduleId.textContent = "· " + a.module;
         moduleId.style.cssText = "font-family:'Geist Mono',ui-monospace,monospace;color:rgba(245,245,255,0.62);font-size:0.82rem;";
         var aspect = doc.createElement("span");
-        aspect.textContent = "· " + a.aspect;
+        aspect.textContent = "· " + T(a.aspect);
         aspect.style.cssText = "color:#F5F5FF;font-size:0.9rem;flex:1;";
         head.appendChild(since);
         head.appendChild(moduleId);
         head.appendChild(aspect);
         var desc = doc.createElement("p");
-        desc.textContent = a.description;
+        desc.textContent = T(a.description);
         desc.style.cssText = "margin:0;font-size:0.82rem;color:rgba(245,245,255,0.7);line-height:1.5;";
         aLi.appendChild(head);
         aLi.appendChild(desc);
@@ -1196,16 +1372,16 @@
       // textContent statt innerHTML → KEINE HTML-Interpretation, dafür
       // "self-inscribing" als Wort, das im Text betont aussieht durch
       // den Serif-Font des umgebenden Blocks.
-      p1.appendChild(doc2.createTextNode("Dieses Siegel ist "));
+      p1.appendChild(doc2.createTextNode(T("Dieses Siegel ist ")));
       var strong = doc2.createElement("strong");
-      strong.textContent = "self-inscribing";
+      strong.textContent = T("self-inscribing");
       strong.style.cssText = "font-weight:500;color:var(--siegel-gold, #C9A961);";
       p1.appendChild(strong);
-      p1.appendChild(doc2.createTextNode(": die App hat sich beim Boot selbst geprüft."));
+      p1.appendChild(doc2.createTextNode(T(": die App hat sich beim Boot selbst geprüft.")));
 
       var p2 = doc2.createElement("p");
       p2.style.cssText = "margin:0;";
-      p2.appendChild(doc2.createTextNode("Vertrauen kommt vom Repo, in dem sie gehostet ist: "));
+      p2.appendChild(doc2.createTextNode(T("Vertrauen kommt vom Repo, in dem sie gehostet ist: ")));
       var link = doc2.createElement("a");
       link.href = snap.repoUrl;
       link.textContent = snap.repoUrl;
@@ -1292,6 +1468,12 @@
         "setzen, um den eigenen Namen ins Siegel zu gravieren (kein Auto-Label).",
       );
     }
+    // Sprache (2026-09-14). Nur "de"/"en" werden uebernommen; alles andere
+    // laesst optLang auf null, und dann entscheidet <html lang>. Kein
+    // Zuruecksetzen auf "de" bei einem unbekannten Wert — sonst schluege eine
+    // Falscheingabe die Seiten-Sprache, statt fail-soft daneben zu liegen.
+    if (opts.lang === "de" || opts.lang === "en") optLang = opts.lang;
+
     // Optionaler Andock-Knopf (KI-unabhängiger Handshake via Modul 18).
     // Strikt boolean true → opt-in; alles andere lässt den Default (aus).
     if (opts.andockTool === true) {
@@ -1440,6 +1622,8 @@
     _resetMycelConnectedForTest: _resetMycelConnectedForTest,
     _meta: {
       badgeId:           BADGE_ID,
+      get lang()              { return sprache(); },
+      get langKeys()          { return Object.keys(TEXTE.en).length; },
       modalId:           MODAL_ID,
       defaultSelector:   DEFAULT_BADGE_SELECTOR,
       get ready()             { return ready; },
