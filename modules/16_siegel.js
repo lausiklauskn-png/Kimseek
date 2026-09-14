@@ -244,6 +244,11 @@
    * machen soll. Begruendung ausgeschrieben in INTERFACES § Modul 16 SPRACHE.
    */
   var TEXTE = { en: {
+      /* Die zwei Anzeigetexte im WAPPEN (Klaus 2026-09-14). „SEAL" ist mit
+       * Modul 17 abgestimmt (dort heisst der Lampen-Slot ebenso) —
+       * zwei Fassungen desselben Wortes liefen sonst auseinander. */
+      "OFFIZIELLE BESTÄTIGUNG": "OFFICIAL ATTESTATION",
+      "SIEGEL": "SEAL",
       /* Modal-Rahmen */
       "SBKIM-Siegel — was bedeutet das?":
         "The SBKIM seal — what does it mean?",
@@ -410,6 +415,20 @@
   var DEFAULT_RIBBON_TEXT = "SAGE OBSERVATORIUM";
   // Eindeutiger Anker im WAPPEN_SVG (genau ein Vorkommen, im Ribbon-textPath).
   var RIBBON_MARKER = ">" + DEFAULT_RIBBON_TEXT + "</textPath>";
+
+  // Die zwei ANZEIGETEXTE im Wappen (Klaus 2026-09-14, entschieden: das Wappen
+  // spricht mit). Sie standen auf englischen Seiten deutsch da — gemessen an
+  // drei echten Seiten mit <html lang="en">, und es war genau Klaus' Befund
+  // vom selben Tag: ein deutsches Wort zwischen englischen Zeilen.
+  //
+  // ⚠ NICHT DIESELBE FRAGE WIE DIE ZERTIFIKAT_ASPEKTE. Deren deutscher
+  // Wortlaut ist die Urkunde und steht nur im CODE; uebersetzt wird dort an
+  // der Anzeige-Stelle. Diese zwei standen IN DER ANZEIGE.
+  //
+  // ⚠ "SBKIM" steht bewusst NICHT hier: ein Eigenname wird nicht uebersetzt.
+  // Der Band-Text laeuft ueber RIBBON_MARKER, nicht hierueber — den graviert
+  // der Host, und er ist keine Uebersetzungs-Frage (§ ribbonText).
+  var WAPPEN_TEXTE = ["OFFIZIELLE BESTÄTIGUNG", "SIEGEL"];
 
   // Sub (e) Bronze/Gold-Stufung (Spec-Erweiterung 2026-05-26).
   var STUFE_BRONZE = "bronze";
@@ -755,9 +774,27 @@
   // bleibt das SVG byte-identisch; sonst wird der Ribbon-Text ersetzt
   // (leerer Wert → offenes Band).
   function renderWappenSvg() {
+    var svg = WAPPEN_SVG;
+
+    // Die zwei Anzeigetexte durch T(). AUF DEUTSCH GIBT T() DEN SATZ
+    // UNVERAENDERT ZURUECK, die Ersetzung entfaellt und das SVG bleibt
+    // BYTE-IDENTISCH — dieselbe Bauart wie der Band-Text eine Zeile weiter
+    // unten, und damit bleibt „OHNE EINSTELLUNG AENDERT SICH NICHTS" gewahrt.
+    //
+    // ⚠ GESUCHT WIRD ">TEXT<", NICHT DER TEXT ALLEIN. Beide Woerter kommen im
+    // SVG ein zweites Mal ausserhalb eines Textknotens vor; eine Ersetzung am
+    // blossen Wort traefe Markup statt Anzeige. Gemessen: als ">TEXT<" ist
+    // jeder von beiden GENAU EINMAL da.
+    for (var i = 0; i < WAPPEN_TEXTE.length; i++) {
+      var de = WAPPEN_TEXTE[i];
+      var uebersetzt = T(de);
+      if (uebersetzt === de) continue;
+      svg = svg.replace(">" + de + "<", ">" + escapeXmlText(uebersetzt) + "<");
+    }
+
     var eff = effectiveRibbonText();
-    if (eff === DEFAULT_RIBBON_TEXT) return WAPPEN_SVG;
-    return WAPPEN_SVG.replace(
+    if (eff === DEFAULT_RIBBON_TEXT) return svg;
+    return svg.replace(
       RIBBON_MARKER,
       ">" + escapeXmlText(eff) + "</textPath>",
     );
