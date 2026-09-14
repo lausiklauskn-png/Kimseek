@@ -139,6 +139,107 @@
     siegel:  "siegel",
   };
 
+  /* ── SPRACHE (Klaus 2026-09-14) ────────────────────────────────────────
+   *
+   * WARUM. Klaus hat vom Tablet ein Bild geschickt: die Seite auf Englisch,
+   * und mitten darin die Lampen-Leiste mit „lebt · verkehr · fremd · siegel".
+   * Die Leiste steht auf JEDER Seite dauerhaft da — sie ist die sichtbarste
+   * deutsche Stelle des ganzen Netzes, noch bevor jemand ein Fenster oeffnet.
+   *
+   * WIE. Byte-gleiches Verfahren wie Modul 23 UI und Modul 16: SCHLUESSELLOS.
+   * `T("…")` nimmt den deutschen Satz und gibt die Uebersetzung zurueck, wenn
+   * es eine gibt. Kein Schluessel-System — ein Schluessel und sein Text laufen
+   * auseinander, sobald einer von beiden sich bewegt, und dann steht im
+   * Fenster ein Schluessel.
+   *
+   * FAIL-SOFT UND RUECKWAERTSKOMPATIBEL: fehlt ein Eintrag, bleibt es deutsch.
+   * Das ist der Zustand vor dieser Aenderung — neunzehn Apps tragen dieses
+   * Modul byte-1:1, und keine davon darf davon etwas merken, solange sie
+   * nichts einstellt.
+   *
+   * ⚠ DER PREIS: aendert jemand einen deutschen Satz, faellt seine
+   * Uebersetzung STILL auf Deutsch zurueck. Dagegen steht ein Waechter
+   * (tests/smoke_bau1617_sprache.mjs), der in beide Richtungen misst.
+   *
+   * ⚠ DIE PILLE WIRD EINMAL GEBAUT. Ein Sprachwechsel danach erreicht die
+   * Etiketten erst beim naechsten Laden; die beiden Modals zeichnen bei jedem
+   * Oeffnen neu und folgen sofort. Benannte Grenze, kein Fehler.
+   */
+  var TEXTE = { en: {
+      "lebt":    "alive",
+      "verkehr": "traffic",
+      "fremd":   "foreign",
+      "siegel":  "seal",
+      "LEBT — Page lebt seit init() (Modul 02 Spore). Klick öffnet Status-Modal.":
+        "ALIVE — page has been alive since init() (module 02 Spore). Click opens the status window.",
+      "VERKEHR — grün = am Relais verbunden, lauscht (Empfangsmodus, antwortet nur). Pulst bei Handschlag (Modul 05) / postMessage (Modul 15). Klick öffnet Mini-Log.":
+        "TRAFFIC — green = connected to the relay, listening (receive mode, replies only). Pulses on a handshake (module 05) / postMessage (module 15). Click opens the mini log.",
+      "FREMD — Fremdzugriff-Buffer (Modul 15 Sub e). Rot wenn Buffer nicht leer. Klick öffnet Modul-15-Modal.":
+        "FOREIGN — foreign-access buffer (module 15 sub e). Red when the buffer is not empty. Click opens the module 15 window.",
+      "SBKIM-Siegel — Modul 16 Self-Inscribing-Bezeugung. Klick öffnet Aspekte-Modal.":
+        "SBKIM seal — module 16 self-inscribing attestation. Click opens the aspects window.",
+      "SBKIM Live-Status-Widget":
+        "SBKIM live status widget",
+      "Widget minimieren — zeigt nur das SBKIM-Siegel. Erneuter Klick maximiert.":
+        "Minimise the widget — shows only the SBKIM seal. Clicking again maximises it.",
+      "Widget maximieren — zeigt alle vier Slots.":
+        "Maximise the widget — shows all four lamps.",
+      "Widget schließen — wiederherstellbar via SbkimWidget.show()":
+        "Close the widget — restorable via SbkimWidget.show()",
+      "Schließen":
+        "Close",
+      "LEBT — Page-Status":
+        "ALIVE — page status",
+      "VERKEHR — letzte ":
+        "TRAFFIC — last ",
+      " Events":
+        " events",
+      "RAM-only FIFO — Tab-Reload leert die Liste.":
+        "RAM-only FIFO — reloading the tab empties the list.",
+      "Zeit":         "Time",
+      "Quelle":       "Source",
+      "Richtung":     "Direction",
+      "Entscheidung": "Decision",
+      "Uptime":         "Uptime (running for)",
+      "Modul-02 init":  "Module 02 init",
+      "nodeId-Präfix":  "nodeId prefix",
+      "Events:alive":   "Events: alive",
+      "since (ISO)":    "since (ISO)",
+      "ja":   "yes",
+      "nein": "no",
+  } };
+
+  /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */
+  var optLang = null;
+
+  function sprache() {
+    if (optLang === "de" || optLang === "en") return optLang;
+    try {
+      var d = global.document;
+      var l = String((d && d.documentElement && d.documentElement.lang) || "").slice(0, 2).toLowerCase();
+      if (l === "en") return "en";
+    } catch (_e) { /* nb */ }
+    return "de";
+  }
+
+  /* Der einzige Ort in diesem Modul, an dem ein uebersetzter Text in einen
+   * innerHTML-String wandert, ist der Tabellen-Kopf des VERKEHR-Fensters.
+   * Die Werte stammen aus dem Woerterbuch oben, also aus dem Modul selbst —
+   * trotzdem escaped: ein Waechter am Einzelfall ist morgen an der naechsten
+   * Uebersetzung blind. */
+  function escHtml(v) {
+    return String(v == null ? "" : v)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  /* Bei JEDEM Aufruf neu nachsehen, nicht einmal beim Laden merken. */
+  function T(de) {
+    if (sprache() !== "en") return de;
+    var w = TEXTE.en;
+    return (w && Object.prototype.hasOwnProperty.call(w, de)) ? w[de] : de;
+  }
+
   // Sage-Page-Stil-Anker: Tafel siehe index.html § :root + .lamps + .lamp.
   // 9 px Lampen in einer Pill mit border-radius:999px + Glow + Atmung.
 
@@ -861,7 +962,7 @@
     btn.id = "sbkim-widget-slot-" + slotId;
     btn.className = "sbkim-widget-slot " + slotId;
     btn.setAttribute("data-slot", slotId);
-    btn.setAttribute("aria-label", SLOT_TOOLTIPS[slotId] || slotId);
+    btn.setAttribute("aria-label", SLOT_TOOLTIPS[slotId] ? T(SLOT_TOOLTIPS[slotId]) : slotId);
     // Pflege 17 Tooltips 2026-05-26 (Klaus' Sichttest-Befund DeX-Chrome):
     // Browser-Standard-`title`-Tooltip auf rechten Slots (FREMD/SIEGEL/
     // Minimize/Close) zeigte sich doppelt auf Touch-Devices (Browser-
@@ -881,7 +982,7 @@
     }
     var label = doc.createElement("span");
     label.className = "sbkim-widget-label";
-    label.textContent = SLOT_LABELS[slotId] || slotId;
+    label.textContent = SLOT_LABELS[slotId] ? T(SLOT_LABELS[slotId]) : slotId;
     btn.appendChild(label);
     return btn;
   }
@@ -909,7 +1010,7 @@
     root.id = WIDGET_ID;
     root.className = "sbkim-widget";
     root.setAttribute("role", "complementary");
-    root.setAttribute("aria-label", "SBKIM Live-Status-Widget");
+    root.setAttribute("aria-label", T("SBKIM Live-Status-Widget"));
     // Pflege 17 UX 2026-05-25: Theme via data-theme-Attribut. Default "auto"
     // setzt das Attribut NICHT (gesteuert via :root-CSS-Variablen). Andere
     // Werte ("transparent", "light", "dark") aktivieren spezifische CSS-Regeln.
@@ -956,7 +1057,7 @@
     minimizeBtnEl = doc.createElement("button");
     minimizeBtnEl.type = "button";
     minimizeBtnEl.className = "sbkim-widget-btn sbkim-widget-minimize";
-    minimizeBtnEl.setAttribute("aria-label", "Widget minimieren — zeigt nur das SBKIM-Siegel. Erneuter Klick maximiert.");
+    minimizeBtnEl.setAttribute("aria-label", T("Widget minimieren — zeigt nur das SBKIM-Siegel. Erneuter Klick maximiert."));
     // Pflege 17 Tooltips 2026-05-26: kein title-Attribut (siehe buildSlotButton-Kommentar).
     minimizeBtnEl.textContent = minimizedFlag ? "+" : "−";
     minimizeBtnEl.addEventListener("click", function (ev) {
@@ -970,7 +1071,7 @@
       var closeBtn = doc.createElement("button");
       closeBtn.type = "button";
       closeBtn.className = "sbkim-widget-btn sbkim-widget-close";
-      closeBtn.setAttribute("aria-label", "Widget schließen — wiederherstellbar via SbkimWidget.show()");
+      closeBtn.setAttribute("aria-label", T("Widget schließen — wiederherstellbar via SbkimWidget.show()"));
       // Pflege 17 Tooltips 2026-05-26: kein title-Attribut.
       closeBtn.textContent = "✕";
       closeBtn.addEventListener("click", function (ev) {
@@ -1257,8 +1358,8 @@
       minimizeBtnEl.setAttribute(
         "aria-label",
         minimizedFlag
-          ? "Widget maximieren — zeigt alle vier Slots."
-          : "Widget minimieren — zeigt nur das SBKIM-Siegel. Erneuter Klick maximiert."
+          ? T("Widget maximieren — zeigt alle vier Slots.")
+          : T("Widget minimieren — zeigt nur das SBKIM-Siegel. Erneuter Klick maximiert.")
       );
       // Idempotent: removeAttribute ist no-op wenn nicht gesetzt.
       try { minimizeBtnEl.removeAttribute("title"); }
@@ -1585,11 +1686,11 @@
     header.className = "sbkim-widget-modal-header";
     var title = doc.createElement("h2");
     title.className = "sbkim-widget-modal-title";
-    title.textContent = "LEBT — Page-Status";
+    title.textContent = T("LEBT — Page-Status");
     var closeBtn = doc.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "sbkim-widget-modal-close";
-    closeBtn.setAttribute("aria-label", "Schließen");
+    closeBtn.setAttribute("aria-label", T("Schließen"));
     closeBtn.textContent = "✕";
     closeBtn.addEventListener("click", closeLebtModal);
     header.appendChild(title);
@@ -1647,11 +1748,11 @@
       } catch (_e) { /* nb */ }
     }
     var rows = [
-      ["Uptime",          uptimeText],
-      ["Modul-02 init",   moduleReady ? "ja" : "nein"],
-      ["nodeId-Präfix",   lebtNodeIdPrefix || "—"],
-      ["Events:alive",    String(eventCounts.alive)],
-      ["since (ISO)",     lebtSince || "—"],
+      [T("Uptime"),          uptimeText],
+      [T("Modul-02 init"),   moduleReady ? T("ja") : T("nein")],
+      [T("nodeId-Präfix"),   lebtNodeIdPrefix || "—"],
+      [T("Events:alive"),    String(eventCounts.alive)],
+      [T("since (ISO)"),     lebtSince || "—"],
     ];
     for (var i = 0; i < rows.length; i++) {
       var dt = doc.createElement("dt");
@@ -1700,11 +1801,11 @@
     header.className = "sbkim-widget-modal-header";
     var title = doc.createElement("h2");
     title.className = "sbkim-widget-modal-title";
-    title.textContent = "VERKEHR — letzte " + TRAFFIC_LOG_MAX + " Events";
+    title.textContent = T("VERKEHR — letzte ") + TRAFFIC_LOG_MAX + T(" Events");
     var closeBtn = doc.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "sbkim-widget-modal-close";
-    closeBtn.setAttribute("aria-label", "Schließen");
+    closeBtn.setAttribute("aria-label", T("Schließen"));
     closeBtn.textContent = "✕";
     closeBtn.addEventListener("click", closeVerkehrModal);
     header.appendChild(title);
@@ -1714,11 +1815,12 @@
     table.className = "sbkim-widget-traffic-table";
     table.innerHTML =
       "<thead><tr>" +
-      "<th>Zeit</th><th>Quelle</th><th>Richtung</th><th>Entscheidung</th>" +
+      "<th>" + escHtml(T("Zeit")) + "</th><th>" + escHtml(T("Quelle")) +
+      "</th><th>" + escHtml(T("Richtung")) + "</th><th>" + escHtml(T("Entscheidung")) + "</th>" +
       "</tr></thead><tbody data-widget-verkehr-tbody></tbody>";
 
     var tip = doc.createElement("p");
-    tip.textContent = "RAM-only FIFO — Tab-Reload leert die Liste.";
+    tip.textContent = T("RAM-only FIFO — Tab-Reload leert die Liste.");
     tip.style.cssText = "margin: 0.9rem 0 0; font-size: 0.78rem; color: rgba(245,245,255,0.55);";
 
     panel.appendChild(header);
@@ -1797,6 +1899,12 @@
     if (typeof opts.theme === "string" && ALLOWED_THEMES.indexOf(opts.theme) >= 0) {
       optTheme = opts.theme;
     }
+
+    // Sprache (2026-09-14). Nur "de"/"en" werden uebernommen; alles andere
+    // laesst optLang auf null, und dann entscheidet <html lang>. Kein
+    // Zuruecksetzen auf "de" bei einem unbekannten Wert — sonst schluege eine
+    // Falscheingabe die Seiten-Sprache, statt fail-soft daneben zu liegen.
+    if (opts.lang === "de" || opts.lang === "en") optLang = opts.lang;
     // Pflege 17 UX 2026-05-25: Theme via data-theme-Attribut am Widget-Root,
     // damit PWAs ihren eigenen Hintergrund anwenden können. `theme:"transparent"`
     // (NEU) macht den Hintergrund vollständig durchsichtig. Die CSS-Variablen
@@ -1947,6 +2055,8 @@
     getPosition: getPosition,
     _meta: {
       widgetId:        WIDGET_ID,
+      get lang()       { return sprache(); },
+      get langKeys()   { return Object.keys(TEXTE.en).length; },
       styleId:         STYLE_ID,
       trafficLogMax:   TRAFFIC_LOG_MAX,
       dragThresholdPx: DRAG_THRESHOLD_PX,
