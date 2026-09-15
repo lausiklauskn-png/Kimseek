@@ -1004,6 +1004,15 @@
   function isoDay() {
     try { return new Date().toISOString().slice(0, 10); } catch (_e) { return "heute"; }
   }
+  /* Der Kennungs-Teil eines Sicherungs-Namens, aus dem Identitäts-Stand.
+     base64url ist in Dateinamen unbedenklich (A–Z a–z 0–9 - _). Ist nichts
+     bekannt, bleibt der Name schlicht ohne Zusatz — nie „undefined". */
+  function kennungsTeil(st) {
+    if (!st) return "";
+    if (st.slots && st.slots.length > 1) return "_" + st.slots.length + "-Kennungen";
+    var s = (typeof st.nodeId === "string") ? st.nodeId.replace(/[^A-Za-z0-9\-_]/g, "") : "";
+    return s ? "_" + s.slice(0, 8) : "";
+  }
   // Liest den Identitäts-Stand, OHNE etwas anzulegen. `known:false` heißt „Modul
   // 02 fehlt / Lesen ging schief" — dann wird NICHT gefragt und der bisherige
   // Weg läuft unverändert weiter (keine neue Hürde durch ein Lese-Problem).
@@ -1172,8 +1181,15 @@
       if (pw !== String(p2.value || "")) { box.appendChild(idNote(T("Die beiden Passwörter sind nicht gleich."), true)); return; }
       go.disabled = true;
       box.appendChild(idNote(T("→ Verschlüssele die Sicherung … (das dauert bewusst einen Moment)"), false));
-      Promise.resolve(s.exportBackup(pw)).then(function (blob) {
-        var name = "sbkim-sicherung-" + (cfg.dbSuffix || "knoten") + "-" + isoDay() + ".json";
+      Promise.all([s.exportBackup(pw), readIdentityState()]).then(function (r) {
+        var blob = r[0], st = r[1];
+        /* ⚠ DER NAME NENNT DIE KENNUNG (Klaus 2026-09-15). Vorher stand dort nur
+           der Tag — zwei Sicherungen DESSELBEN Tages ergaben denselben Namen, und
+           der Browser hängte ein „_1" an. Bei MEHREREN Fächern eine Kennung
+           herauszugreifen wäre eine Behauptung darüber, welche die wichtige ist;
+           dann steht die Anzahl da. Der Name ist ein HINWEIS, kein Beweis. */
+        var name = "sbkim-sicherung-" + (cfg.dbSuffix || "knoten") + "-" + isoDay()
+          + kennungsTeil(st) + ".json";
         var ok = downloadJson(blob, name);
         saveBackupStamp(isoDay());
         refreshIdentityBox();
