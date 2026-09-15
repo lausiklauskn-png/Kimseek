@@ -75,6 +75,9 @@
     "Im Feld steht der Vorschlag dieser App. Dein zuletzt signierter Text war ein anderer — er bleibt in deiner Spore, bis du neu signierst.",
     "Im Feld steht jetzt dein zuletzt signierter Text.",
     "↺ Meinen zuletzt signierten Text zurückholen",
+    "Im Feld steht dein zuletzt signierter Text. Die App schlägt inzwischen einen anderen vor.",
+    "↻ Den Vorschlag der App ansehen",
+    "Im Feld steht jetzt der Vorschlag dieser App.",
     "Je konkreter, desto besser findet dich das Mycel. Beschreibe in eigenen Worten: was die App/Seite ist, wofür man sie nutzt, welche Themen/Stichworte sie abdeckt, für wen sie gedacht ist. Ein gut gefüllter Absatz (ca. 3–8 Sätze) ist ideal — gern auch die README hineinkopieren. Vermeide reine Schlagwort-Listen ohne Kontext.",
     "Beschreibung übernehmen → Vektor & Spore neu signieren",
     "Bitte zuerst eine Beschreibung eintippen.",
@@ -86,7 +89,13 @@
     "Erzeuge Satz-Schnipsel (v0.2) …",
     "Signiere Spore …",
     "Spore neu signiert + ⬇  ·  nodeId={0}. Datei nach sbkim/spore.json committen.",
+    "Berechne den Vektor aus {0} eigenen Inhalten …",
+    "Spore neu signiert + ⬇  ·  nodeId={0}  ·  Vektor aus {1} eigenen Inhalten. Datei nach sbkim/spore.json committen.",
+    "Dein Vektor kommt aus deinen eigenen Inhalten ({0} Einträge) — nicht aus dem Text oben. So wirst du nach dem gefunden, was wirklich bei dir steht.",
     "Fehler: {0}",
+    /* Dateinamens-Bestandteil, wenn eine Sicherung MEHRERE Kennungen trägt.
+       Steht hier, weil der Nutzer ihn liest — an seinem Dateinamen. */
+    "_{0}-Kennungen",
     /* Schutz-Block */
     "🛡 Was bedeutet dieses Siegel — und wie bist du geschützt?",
     "Das Siegel ist selbst-ausgestellt: der Knoten hat beim Start geprüft, dass seine Schutz-Bausteine geladen sind, und zeigt das offen. Es wandern nur Daten, nie Programme; dein privater Schlüssel verlässt diesen Browser nie. Kein Server in der Mitte, keine Anmeldung.",
@@ -189,15 +198,89 @@
   /* Sprechender Download-Name für die Spore (Klaus 2026-07-23, netzweit): statt
    * immer nur spore.json wird der App-Name + Datum eingesetzt. Ziel im Repo
    * bleibt sbkim/spore.json. */
-  function sporeFileName() {
+  /* ⚠ DER NAME NENNT DIE KENNUNG UND EIN SORTIERBARES DATUM (Klaus 2026-09-15:
+     „vielleicht über die Dateibezeichnung schon erkennt, welche Spore oder ID
+     oder beides"). Vorher stand dort <Name>_spore_TT_MM_JJ.json — zwei Läufe
+     DESSELBEN Tages ergaben denselben Namen, und der Browser hängte ein „_1" an.
+     Genau so lagen am 2026-09-15 zwei WorkFloh-Sporen nebeneinander; welche die
+     neuere war, stand NUR im Inhalt (13:03 gegen 14:04).
+     ⚠ Der Name ist ein HINWEIS, kein Beweis — er lässt sich umbenennen. Geprüft
+     wird weiter der Inhalt: id == base64url(SHA256(rawPub)). */
+  function sporeFileName(nodeId) {
     var c = cfg() || {};
     var d = new Date();
     var p = function (n) { return (n < 10 ? "0" : "") + n; };
-    var stamp = p(d.getDate()) + "_" + p(d.getMonth() + 1) + "_" + String(d.getFullYear()).slice(-2);
+    var stamp = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
     var base = String(c.nodeName || "SBKIM").replace(/[^\w\-]+/g, "_").replace(/^_+|_+$/g, "");
-    return base + "_spore_" + stamp + ".json";
+    return base + "_spore_" + stamp + kennungsTeil(nodeId) + ".json";
+  }
+
+  /* base64url ist in einem Dateinamen unbedenklich (A–Z a–z 0–9 - _). Fehlt die
+     Kennung, bleibt der Name schlicht ohne sie — nie „undefined" im Dateinamen. */
+  function kennungsTeil(nodeId) {
+    var s = (typeof nodeId === "string") ? nodeId.replace(/[^A-Za-z0-9\-_]/g, "") : "";
+    return s ? "_" + s.slice(0, 8) : "";
+  }
+
+  /* Wie viele Kennungen in einer Sicherung stecken — und welche, wenn es genau
+     eine ist. Bei MEHREREN eine herauszugreifen wäre eine Behauptung darüber,
+     welche die wichtige ist; dann steht die Anzahl da. Fail-soft: im Zweifel
+     gar kein Zusatz statt einer falschen Angabe. */
+  function sicherungsKennung() {
+    if (!window.SbkimSpore || typeof window.SbkimSpore.listIdentities !== "function") {
+      return Promise.resolve("");
+    }
+    return window.SbkimSpore.listIdentities().then(function (ids) {
+      if (!ids || !ids.length) return "";
+      if (ids.length > 1) return Tf("_{0}-Kennungen", ids.length);
+      if (typeof window.SbkimSpore.getOrCreateIdentity !== "function") return "";
+      return window.SbkimSpore.getOrCreateIdentity(ids[0])
+        .then(function (id) { return kennungsTeil(id && id.nodeId); });
+    }).catch(function () { return ""; });
   }
   function autoGrow(ta) { if (!ta) return; ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; }
+
+  /* ── Hat der Nutzer je EINEN EIGENEN Text signiert? ─────────────────────
+   *
+   * ⚠ WOZU DAS DA IST (Klaus 2026-09-15): „wenn ich die App aktualisiere und
+   * auch das Siegel … dann würde die Sporenbeschreibung des Nutzers
+   * überschrieben." Ein App-Update fasst die Spore NICHT an — aber es füllt das
+   * Textfeld mit dem neuen Vorschlag vor, und wer danach neu signiert, ohne
+   * hinzusehen, überschreibt seinen eigenen Text.
+   *
+   * Die Regel vom 2026-09-10 („der Vorschlag der App gewinnt") war richtig für
+   * Klaus' EIGENE Apps, wo der App-Text der gepflegte ist. Für einen fremden
+   * Nutzer mit eigenen Inhalten ist sie genau falsch herum. Statt die Module
+   * einzufrieren — dann käme nie wieder ein Sicherheits-Update an — wird die
+   * Frage genauer gestellt: wer zuletzt SELBST geschrieben hat, behält sein Wort.
+   *
+   * ⚠ DER SCHLÜSSEL IST APP-SPEZIFISCH. github.io ist eine GETEILTE Adresse;
+   * ein gemeinsamer Schlüssel ließe die Nachbar-App mitentscheiden. */
+  function eigenTextSchluessel() {
+    var c = cfg() || {};
+    var app = String(c.backupPrefix || c.nodeName || "sbkim").replace(/[^\w\-]+/g, "_");
+    return "sbkim_eigener_text_" + app;
+  }
+  function hatEigenenText() {
+    try { return window.localStorage.getItem(eigenTextSchluessel()) === "ja"; } catch (e) { return false; }
+  }
+  /* Beim Signieren gesetzt: war der unterschriebene Text der Vorschlag der App
+     (dann „nein"), oder hat der Nutzer ihn angefasst (dann „ja")? */
+  function merkeEigenenText(beschreibung) {
+    var c = cfg() || {};
+    var eigen = String(beschreibung || "").trim() !== String(c.domainDescription || "").trim();
+    try { window.localStorage.setItem(eigenTextSchluessel(), eigen ? "ja" : "nein"); } catch (e) { /* fail-soft */ }
+  }
+
+  /* Das aktive Identitäts-Fach. Fehlt Modul 02 die Funktion (ältere Generation),
+     kommt `undefined` zurück — getOrCreateIdentity fällt dann auf seinen eigenen
+     Default zurück, also genau auf das bisherige Verhalten. Fail-soft, kein Wurf. */
+  function aktivesFach() {
+    if (!window.SbkimSpore || typeof window.SbkimSpore.getActiveIdentityKey !== "function") {
+      return Promise.resolve(undefined);
+    }
+    return window.SbkimSpore.getActiveIdentityKey().catch(function () { return undefined; });
+  }
 
   /* ── Injektion ins Siegel-Modal ─────────────────────────────────────── */
   function injectIntoSiegel(modal) {
@@ -299,6 +382,25 @@
           var abweichend = !!eigener.trim()
             && eigener.trim() !== String(c.domainDescription || "").trim();
           if (!abweichend) return;
+          /* ⚠ WER GEWINNT, HÄNGT DARAN, WER ZULETZT GESCHRIEBEN HAT. Hat der
+             Nutzer den Text selbst angefasst, steht SEINER im Feld und der neue
+             App-Vorschlag hinter dem Knopf — sonst umgekehrt. Beide Richtungen
+             sind erreichbar, und die Zeile darüber nennt jedes Mal, welcher
+             gerade dasteht; ein stiller Tausch wäre schlimmer als ein falscher. */
+          if (hatEigenenText()) {
+            ta.value = eigener; autoGrow(ta);
+            herkunft.setAttribute("data-woher", "spore");
+            herkunft.textContent = T("Im Feld steht dein zuletzt signierter Text. Die App schlägt inzwischen einen anderen vor.");
+            zurueck.textContent = T("↻ Den Vorschlag der App ansehen");
+            zurueck.hidden = false;
+            zurueck.addEventListener("click", function () {
+              ta.value = String(c.domainDescription || ""); autoGrow(ta);
+              herkunft.setAttribute("data-woher", "app");
+              herkunft.textContent = T("Im Feld steht jetzt der Vorschlag dieser App.");
+              zurueck.hidden = true;
+            });
+            return;
+          }
           herkunft.textContent = T("Im Feld steht der Vorschlag dieser App. Dein zuletzt signierter Text war ein anderer — er bleibt in deiner Spore, bis du neu signierst.");
           zurueck.hidden = false;
           zurueck.addEventListener("click", function () {
@@ -326,18 +428,88 @@
     out.style.cssText = "margin:0.6rem 0 0;font-family:monospace;font-size:0.78rem;line-height:1.5;color:#6ee7d3;word-break:break-word;";
     btn.addEventListener("click", function () { reSignWithDescription(ta, btn, out); });
 
+    /* ⚠ WORAUS DER VEKTOR GERECHNET WIRD — steht da, BEVOR gedrückt wird.
+       Liefert die App eigene Inhalte, entscheidet der Inhalt und nicht der Text
+       im Feld darüber. Das ist gewollt (Rangfolge vom 2026-06-28), aber es wäre
+       eine Überraschung, wenn es niemand sagt: derselbe Knopf, dieselbe
+       Beschreibung, eine andere Messgrundlage. */
+    var proben = inhaltsSchnipsel();
+    var vektorzeile = null;
+    if (proben.length) {
+      vektorzeile = document.createElement("p");
+      vektorzeile.id = "sbkim-si-semantik-vektorquelle";
+      vektorzeile.setAttribute("data-vektor", "content");
+      vektorzeile.style.cssText = "margin:0.5rem 0 0;font-size:0.78rem;line-height:1.45;color:#6ee7d3;";
+      vektorzeile.textContent = Tf("Dein Vektor kommt aus deinen eigenen Inhalten ({0} Einträge) — nicht aus dem Text oben. So wirst du nach dem gefunden, was wirklich bei dir steht.", proben.length);
+    }
+
     wrap.appendChild(label);
     wrap.appendChild(herkunft); wrap.appendChild(zurueck);
     wrap.appendChild(ta);
-    wrap.appendChild(hint); wrap.appendChild(btn); wrap.appendChild(out);
+    wrap.appendChild(hint);
+    if (vektorzeile) wrap.appendChild(vektorzeile);
+    wrap.appendChild(btn); wrap.appendChild(out);
     setTimeout(function () { autoGrow(ta); }, 0);
     return wrap;
+  }
+
+  /* ── Der Vektor: INHALT schlägt Selbstbeschreibung ──────────────────────
+   *
+   * ⚠ DER BEFUND, DER DAS NÖTIG MACHTE (gemessen 2026-09-15): es gibt ZWEI Wege
+   * zur Spore, und sie betteten Verschiedenes ein. Die stille Erst-Anmeldung
+   * (sbkim-connect.js) rechnete den Vektor aus `sampleContent()` — den ECHTEN
+   * Inhalten der App —, dieser Weg hier ausschließlich aus der Beschreibung.
+   * Für einen fremden Nutzer, der Mein Rezeptbuch mit SEINEN Rezepten füllt,
+   * hieß das: die erste Anmeldung war richtig, und in dem Moment, in dem er im
+   * Siegel neu signierte, VERLOR er seinen Inhalts-Vektor und bekam die
+   * Beschreibung der fremden App. Sein Knoten kündigte danach ein Thema an, das
+   * ihm nicht gehört.
+   *
+   * Die Rangfolge ist NICHT neu erfunden, sondern die vom 2026-06-28: „wenn
+   * echte Inhalte vorhanden sind, entscheidet der INHALT statt der
+   * Selbstbeschreibung." Beide Wege fahren sie jetzt.
+   *
+   * ⚠ WER KEINE `sampleContent` HAT, MERKT NICHTS. Ohne die Funktion bleibt
+   * alles wie bisher — deshalb braucht es für Apps, bei denen der Inhalt nichts
+   * über den Nutzer sagt (Buchhaltung) oder gar nicht vorliegt, keine Sperre.
+   * Eine Sperre, die nichts sperrt, sieht aus wie Schutz. */
+  function inhaltsSchnipsel() {
+    var c = cfg() || {};
+    if (typeof c.sampleContent !== "function") return [];
+    try {
+      var s = c.sampleContent();
+      if (!Array.isArray(s)) return [];
+      return s.filter(function (x) { return x && String(x).trim().length; });
+    } catch (e) { return []; }   // eine App, die wirft, verliert nur den Inhalts-Weg
+  }
+
+  /* Liefert { vec, quelle, anzahl }. `quelle` wandert als embeddingSource in die
+     Spore. Der Rückfall auf die Beschreibung ist in BEIDE Richtungen fail-soft:
+     keine Schnipsel ODER ein Fehler beim Rechnen → Beschreibung, kein Abbruch. */
+  function vektorFuerSpore(beschreibung, say) {
+    var proben = inhaltsSchnipsel();
+    function ausBeschreibung() {
+      say(T("Berechne semantischen Vektor (384-dim) …"));
+      return window.SbkimEmbedding.embedPassage(beschreibung)
+        .then(function (v) { return { vec: v, quelle: "description", anzahl: 0 }; });
+    }
+    if (!proben.length || typeof window.SbkimEmbedding.embedContentVector !== "function") {
+      return ausBeschreibung();
+    }
+    say(Tf("Berechne den Vektor aus {0} eigenen Inhalten …", proben.length));
+    return window.SbkimEmbedding.embedContentVector(proben)
+      .then(function (res) {
+        if (!res || !res.vector) return ausBeschreibung();
+        return { vec: res.vector, quelle: "content", anzahl: proben.length };
+      })
+      .catch(function () { return ausBeschreibung(); });
   }
 
   function reSignWithDescription(ta, btn, out) {
     var c = cfg() || {};
     function say(msg, bad) { out.textContent = msg; out.style.color = bad ? "#e5484d" : "#6ee7d3"; }
     var beschreibung = (ta.value || "").trim();
+    var gewaehlteQuelle = "description", gewaehlteAnzahl = 0;
     if (!beschreibung) { say(T("Bitte zuerst eine Beschreibung eintippen."), true); return; }
     if (!window.SbkimSpore || !window.SbkimEmbedding) { say(T("Module 02/03 nicht geladen."), true); return; }
     btn.disabled = true;
@@ -348,32 +520,50 @@
     };
     window.addEventListener("sbkim:embedding-progress", onProg);
     say(T("Erzeuge / lade Identität …"));
-    window.SbkimSpore.getOrCreateIdentity()
+    /* ⚠ Das AKTIVE Fach, nicht hart "main" — dieselbe Falle wie in Schritt 1 des
+       Wizards. generateOwnSpore unten signiert mit dem aktiven; ohne diese Zeile
+       meldete die Statuszeile eine andere nodeId als die, die danach unterschrieb. */
+    aktivesFach().then(function (fach) { return window.SbkimSpore.getOrCreateIdentity(fach); })
       .then(function (id) { say(Tf("Identität: {0} — initialisiere Embedding …", id.nodeId)); return window.SbkimEmbedding.init(); })
-      .then(function () { say(T("Berechne semantischen Vektor (384-dim) …")); return window.SbkimEmbedding.embedPassage(beschreibung); })
-      .then(function (vec) {
-        var arr = Array.from(vec);
+      .then(function () { return vektorFuerSpore(beschreibung, say); })
+      .then(function (v) {
+        var arr = Array.from(v.vec);
         /* A10 „Schnipsel-Mittel" (Spore v0.2): die Beschreibung zusätzlich SATZ-
            weise einbetten → snippetVectors. Fail-soft: schlägt es fehl, wird ohne
-           Schnipsel weiter signiert (v0.2 bleibt). Reine Anzeige, gatet nichts. */
+           Schnipsel weiter signiert (v0.2 bleibt). Reine Anzeige, gatet nichts.
+           Bleibt die BESCHREIBUNG, auch wenn der Haupt-Vektor aus dem Inhalt kommt:
+           die Schnipsel beantworten eine andere Frage (welcher SATZ passt zur
+           Frage), und ein Rezept-Name ist kein Satz. */
         say(T("Erzeuge Satz-Schnipsel (v0.2) …"));
-        if (!window.SbkimEmbedding.embedSnippets) return { arr: arr, snippetVectors: [] };
+        if (!window.SbkimEmbedding.embedSnippets) return { arr: arr, snippetVectors: [], quelle: v.quelle, anzahl: v.anzahl };
         return window.SbkimEmbedding.embedSnippets(beschreibung)
-          .then(function (snips) { return { arr: arr, snippetVectors: (snips || []).map(function (s) { return { vec: Array.from(s.vec), text: s.text }; }) }; })
-          .catch(function () { return { arr: arr, snippetVectors: [] }; });
+          .then(function (snips) { return { arr: arr, snippetVectors: (snips || []).map(function (s) { return { vec: Array.from(s.vec), text: s.text }; }), quelle: v.quelle, anzahl: v.anzahl }; })
+          .catch(function () { return { arr: arr, snippetVectors: [], quelle: v.quelle, anzahl: v.anzahl }; });
       })
       .then(function (r) {
         say(T("Signiere Spore …"));
+        gewaehlteQuelle = r.quelle; gewaehlteAnzahl = r.anzahl;
         return window.SbkimSpore.generateOwnSpore({
           domain: c.domain, endpoint: c.endpoint, nodeType: c.nodeType, nodeName: c.nodeName,
           domainDescription: beschreibung, domainKeywords: c.domainKeywords,
           domainVector: r.arr, snippetVectors: r.snippetVectors,
           stammCategories: c.stammCategories, guestCategories: c.guestCategories,
+          /* Sagt der Spore selbst, WORAUS ihr Vektor gerechnet ist. Ohne das Feld
+             sieht eine inhalts-getriebene Spore wie eine beschreibungs-getriebene
+             aus, und wer die Zahlen über die Zeit vergleicht, vergleicht zwei
+             verschiedene Maßstäbe, ohne es zu merken. */
+          embeddingSource: r.quelle,
         });
       })
       .then(function (spore) {
-        lastSpore = spore; downloadJson(sporeFileName(), spore);
-        say(Tf("Spore neu signiert + ⬇  ·  nodeId={0}. Datei nach sbkim/spore.json committen.", spore.id));
+        lastSpore = spore; downloadJson(sporeFileName(spore && spore.id), spore);
+        merkeEigenenText(beschreibung);
+        /* ⚠ ES STEHT DRAN, WORAUS DER VEKTOR KAM. Ohne diesen Satz wäre der
+           Wechsel der Messgrundlage still — und still ist hier schlimmer als
+           falsch: dieselbe Kennung, dieselbe Beschreibung, eine andere Zahl. */
+        say(gewaehlteQuelle === "content"
+          ? Tf("Spore neu signiert + ⬇  ·  nodeId={0}  ·  Vektor aus {1} eigenen Inhalten. Datei nach sbkim/spore.json committen.", spore.id, gewaehlteAnzahl)
+          : Tf("Spore neu signiert + ⬇  ·  nodeId={0}. Datei nach sbkim/spore.json committen.", spore.id));
       })
       .catch(function (e) { say(Tf("Fehler: {0}", (e && e.message) || e), true); })
       .then(function () { window.removeEventListener("sbkim:embedding-progress", onProg); btn.disabled = false; });
@@ -493,7 +683,15 @@
       var b = dlg.querySelector("#sbwiz-s1");
       if (!window.SbkimSpore || !window.SbkimSpore.getOrCreateIdentity) { out("#sbwiz-o1", T("Modul 02 nicht geladen."), true); return; }
       b.disabled = true; out("#sbwiz-o1", T("Erzeuge Identität …"));
-      window.SbkimSpore.getOrCreateIdentity().then(function (id) {
+      /* ⚠ DAS AKTIVE FACH, NICHT HART "main". getOrCreateIdentity() ohne Argument
+         trifft immer DEFAULT_IDENTITY_KEY; Schritt 2 signiert dagegen mit dem
+         AKTIVEN Fach (generateOwnSpore → getActiveIdentityKey). Nach einem
+         Identitäts-Wechsel bedienten die zwei Knöpfe desselben Fensters damit
+         ZWEI VERSCHIEDENE Identitäten: Schritt 1 meldete eine nodeId, Schritt 2
+         signierte eine andere. Gemessen am 2026-09-15. */
+      aktivesFach().then(function (fach) {
+        return window.SbkimSpore.getOrCreateIdentity(fach);
+      }).then(function (id) {
         out("#sbwiz-o1", Tf("nodeId: {0}", id.nodeId)); dlg.querySelector("#sbwiz-s2").disabled = false;
         /* Schritt 5 nachziehen. Ohne das behauptet der Wechsler weiter „Noch
            keine Identität", obwohl gerade eine angelegt wurde — er wurde bisher
@@ -546,7 +744,7 @@
           });
         })
         .then(function (spore) {
-          lastSpore = spore; downloadJson(sporeFileName(), spore);
+          lastSpore = spore; downloadJson(sporeFileName(spore && spore.id), spore);
           out("#sbwiz-o2", Tf("Spore erzeugt + ⬇ (nodeId={0}). Nach sbkim/spore.json committen.", spore.id));
           dlg.querySelector("#sbwiz-s3").disabled = false;
           /* Auch hier nachziehen: der Wechsler zeigt je Fach die Kennung, und die
@@ -569,9 +767,10 @@
       if (!pw) { out("#sbwiz-o3", T("Abgebrochen — kein Passwort."), true); return; }
       var b = dlg.querySelector("#sbwiz-s3"); b.disabled = true;
       out("#sbwiz-o3", T("Erzeuge Backup (PBKDF2 600k + AES-GCM-256) …"));
-      window.SbkimSpore.exportBackup(pw).then(function (blob) {
+      Promise.all([window.SbkimSpore.exportBackup(pw), sicherungsKennung()]).then(function (r) {
+        var blob = r[0], kennung = r[1];
         var praefix = c.backupPrefix || "sbkim-backup";
-        downloadJson(praefix + "-" + new Date().toISOString().replace(/[:.]/g, "-") + ".sbkim.json", blob);
+        downloadJson(praefix + "-" + new Date().toISOString().replace(/[:.]/g, "-") + kennung + ".sbkim.json", blob);
         out("#sbwiz-o3", T("Backup ⬇ — Datei + Passwort sicher aufbewahren."));
       }).catch(function (e) { out("#sbwiz-o3", Tf("Fehler: {0}", (e && e.message) || e), true); b.disabled = false; });
     });
@@ -695,7 +894,21 @@
     window.SbkimSpore.setActiveIdentity(key).then(function () {
       if (o) o.textContent = Tf("✔ Aktive Identität gewechselt zu {0}. Die nächste Spore-Signatur nutzt diese nodeId.", key);
       refreshWizardIdentities();
+      /* ⚠ DER SEMANTIK-BLOCK ZIEHT SONST NICHT NACH. Er wird EINMAL gebaut und
+         liest getOwnSpore() genau einmal dabei — nach einem Wechsel stand dort
+         weiter der Vergleich des VORIGEN Fachs, also die Herkunfts-Zeile und der
+         „↺ zurückholen"-Knopf einer fremden Identität. Gemessen am 2026-09-15. */
+      redrawSemantikBlock();
     }).catch(function (err) { if (o) o.textContent = Tf("Wechsel fehlgeschlagen: {0}", (err && err.message) || err); });
+  }
+
+  /* Den Semantik-Block gegen einen frisch gebauten tauschen. Nicht „aktualisieren":
+     der Block liest seinen Zustand beim Bauen, also ist Neubauen die eine Stelle,
+     an der die Herkunfts-Logik steht. Zwei Fassungen liefen sonst auseinander. */
+  function redrawSemantikBlock() {
+    var alt = document.getElementById("sbkim-si-semantik-block");
+    if (!alt || !alt.parentNode) return;   // fail-soft: kein Siegel offen, nichts zu tun
+    alt.parentNode.replaceChild(buildSemantikBlock(), alt);
   }
 
   function openWizard() {
