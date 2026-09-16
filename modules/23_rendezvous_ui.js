@@ -212,6 +212,10 @@
         "Fetch an identifier back from a backup file",
       "Kennung in eine verschlüsselte Datei sichern":
         "Back the identifier up into an encrypted file",
+      "Eine Kennung, eine Spore: im Siegel signierst du dieselbe. Einmal genügt.":
+        "One identity, one spore: in the seal you sign that very same one. Once is enough.",
+      "\nDas ist dieselbe Sicherung wie im Siegel — eine Datei genügt.":
+        "\nThis is the same backup as the one in the seal — one file is enough.",
       "Letzte Sicherung: ":
         "Last backup: ",
       "MODUL 23 UI RENDEZVOUS-KNOPF bereit (öffentlich, app-agnostisch), Funktionen: init/show/hide/isOpen":
@@ -1068,6 +1072,21 @@
       } else {
         lines.push(T("Letzte Sicherung: ") + stamp + T(" (nur hier vermerkt — die Datei selbst musst du aufbewahren)."));
       }
+      /* ⚠ EINE KENNUNG, EINE SPORE — und das gehoert HINGESCHRIEBEN.
+         Es gibt zwei Orte, an denen signiert wird: die Anmeldung hinter
+         „Mit dem Knotennetz verbinden" und Schritt 2 im Siegel. Beide rufen
+         `generateOwnSpore` OHNE Fach-Angabe, und Modul 02 nimmt dann das
+         aktive — gemessen am 2026-09-16. Es entsteht also nie ein zweiter
+         Eintrag im Netz; der zweite Klick ueberschreibt den ersten.
+         Wer das nicht weiss, signiert an beiden Stellen und glaubt, er haette
+         zwei Knoten. Dieselbe Verwechslung wie bei der Sicherung, nur eine
+         Ebene tiefer.
+         ⚠ NUR MIT KENNUNG. Steht noch keine da, beantwortet der Satz eine
+         Frage, die der Nutzer noch gar nicht hat — und verdraengt die Zeile,
+         die ihm sagt, was als Naechstes zu tun ist. */
+      if (st.nodeId) {
+        lines.push(T("Eine Kennung, eine Spore: im Siegel signierst du dieselbe. Einmal genügt."));
+      }
       // Der Aufräum-Knopf erscheint NUR, wenn es mehr als ein Fach gibt. Sonst
       // stünde ein Knopf da, der nichts zu tun hat — und der sich mit dem
       // Alt-Speicher-Aufräumen weiter unten verwechseln ließe.
@@ -1194,7 +1213,12 @@
         saveBackupStamp(isoDay());
         refreshIdentityBox();
         setIdForm(idNote(ok
-          ? T("✓ Sicherung erzeugt: ") + name + T("\nBewahre die Datei getrennt vom Gerät auf. Mit ihr und dem Passwort ist eine verlorene Kennung wiederherstellbar.")
+          /* ⚠ DIESELBE DATEI WIE IM SIEGEL. Beide Wege rufen dasselbe
+             `SbkimSpore.exportBackup` — wer hier und dort drueckt, hat zwei
+             Dateien mit gleichem Inhalt und haelt sie fuer zwei Sicherungen.
+             Der Vermerk „Letzte Sicherung" zieht seit dem 2026-09-16 aus
+             beiden Wegen nach; gesagt wurde es bis jetzt nirgends. */
+          ? T("✓ Sicherung erzeugt: ") + name + T("\nBewahre die Datei getrennt vom Gerät auf. Mit ihr und dem Passwort ist eine verlorene Kennung wiederherstellbar.") + T("\nDas ist dieselbe Sicherung wie im Siegel — eine Datei genügt.")
           : T("✓ Sicherung erzeugt, aber der Download ging in diesem Browser nicht. Bitte nochmal versuchen."), !ok));
       }).catch(function (e) {
         go.disabled = false;

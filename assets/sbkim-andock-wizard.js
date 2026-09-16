@@ -152,12 +152,12 @@
       "<b>Create identity</b> — Ed25519 key pair, nodeId derived from the public key.",
     "Identität erzeugen":
       "Create identity",
-    "<b>Spore signieren + herunterladen</b> — mit echtem 384-dim domainVector.":
-      "<b>Sign + download spore</b> — with a real 384-dim domainVector.",
+    "<b>Spore signieren + herunterladen</b> — mit echtem 384-dim domainVector. Dieselbe Spore wie im Verbinden-Fenster: eine Kennung, ein Eintrag im Netz. Du signierst hier ODER dort, nicht in beiden.":
+      "<b>Sign + download spore</b> — with a real 384-dim domainVector. The very same spore as in the connect window: one identity, one entry in the network. You sign here OR there, not in both.",
     "Spore erzeugen + ⬇":
       "Create spore + ⬇",
-    "<b>Verschlüsseltes Backup</b> — Passwort-Sicherung (AES-256-GCM/PBKDF2 600k) gegen IndexedDB-Verlust.":
-      "<b>Encrypted backup</b> — password-protected copy (AES-256-GCM/PBKDF2 600k) against losing IndexedDB.",
+    "<b>Verschlüsseltes Backup</b> — Passwort-Sicherung (AES-256-GCM/PBKDF2 600k) gegen IndexedDB-Verlust. Dieselbe Sicherung wie im Verbinden-Fenster: zweimal drücken ergibt zwei Dateien mit gleichem Inhalt.":
+      "<b>Encrypted backup</b> — password-protected copy (AES-256-GCM/PBKDF2 600k) against losing IndexedDB. The very same backup as in the connect window: pressing twice gives you two files with identical contents.",
     "Backup erzeugen + ⬇":
       "Create backup + ⬇",
     "<b>Identität wiederherstellen</b> — Backup-Datei (Schritt 3) + Passwort zurückspielen: Schlüssel <em>und</em> Spore landen wieder in der Browser-IndexedDB. Auch auf neuem Gerät.":
@@ -184,10 +184,10 @@
       "Model loaded ✓",
     "Lade Embedding-Modell (~30 MB, einmalig) …":
       "Loading embedding model (~30 MB, once) …",
-    "Erzeuge domainVector (384) …":
-      "Creating domainVector (384) …",
     "Spore erzeugt + ⬇ (nodeId={0}). Nach sbkim/spore.json committen.":
       "Spore created + ⬇ (nodeId={0}). Commit it to sbkim/spore.json.",
+    "Spore erzeugt + ⬇ (nodeId={0})  ·  Vektor aus {1} eigenen Inhalten. Nach sbkim/spore.json committen.":
+      "Spore created + ⬇ (nodeId={0})  ·  vector from {1} of your own entries. Commit it to sbkim/spore.json.",
     "Modul 02 exportBackup fehlt.":
       "Module 02 exportBackup is missing.",
     "Backup-Passwort (mind. 8 Zeichen, KEIN Reset möglich):":
@@ -293,9 +293,9 @@
     "Erzeugt eine SBKIM-Identität <b>im Browser</b> (Ed25519, IndexedDB) — der private Schlüssel verlässt diesen Browser nie. Notfall-tauglich: jederzeit eine <b>neue</b> Spore/Identität erzeugen und sichern. Erstes Embedding lädt ~30 MB (Modul 03, einmalig).",
     "<b>Identität erzeugen</b> — Ed25519-Schlüsselpaar, nodeId aus dem Public Key.",
     "Identität erzeugen",
-    "<b>Spore signieren + herunterladen</b> — mit echtem 384-dim domainVector.",
+    "<b>Spore signieren + herunterladen</b> — mit echtem 384-dim domainVector. Dieselbe Spore wie im Verbinden-Fenster: eine Kennung, ein Eintrag im Netz. Du signierst hier ODER dort, nicht in beiden.",
     "Spore erzeugen + ⬇",
-    "<b>Verschlüsseltes Backup</b> — Passwort-Sicherung (AES-256-GCM/PBKDF2 600k) gegen IndexedDB-Verlust.",
+    "<b>Verschlüsseltes Backup</b> — Passwort-Sicherung (AES-256-GCM/PBKDF2 600k) gegen IndexedDB-Verlust. Dieselbe Sicherung wie im Verbinden-Fenster: zweimal drücken ergibt zwei Dateien mit gleichem Inhalt.",
     "Backup erzeugen + ⬇",
     "<b>Identität wiederherstellen</b> — Backup-Datei (Schritt 3) + Passwort zurückspielen: Schlüssel <em>und</em> Spore landen wieder in der Browser-IndexedDB. Auch auf neuem Gerät.",
     "Backup-Datei wählen + wiederherstellen",
@@ -311,8 +311,8 @@
     "Modell lädt  {0}  {1} %  (~30 MB einmalig)",
     "Modell geladen ✓",
     "Lade Embedding-Modell (~30 MB, einmalig) …",
-    "Erzeuge domainVector (384) …",
     "Spore erzeugt + ⬇ (nodeId={0}). Nach sbkim/spore.json committen.",
+    "Spore erzeugt + ⬇ (nodeId={0})  ·  Vektor aus {1} eigenen Inhalten. Nach sbkim/spore.json committen.",
     /* Schritt 3 */
     "Modul 02 exportBackup fehlt.",
     "Backup-Passwort (mind. 8 Zeichen, KEIN Reset möglich):",
@@ -845,9 +845,9 @@
       '<ol style="padding-left:1.1rem;line-height:1.5;font-size:.9rem">' +
         schritt(1, T("<b>Identität erzeugen</b> — Ed25519-Schlüsselpaar, nodeId aus dem Public Key."),
           '<button type="button" id="sbwiz-s1" style="' + KNOPF_CSS + '">' + T("Identität erzeugen") + '</button>') +
-        schritt(2, T("<b>Spore signieren + herunterladen</b> — mit echtem 384-dim domainVector."),
+        schritt(2, T("<b>Spore signieren + herunterladen</b> — mit echtem 384-dim domainVector. Dieselbe Spore wie im Verbinden-Fenster: eine Kennung, ein Eintrag im Netz. Du signierst hier ODER dort, nicht in beiden."),
           '<button type="button" id="sbwiz-s2" disabled style="' + KNOPF_CSS + '">' + T("Spore erzeugen + ⬇") + '</button>') +
-        schritt(3, T("<b>Verschlüsseltes Backup</b> — Passwort-Sicherung (AES-256-GCM/PBKDF2 600k) gegen IndexedDB-Verlust."),
+        schritt(3, T("<b>Verschlüsseltes Backup</b> — Passwort-Sicherung (AES-256-GCM/PBKDF2 600k) gegen IndexedDB-Verlust. Dieselbe Sicherung wie im Verbinden-Fenster: zweimal drücken ergibt zwei Dateien mit gleichem Inhalt."),
           '<button type="button" id="sbwiz-s3" disabled style="' + KNOPF_CSS + '">' + T("Backup erzeugen + ⬇") + '</button>') +
         schritt(4, T("<b>Identität wiederherstellen</b> — Backup-Datei (Schritt 3) + Passwort zurückspielen: Schlüssel <em>und</em> Spore landen wieder in der Browser-IndexedDB. Auch auf neuem Gerät."),
           '<button type="button" id="sbwiz-s4" style="' + KNOPF_CSS + '">' + T("Backup-Datei wählen + wiederherstellen") + '</button>',
@@ -908,10 +908,28 @@
       window.addEventListener("sbkim:embedding-progress", onProg);
       out("#sbwiz-o2", T("Lade Embedding-Modell (~30 MB, einmalig) …"));
       var quelle = String(c.domainDescription || "") + ". " + (c.domainKeywords || []).join(", ");
+      /* ⚠ DERSELBE WEG WIE „NEU SIGNIEREN" — DER INHALT SCHLÄGT DIE
+         SELBSTBESCHREIBUNG. Bis zum 2026-09-16 stand hier ein nacktes
+         `embedPassage(quelle)`. Die ERST-Signatur über das Siegel bettete
+         damit immer die App-Beschreibung ein, während die stille Anmeldung
+         über das Verbinden-Fenster und der Knopf „neu signieren" längst den
+         INHALT nahmen. Beide Wege schreiben aber in dasselbe Fach
+         (`generateOwnSpore` ohne Argument → aktives Fach): dieselbe Kennung,
+         dieselbe Spore — und je nach gedrücktem Knopf ein anderes Thema, unter
+         dem man gefunden wird. Das ist dem Nutzer nicht zu erklären, und es
+         war der Grund, warum „du musst nur an EINER Stelle signieren" bis
+         heute nicht ganz stimmte.
+         ⚠ ES BRAUCHT KEINE SPERRE FÜR APPS OHNE EIGENE INHALTE. Ohne
+         `sampleContent` fällt `vektorFuerSpore` von selbst auf die
+         Beschreibung zurück — Buchhaltung und Firmen-Seiten bleiben damit
+         unberührt, ohne dass sie jemand austragen müsste. Eine Sperre, die
+         nichts sperrt, sieht aus wie Schutz. */
+      var s2Quelle = "description", s2Anzahl = 0;
       window.SbkimEmbedding.init()
-        .then(function () { out("#sbwiz-o2", T("Erzeuge domainVector (384) …")); return window.SbkimEmbedding.embedPassage(quelle); })
-        .then(function (vec) {
-          var arr = Array.from(vec);
+        .then(function () { return vektorFuerSpore(quelle, function (m) { out("#sbwiz-o2", m); }); })
+        .then(function (v) {
+          var arr = Array.from(v.vec);
+          s2Quelle = v.quelle; s2Anzahl = v.anzahl;
           out("#sbwiz-o2", T("Erzeuge Satz-Schnipsel (v0.2) …"));
           if (!window.SbkimEmbedding.embedSnippets) return { arr: arr, snippetVectors: [] };
           return window.SbkimEmbedding.embedSnippets(quelle)
@@ -925,11 +943,19 @@
             domainDescription: c.domainDescription, domainKeywords: c.domainKeywords,
             domainVector: r.arr, snippetVectors: r.snippetVectors,
             stammCategories: c.stammCategories, guestCategories: c.guestCategories,
+            /* Sagt der Spore selbst, WORAUS ihr Vektor gerechnet ist — wie im
+               Weg „neu signieren". Ohne das Feld sieht eine inhalts-getriebene
+               Spore wie eine beschreibungs-getriebene aus. */
+            embeddingSource: s2Quelle,
           });
         })
         .then(function (spore) {
           lastSpore = spore; downloadJson(sporeFileName(spore && spore.id), spore);
-          out("#sbwiz-o2", Tf("Spore erzeugt + ⬇ (nodeId={0}). Nach sbkim/spore.json committen.", spore.id));
+          /* ⚠ ES STEHT DRAN, WORAUS DER VEKTOR KAM. Sonst wäre der Wechsel der
+             Messgrundlage still, und still ist hier schlimmer als falsch. */
+          out("#sbwiz-o2", s2Quelle === "content"
+            ? Tf("Spore erzeugt + ⬇ (nodeId={0})  ·  Vektor aus {1} eigenen Inhalten. Nach sbkim/spore.json committen.", spore.id, s2Anzahl)
+            : Tf("Spore erzeugt + ⬇ (nodeId={0}). Nach sbkim/spore.json committen.", spore.id));
           dlg.querySelector("#sbwiz-s3").disabled = false;
           /* Auch hier nachziehen: der Wechsler zeigt je Fach die Kennung, und die
              steht erst nach der Spore fest. */
