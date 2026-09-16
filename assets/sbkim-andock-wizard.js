@@ -124,8 +124,8 @@
       "Computing the vector from {0} of your own entries …",
     "Spore neu signiert + ⬇  ·  nodeId={0}  ·  Vektor aus {1} eigenen Inhalten. Datei nach sbkim/spore.json committen.":
       "Spore re-signed + ⬇  ·  nodeId={0}  ·  vector from {1} of your own entries. Commit the file to sbkim/spore.json.",
-    "Dein Vektor kommt aus deinen eigenen Inhalten ({0} Einträge) — nicht aus dem Text oben. So wirst du nach dem gefunden, was wirklich bei dir steht.":
-      "Your vector comes from your own entries ({0} of them) — not from the text above. That way you are found by what is really in there.",
+    "Dein Vektor kommt aus deinen eigenen Inhalten ({0} Einträge) — nicht aus dem Text oben. So wirst du nach dem gefunden, was wirklich bei dir steht. Die Satz-Schnipsel für die Feinsuche kommen weiter aus dem Text.":
+      "Your vector comes from your own entries ({0} of them) — not from the text above. That way you are found by what is really in there. The sentence snippets used for fine-grained search still come from the text.",
     "Fehler: {0}":
       "Error: {0}",
     "_{0}-Kennungen":
@@ -275,7 +275,7 @@
     "Spore neu signiert + ⬇  ·  nodeId={0}. Datei nach sbkim/spore.json committen.",
     "Berechne den Vektor aus {0} eigenen Inhalten …",
     "Spore neu signiert + ⬇  ·  nodeId={0}  ·  Vektor aus {1} eigenen Inhalten. Datei nach sbkim/spore.json committen.",
-    "Dein Vektor kommt aus deinen eigenen Inhalten ({0} Einträge) — nicht aus dem Text oben. So wirst du nach dem gefunden, was wirklich bei dir steht.",
+    "Dein Vektor kommt aus deinen eigenen Inhalten ({0} Einträge) — nicht aus dem Text oben. So wirst du nach dem gefunden, was wirklich bei dir steht. Die Satz-Schnipsel für die Feinsuche kommen weiter aus dem Text.",
     "Fehler: {0}",
     /* Dateinamens-Bestandteil, wenn eine Sicherung MEHRERE Kennungen trägt.
        Steht hier, weil der Nutzer ihn liest — an seinem Dateinamen. */
@@ -624,7 +624,7 @@
       vektorzeile.id = "sbkim-si-semantik-vektorquelle";
       vektorzeile.setAttribute("data-vektor", "content");
       vektorzeile.style.cssText = "margin:0.5rem 0 0;font-size:0.78rem;line-height:1.45;color:#6ee7d3;";
-      vektorzeile.textContent = Tf("Dein Vektor kommt aus deinen eigenen Inhalten ({0} Einträge) — nicht aus dem Text oben. So wirst du nach dem gefunden, was wirklich bei dir steht.", proben.length);
+      vektorzeile.textContent = Tf("Dein Vektor kommt aus deinen eigenen Inhalten ({0} Einträge) — nicht aus dem Text oben. So wirst du nach dem gefunden, was wirklich bei dir steht. Die Satz-Schnipsel für die Feinsuche kommen weiter aus dem Text.", proben.length);
     }
 
     wrap.appendChild(label);
@@ -689,6 +689,45 @@
       .catch(function () { return ausBeschreibung(); });
   }
 
+  /* ── embeddingVersion: der Zähler „der wievielte Inhalts-Stand ist das" ──
+   *
+   * ⚠ DER BEFUND (Klaus 2026-09-16, an seiner ECHTEN Spore gemessen): das Feld
+   * FEHLTE. `regenerateOwnSpore` zählt es seit jeher hoch — aber dieser Weg
+   * ruft `generateOwnSpore`, und das setzt es nur, wenn der Aufrufer es
+   * mitgibt. Der Wizard tat das nicht, also stand es in keiner über das Siegel
+   * signierten Spore. Ein Plan-Satz hatte behauptet, der Zähler sei „bereits
+   * da"; er war es für den einen Weg, nicht für diesen.
+   *
+   * Was es leistet: `id` gehört dem SCHLÜSSEL und bleibt, solange der lebt.
+   * `embeddingVersion` gehört dem INHALT. Ohne das Feld lässt sich an einer
+   * Spore nicht ablesen, ob sich der Vektor seit dem letzten Mal bewegt hat —
+   * dieselbe Kennung, derselbe Text, ein anderer Vektor, und nichts sagt es.
+   *
+   * ⚠ GEZÄHLT WIRD NUR, WENN SICH DER VEKTOR WIRKLICH BEWEGT. Ein Zähler, der
+   * bei jedem Signieren hochläuft, misst KLICKS statt Inhalten und ist als
+   * Drift-Anzeige wertlos. Das ist dieselbe Regel, die `regenerateOwnSpore` in
+   * Modul 02 seit jeher fährt: gleicher Vektor ⇒ gleiche Zahl.
+   *
+   * Fail-soft in beide Richtungen: ist keine alte Spore lesbar, wird gezählt
+   * statt abgebrochen — lieber eine 1 als gar kein Feld. */
+  function naechsteEmbeddingVersion(neuerVektor) {
+    return Promise.resolve()
+      .then(function () { return window.SbkimSpore.getOwnSpore(); })
+      .then(function (alt) {
+        var prev = (alt && typeof alt.embeddingVersion === "number" && isFinite(alt.embeddingVersion))
+          ? alt.embeddingVersion : 0;
+        var a = alt && alt.domainVector;
+        if (!Array.isArray(a) || !Array.isArray(neuerVektor) || a.length !== neuerVektor.length) {
+          return prev + 1;
+        }
+        for (var i = 0; i < a.length; i++) if (a[i] !== neuerVektor[i]) return prev + 1;
+        /* Unverändert: die Zahl bleibt stehen. Eine Alt-Spore ohne das Feld
+           bekommt dabei die 1 — sie IST der erste gezählte Stand. */
+        return prev || 1;
+      })
+      .catch(function () { return 1; });
+  }
+
   function reSignWithDescription(ta, btn, out) {
     var c = cfg() || {};
     function say(msg, bad) { out.textContent = msg; out.style.color = bad ? "#e5484d" : "#6ee7d3"; }
@@ -727,16 +766,20 @@
       .then(function (r) {
         say(T("Signiere Spore …"));
         gewaehlteQuelle = r.quelle; gewaehlteAnzahl = r.anzahl;
+        return naechsteEmbeddingVersion(r.arr).then(function (ver) {
         return window.SbkimSpore.generateOwnSpore({
           domain: c.domain, endpoint: c.endpoint, nodeType: c.nodeType, nodeName: c.nodeName,
           domainDescription: beschreibung, domainKeywords: c.domainKeywords,
           domainVector: r.arr, snippetVectors: r.snippetVectors,
           stammCategories: c.stammCategories, guestCategories: c.guestCategories,
+          /* Der wievielte Inhalts-Stand das ist — siehe naechsteEmbeddingVersion. */
+          embeddingVersion: ver,
           /* Sagt der Spore selbst, WORAUS ihr Vektor gerechnet ist. Ohne das Feld
              sieht eine inhalts-getriebene Spore wie eine beschreibungs-getriebene
              aus, und wer die Zahlen über die Zeit vergleicht, vergleicht zwei
              verschiedene Maßstäbe, ohne es zu merken. */
           embeddingSource: r.quelle,
+        });
         });
       })
       .then(function (spore) {
@@ -938,15 +981,19 @@
         })
         .then(function (r) {
           out("#sbwiz-o2", T("Signiere Spore …"));
+          return naechsteEmbeddingVersion(r.arr).then(function (ver) {
           return window.SbkimSpore.generateOwnSpore({
             domain: c.domain, endpoint: c.endpoint, nodeType: c.nodeType, nodeName: c.nodeName,
             domainDescription: c.domainDescription, domainKeywords: c.domainKeywords,
             domainVector: r.arr, snippetVectors: r.snippetVectors,
             stammCategories: c.stammCategories, guestCategories: c.guestCategories,
+            /* Der wievielte Inhalts-Stand das ist — wie im Weg „neu signieren". */
+            embeddingVersion: ver,
             /* Sagt der Spore selbst, WORAUS ihr Vektor gerechnet ist — wie im
                Weg „neu signieren". Ohne das Feld sieht eine inhalts-getriebene
                Spore wie eine beschreibungs-getriebene aus. */
             embeddingSource: s2Quelle,
+          });
           });
         })
         .then(function (spore) {
