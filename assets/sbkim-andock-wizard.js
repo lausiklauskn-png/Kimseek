@@ -955,6 +955,20 @@
         var blob = r[0], kennung = r[1];
         var praefix = c.backupPrefix || "sbkim-backup";
         downloadJson(praefix + "-" + new Date().toISOString().replace(/[:.]/g, "-") + kennung + ".sbkim.json", blob);
+        /* ⚠ DAS VERBINDEN-PANEL ZEIGT „Letzte Sicherung" — und wusste bis zum
+           2026-09-16 nichts von einer Sicherung, die HIER entstand. Beide Wege
+           rufen dasselbe `SbkimSpore.exportBackup`; nur der Vermerk hing an
+           Modul 23 allein, und so sah es aus, als haette der Nutzer nicht
+           gesichert, obwohl die Datei liegt.
+           ⚠ Der Schluessel wird NICHT nachgebaut (er haengt an `cfg.dbSuffix`,
+           den dieses Modul nicht kennt) — gerufen wird die Handlung. Fail-soft:
+           ohne Modul 23 bleibt das Backup trotzdem gueltig, es fehlt nur ein
+           Vermerk in einem Panel, das es hier gar nicht gibt. */
+        try {
+          if (window.SbkimRendezvousUI && typeof window.SbkimRendezvousUI.markBackupMade === "function") {
+            window.SbkimRendezvousUI.markBackupMade();
+          }
+        } catch (_e) { /* fail-soft — ein fehlender Vermerk kostet kein Backup */ }
         out("#sbwiz-o3", T("Backup ⬇ — Datei + Passwort sicher aufbewahren."));
       }).catch(function (e) { out("#sbwiz-o3", Tf("Fehler: {0}", (e && e.message) || e), true); b.disabled = false; });
     });
