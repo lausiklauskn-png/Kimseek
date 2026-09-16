@@ -2890,12 +2890,33 @@
     return Promise.resolve();
   }
 
+  /* Der Vermerk „Letzte Sicherung" gehoert DIESEM Modul: sein Schluessel haengt
+     an `cfg.dbSuffix`, und den kennt nur die Konfiguration, die `init` bekommen
+     hat. Das Siegel (Modul 16b) sichert ueber DIESELBE Funktion in Modul 02,
+     wusste den Schluessel aber nicht — also blieb dort nach einer Sicherung im
+     Siegel das alte Datum stehen, und es sah aus, als haette der Nutzer nicht
+     gesichert. Eine Auskunft, die in die falsche Richtung zeigt, ist teurer als
+     gar keine (Klaus 2026-09-16).
+     ⚠ DER SCHLUESSEL WIRD NICHT WEITERGEGEBEN, sondern die HANDLUNG. Gaebe dieses
+     Modul den Namen heraus und 16b baute ihn nach, waeren es zwei Stellen, die
+     denselben Namen behaupten — und die laufen auseinander.
+     ⚠ Und der Vermerk ist ein Vermerk, kein Beweis: er sagt, dass in DIESEM
+     Browser einmal eine Sicherung angelegt wurde, nicht dass die Datei noch
+     existiert. Genau so steht es auch in der Oberflaeche. */
+  function markBackupMade() {
+    if (!global.localStorage) return false;
+    saveBackupStamp(isoDay());
+    refreshIdentityBox();   // faellt von selbst durch, wenn das Panel nicht steht
+    return true;
+  }
+
   var api = {
     init: init,
     show: show,
     hide: hide,
     close: closeAll,
     isOpen: isOpen,
+    markBackupMade: markBackupMade,
     get _meta() {
       return {
         version: VERSION, mounted: mounted, open: isOpen(), nodeName: cfg.nodeName,
