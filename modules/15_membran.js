@@ -14,6 +14,13 @@
  *   Sub (e) Fremdzugriff-Detektor + Navleisten-Lampe — Ringbuffer RAM-
  *     only, Listener-Liste, Lampen-Toggle, Modal-Mount, Click-Handler,
  *     BroadcastChannel-Subscription für SW-endpoint-probes.
+ *     Pflege 2026-08-01 (Klaus' Live-Befund im DuckDuckGo-Browser): jeder
+ *     postMessage-Eintrag führt jetzt mit, WER gesendet hat, WOFÜR sich die
+ *     Nachricht ausgab, WANN nach dem Laden sie kam und unter welchen
+ *     Umständen — und welcher der vier gleich aussehenden „ignored"-Fälle
+ *     zutraf (`details.grund`). Das Fenster zeigt das als Klartext-Zeile.
+ *     PII-Tabu bleibt hart: nie Werte aus fremden Objekten, nur Feld-NAMEN,
+ *     Text-Auszug gekappt und mit maskierten Ziffern, alles RAM-only.
  *
  * Modul 15 ist NICHT protokoll-aktiv: kein Netz, keine Signatur, kein
  * Embedding, keine Spore-Erzeugung. Sub (b) ist Empfänger-Schicht (keine
@@ -34,7 +41,8 @@
  *     lampSelector?: string,        // Default '#lamp-fremd'
  *     mountModal?: boolean,         // Default true
  *     allowedOrigins?: string[],    // Default [] (alle Cross-Origin → rejected-allowlist)
- *     enableTestButton?: boolean }  // Default false (Sage-Page-Sichttest-Knopf)
+ *     enableTestButton?: boolean,   // Default false (Sage-Page-Sichttest-Knopf)
+ *     lang?: 'de' | 'en' }          // Default: <html lang> → 'de'. Siehe § SPRACHE.
  *
  * Self-check: emits a console.info line on script load (synchronous,
  * before any call). Siehe INTERFACES.md §1 Modul 15 und
@@ -63,6 +71,17 @@
 
   var VALID_KINDS = { "membrane-read": 1, "membrane-postmessage": 1, "endpoint-probe": 1 };
   var VALID_DECISIONS = { "accepted": 1, "ignored": 1, "rejected-allowlist": 1 };
+  // Sub (e), Pflege 2026-08-01: die feineren Gründe hinter `decision`. „ignored"
+  // allein deckt vier verschiedene Sachlagen ab — in Klaus' Live-Befund war
+  // nicht zu erkennen, welche davon zutraf. Whitelist statt Freitext: hier soll
+  // nie ein fremder String ins Protokoll wandern.
+  var VALID_GRUENDE = {
+    "fremder-typ": 1,        // die Nachricht gab sich nicht als SBKIM aus
+    "nicht-erlaubt": 1,      // Herkunft steht nicht auf der Allowlist
+    "kein-nonce": 1,         // Pflicht-Feld fehlte
+    "unbekannte-op": 1,      // op fehlt oder ist nicht in der Whitelist
+    "gedrosselt": 1          // Modul 11 hat abgeriegelt
+  };
 
   // ---- Modul-Zustand (Closure) ----
 
@@ -98,6 +117,154 @@
   // produktive Pfad-Erweiterung.
   var testButtonEnabled = false;
 
+  /* ── Die Sprache ────────────────────────────────────────────────────────
+   * Verfahren BYTE-GLEICH mit Modul 16, 17 und 23 UI: SCHLUESSELLOS — der
+   * deutsche Satz IST der Schluessel, `TEXTE.en` traegt die Uebersetzung,
+   * `T()` faellt fail-soft auf Deutsch zurueck. Rangfolge:
+   * init({lang}) → <html lang> → de.
+   *
+   * ⚠ WARUM DIESES MODUL UEBERHAUPT UEBERSETZT WIRD. Das Fremdzugriff-Fenster
+   * haengt an der FREMD-Lampe von Modul 17 — und die spricht seit dem
+   * 2026-09-14 Englisch. Wer dort klickte, bekam ein vollstaendig deutsches
+   * Fenster: englische Leiste, deutsches Fenster dahinter. Genau die HALB
+   * UEBERSETZTE TAFEL, die netzweit als die schlimmere Sorte benannt ist.
+   * Gemessen am 2026-09-16: 0 von 20 Traegern zeigten dieses Fenster auf
+   * Englisch, in allen 20 stand die Leiste darueber auf Englisch.
+   *
+   * ⚠ OHNE EINSTELLUNG AENDERT SICH NICHTS. Ohne `lang` und ohne
+   * `<html lang="en">` gibt T() den deutschen Satz Zeichen fuer Zeichen
+   * zurueck — neunzehn Apps tragen dieses Modul byte-1:1, und keine davon
+   * darf davon etwas merken.
+   *
+   * ⚠ WAS BEWUSST DEUTSCH BLEIBT: die Spaltenkoepfe `kind`, `origin`,
+   * `endpoint`, `decision` sind FELDNAMEN des Protokolls, keine Saetze — sie
+   * stehen in beiden Sprachen gleich da, so wie „nodeId" im Wizard. Auch die
+   * WERTE in diesen Spalten (`membrane-postmessage`, `ignored`, `accepted`)
+   * sind Protokoll-Bestand und werden nicht uebersetzt: wer einen Befund
+   * meldet, soll in beiden Sprachen dasselbe Wort nennen koennen.
+   *
+   * ⚠ KEIN ZERTIFIKAT_ASPEKTE-EINTRAG, obwohl 15 ein Schutz-Modul ist und die
+   * Konvention sonst greift — dieselbe Begruendung wie bei Modul 16 am
+   * 2026-09-14: eine Uebersetzung ist Render-Schicht. Sie ruehrt weder die
+   * Allowlist noch die Nonce-Pflicht noch den Ringbuffer an. Ein Eintrag
+   * „spricht jetzt Englisch" behauptete einen Sicherheits-Fortschritt, den es
+   * nicht gibt, und verwaesserte die Liste, die Sicherheits-Updates sichtbar
+   * machen soll. Ausgeschrieben in INTERFACES § Modul 15 SPRACHE. */
+  var TEXTE = { en: {
+      /* Das Fenster selbst */
+      "Fremdzugriff-Fenster":
+        "Foreign-access window",
+      "Schließen":
+        "Close",
+      "{0} Einträge im Ringbuffer (max {1})":
+        "{0} entries in the ring buffer (max {1})",
+      "Aufräumen":
+        "Clear",
+      "🧪 Demo-Eintrag":
+        "🧪 Demo entry",
+      "Sichttest: synthetischen endpoint-probe-Eintrag einfügen (Sage-Page-Sichttest, kein produktiver Pfad)":
+        "Visual check: insert a synthetic endpoint-probe entry (Sage page visual check, not a production path)",
+      "Zeit":
+        "Time",
+      "Tipp: leere Tabelle = Lampe geht aus.":
+        "Tip: an empty table means the lamp goes out.",
+      "(lokal)":
+        "(local)",
+
+      /* Die fuenf Abweis-Gruende (GRUND_TEXT). Sie sind Teilsaetze und werden
+       * unten in einen ganzen Satz eingesetzt — deshalb ohne Punkt. */
+      "Die Nachricht war nicht für SBKIM bestimmt":
+        "The message was not meant for SBKIM",
+      "Die Herkunft steht nicht auf der Erlaubnis-Liste":
+        "The origin is not on the allowlist",
+      "Der Nachricht fehlte die Pflicht-Kennung":
+        "The message was missing its required identifier",
+      "Die Nachricht wollte etwas, das die Membran nicht anbietet":
+        "The message wanted something the membrane does not offer",
+      "Es kam zu viel auf einmal von dieser Herkunft":
+        "Too much arrived at once from this origin",
+
+      /* Die fuenf Absender (ABSENDER_TEXT) — ebenfalls Teilsaetze. */
+      "dieses Fenster selbst":
+        "this window itself",
+      "ein eingebetteter Rahmen auf dieser Seite":
+        "an embedded frame on this page",
+      "das Fenster, das diese Seite geöffnet hat":
+        "the window that opened this page",
+      "ein anderes Fenster":
+        "another window",
+      "nicht feststellbar":
+        "not determinable",
+
+      /* Die Erklaer-Zeile. JEDER EINTRAG IST EIN GANZER SATZ mit Platzhaltern
+       * — nicht ein Anfang und ein Ende, die der Code zusammenklebt. Ein Satz,
+       * der am Komma auseinandergeschnitten wird, ist keine
+       * Uebersetzungs-Einheit: die englische Wortstellung ist eine andere. */
+      "{0} (sie gab sich aus als „{1}“).":
+        "{0} (it claimed to be “{1}”).",
+      "{0}.":
+        "{0}.",
+      "Sie gab sich aus als „{0}“.":
+        "It claimed to be “{0}”.",
+      "Abgeschickt hat sie: {0}.":
+        "It was sent by: {0}.",
+      "Herkunft: {0}.":
+        "Origin: {0}.",
+      "Herkunft: nicht feststellbar — typisch für Skripte des Browsers selbst und für Erweiterungen.":
+        "Origin: not determinable — typical for the browser’s own scripts and for extensions.",
+      "Kam {0} s nach dem Laden der Seite, während der Tab vorn war.":
+        "Arrived {0} s after the page loaded, while the tab was in the foreground.",
+      "Kam {0} s nach dem Laden der Seite, während der Tab im Hintergrund lag.":
+        "Arrived {0} s after the page loaded, while the tab was in the background.",
+      "Kam {0} s nach dem Laden der Seite.":
+        "Arrived {0} s after the page loaded.",
+      "Inhalt (gekürzt, Ziffern ersetzt): „{0}“":
+        "Content (shortened, digits replaced): “{0}”",
+      "Felder der Nachricht: {0}. (Nur die Namen — Inhalte werden nicht protokolliert.)":
+        "Fields of the message: {0}. (Names only — contents are not logged.)",
+      "Felder der Nachricht: {0} und {1} weitere. (Nur die Namen — Inhalte werden nicht protokolliert.)":
+        "Fields of the message: {0} and {1} more. (Names only — contents are not logged.)",
+  } };
+
+  /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */
+  var optLang = null;
+
+  function sprache() {
+    if (optLang === "de" || optLang === "en") return optLang;
+    try {
+      var d = global.document;
+      var l = String((d && d.documentElement && d.documentElement.lang) || "").slice(0, 2).toLowerCase();
+      if (l === "en") return "en";
+    } catch (_e) { /* nb */ }
+    return "de";
+  }
+
+  /* Bei JEDEM Aufruf neu nachsehen, nicht einmal beim Laden merken: wer die
+   * Sprache umschaltet und danach das Fenster oeffnet, bekaeme sonst die alte. */
+  function T(de) {
+    if (sprache() !== "en") return de;
+    var w = TEXTE.en;
+    return (w && Object.prototype.hasOwnProperty.call(w, de)) ? w[de] : de;
+  }
+
+  /* Platzhalter {0}, {1}, … — die Zahl steht im SATZ, nicht daneben. */
+  /* Die Zaehl-Zeile stand bis zum 2026-09-16 an DREI Stellen als eigener
+   * Zusammenbau (`n + " Einträge im Ringbuffer (max " + bufferMax + ")"`).
+   * Ein Satz an drei Orten sind drei Orte, an denen er auseinanderlaufen
+   * kann — und beim Uebersetzen waeren es drei Schluessel gewesen, von denen
+   * zwei still deutsch geblieben waeren. */
+  function zaehlText(n) {
+    return Tf("{0} Einträge im Ringbuffer (max {1})", n, bufferMax);
+  }
+
+  function Tf(de) {
+    var a = arguments;
+    return T(de).replace(/\{(\d+)\}/g, function (_, i) {
+      var v = a[Number(i) + 1];
+      return v === undefined || v === null ? "" : String(v);
+    });
+  }
+
   // Bau 04.G-Folge (Strang A2, 2026-07-01): optionale KI-Richter-Konfig für
   // den `op:"query"`-Antwort-Pfad. Default `null` = Richter AUS → der Empfänger
   // ruft wie bisher `SbkimMatch.queryLocal` (roher Vorfilter). Setzt der
@@ -107,6 +274,35 @@
   // der Schlüssel steht NIE im Code. Opt-in, weil der antwortende Knoten mit dem
   // Richter seinen eigenen Schlüssel für eingehende Fremd-Anfragen ausgibt.
   var queryJudge = null;
+
+  // Inklusions-Konfig für den `op:"query"`-Antwort-Pfad (2026-08-14, aus
+  // BookLedgerPro in den Kanon gehoben).
+  //
+  // WOHER DAS KOMMT. BookLedgerPro hatte diesen Pfad seit dem 2026-07-11 in
+  // seiner EIGENEN Kopie von Modul 15 stehen — mit einer fest eingebauten
+  // Buchhaltungs-Synonym-Karte (rechnung↔faktura, beleg↔quittung, ust↔
+  // umsatzsteuer). Das war echte, nützliche Funktion an der falschen Stelle:
+  // „kopieren, nicht klonen" verbietet, die Kopie zu ändern, und ein späteres
+  // byte-1:1-Nachziehen hätte sie lautlos gelöscht. Also wandert die Mechanik
+  // hierher — und die FACHWORTE bleiben bei der App, die sie kennt.
+  //
+  // Default `null` = aus. Dann ruft der Empfänger wie bisher
+  // `SbkimMatch.queryLocal(text, k)` — byte-gleiches Verhalten für jeden, der
+  // nichts konfiguriert. Setzt der Betreiber
+  // `init({queryInclusion:{synonyms?,hybrid?}})` ODER `setQueryInclusion(cfg)`,
+  // läuft die Kaskade aus Bau 22f:
+  //   A4  Frage über die Synonym-Karte auffächern (expandQuerySimple)
+  //       → queryLocalMulti mit RRF-Fusion
+  //   A1  Hybrid-queryLocal (BM25 + Vektor)
+  //   Boden: der bewährte reine Cosinus-Pfad (Bau 04.C)
+  // Jede Stufe fail-soft; die Funktion wirft NICHT (der äußere try/catch im
+  // Empfänger schickt sonst die fail-soft-Fehlerantwort statt Treffern).
+  //
+  // REINE INKLUSION: cross-formulierte Wort-Treffer unter dem Cosinus-Boden
+  // werden über BM25 AUFGENOMMEN. Der 0.80-Andock-Riegel (Modul 05
+  // `PROVIDER_MIN_MATCH`) bleibt unberührt — hier wird geantwortet, nicht
+  // angedockt.
+  var queryInclusion = null;
 
   // ---- Hilfsfunktionen ----
 
@@ -190,6 +386,143 @@
   function isHttpOrigin(s) {
     if (typeof s !== "string" || s.length === 0) return false;
     return s.indexOf("http://") === 0 || s.indexOf("https://") === 0;
+  }
+
+  // ---- Sub (e) Herkunfts-Analyse (Pflege 2026-08-01, Klaus' Live-Befund) ----
+  //
+  // WOZU. Am 2026-08-01 stand im DuckDuckGo-Browser die FREMD-Lampe auf Rot.
+  // Klaus klickte sie an und las:
+  //
+  //     membrane-postmessage   origin: —   decision: ignored
+  //
+  // Die Membran hatte also etwas gefangen und richtig abgewiesen — aber WER
+  // gesendet hat, stand nicht da, und „ignored" deckt vier verschiedene Gründe
+  // ab, die alle gleich aussehen. Ein Wächter, dessen Meldung man nicht deuten
+  // kann, ist nur halb ein Wächter. Klaus' Wort: „es soll mehr zu lesen sein —
+  // wer hat zugegriffen, wann, unter welchen Umständen."
+  //
+  // WAS AUFGENOMMEN WIRD, UND WARUM GERADE DAS:
+  //   grund       welcher der vier ignored-Fälle es war — die häufigste Frage
+  //   absender    Fenster, eingebetteter Rahmen, öffnendes Fenster, Worker
+  //   typ         wofür sich die Nachricht ausgibt (data.type), gekappt
+  //   felder      NUR die NAMEN der obersten Ebene, nie die Werte
+  //   text        bei einer reinen Text-Nachricht ein kurzer Auszug
+  //   nachLadenMs wie lange nach dem Laden — trennt Erweiterungen (sofort)
+  //               von späterem Zutun
+  //   sichtbar    war der Tab vorn? Ein Zugriff im Hintergrund ist ein anderer
+  //               Befund als einer, während man hinsieht
+  //
+  // PII-DISZIPLIN, HART. Werte aus fremden Objekten werden NIE protokolliert —
+  // nur Feld-NAMEN, und die gekappt, gezählt und auf ein enges Zeichen-Alphabet
+  // gefiltert. Der Text-Auszug ist auf MESSAGE_TEXT_MAX Zeichen gekappt, von
+  // Steuerzeichen befreit, und JEDE Ziffernfolge wird durch `#` ersetzt: eine
+  // Kontonummer, ein Geburtsdatum oder eine Telefonnummer kommt so gar nicht
+  // erst ins Protokoll, der wiedererkennbare Wortlaut aber schon. Das Protokoll
+  // bleibt RAM-only und verlässt den Browser nicht.
+  var MESSAGE_TEXT_MAX = 48;                 // Auszug einer Text-Nachricht
+  var MESSAGE_FIELDS_MAX = 8;                // so viele Feld-Namen, dann "…"
+  var MESSAGE_FIELD_LEN = 32;                // je Name
+  var MESSAGE_TYPE_MAX = 64;                 // data.type
+
+  function kurzText(s, max) {
+    if (typeof s !== "string" || s.length === 0) return null;
+    var sauber = s
+      .replace(/[\u0000-\u001f\u007f]/g, " ")   // Steuerzeichen raus
+      .replace(/\d+/g, "#")                     // Ziffernfolgen maskieren (PII)
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!sauber) return null;
+    return sauber.length > max ? sauber.slice(0, max) + "…" : sauber;
+  }
+
+  // Nur der Name, nie der Wert. Namen mit ungewöhnlichen Zeichen werden nicht
+  // durchgereicht, sondern als "?" gezählt — ein Feld-Name ist ein Hinweis,
+  // kein Freitext-Kanal ins Protokoll.
+  function feldNamen(o) {
+    var raus = [], mehr = 0, i, k;
+    var keys;
+    try { keys = Object.keys(o); } catch (_e) { return null; }
+    for (i = 0; i < keys.length; i++) {
+      k = keys[i];
+      if (raus.length >= MESSAGE_FIELDS_MAX) { mehr++; continue; }
+      raus.push(/^[A-Za-z0-9_.$-]{1,32}$/.test(k) ? k : "?");
+    }
+    if (!raus.length && !mehr) return null;
+    return { namen: raus, mehr: mehr };
+  }
+
+  // WER hat gesendet — ohne je in ein fremdes Fenster hineinzusehen. Verglichen
+  // wird nur mit Referenzen, die wir ohnehin haben; jeder Zugriff ist in
+  // try/catch, weil ein Cross-Origin-Fenster beim bloßen Vergleich werfen kann.
+  function absenderArt(event) {
+    try {
+      var q = event && event.source;
+      if (!q) return "unbekannt";
+      if (q === global) return "eigenes-fenster";
+      try { if (global.opener && q === global.opener) return "oeffnendes-fenster"; } catch (_e) { /* nb */ }
+      try {
+        var f = global.frames;
+        if (f && typeof f.length === "number") {
+          for (var i = 0; i < f.length && i < 32; i++) {
+            try { if (f[i] === q) return "eingebetteter-rahmen"; } catch (_e2) { /* nb */ }
+          }
+        }
+      } catch (_e3) { /* nb */ }
+      if (q === event.target) return "eigenes-fenster";
+      return "anderes-fenster";
+    } catch (_e4) {
+      return "unbekannt";
+    }
+  }
+
+  // Die Umstände. Beide Werte sind fail-soft: fehlt die Uhr oder die
+  // Sichtbarkeits-Auskunft, steht das Feld einfach nicht im Eintrag.
+  function nachLadenMs() {
+    try {
+      var p = global.performance;
+      if (p && typeof p.now === "function") return Math.round(p.now());
+    } catch (_e) { /* nb */ }
+    return null;
+  }
+  function tabSichtbar() {
+    try {
+      var d = global.document;
+      if (d && typeof d.visibilityState === "string") return d.visibilityState === "visible";
+    } catch (_e) { /* nb */ }
+    return null;
+  }
+
+  // Alles zusammen, gedeckelt. Wird an `details` gehängt, nicht an die
+  // Kopf-Felder — der Draht-Vertrag des Eintrags (kind/origin/decision) bleibt
+  // damit unverändert, und ältere Anzeigen zeigen einfach weiter, was sie
+  // kennen.
+  function herkunftDetails(event) {
+    var d = {};
+    try {
+      var art = absenderArt(event);
+      if (art) d.absender = art;
+      var roh = event ? event.data : null;
+      if (typeof roh === "string") {
+        d.form = "text";
+        var t = kurzText(roh, MESSAGE_TEXT_MAX);
+        if (t) d.text = t;
+      } else if (roh && typeof roh === "object") {
+        d.form = Array.isArray(roh) ? "liste" : "objekt";
+        var typ = kurzText(roh.type, MESSAGE_TYPE_MAX);
+        if (typ) d.typ = typ;
+        var f = feldNamen(roh);
+        if (f) { d.felder = f.namen; if (f.mehr) d.felderMehr = f.mehr; }
+      } else if (roh !== undefined && roh !== null) {
+        d.form = typeof roh;
+      } else {
+        d.form = "leer";
+      }
+      var ms = nachLadenMs();
+      if (ms !== null) d.nachLadenMs = ms;
+      var sicht = tabSichtbar();
+      if (sicht !== null) d.sichtbar = sicht;
+    } catch (_e) { /* nb — ein Protokoll darf nie der Grund für einen Fehler sein */ }
+    return d;
   }
 
   function safeUserAgentHint() {
@@ -368,6 +701,19 @@
     if (extraDetails && typeof extraDetails === "object") {
       // Defensive Kopie der Extra-Felder (KEIN voller Payload — PII-Tabu).
       if (extraDetails.throttled === true) details.throttled = true;
+      // `grund` sagt, WELCHER der gleich aussehenden Fälle es war. Genau das
+      // fehlte in Klaus' Befund vom 2026-08-01: „ignored" allein deckt vier
+      // verschiedene Sachlagen ab. Whitelist, damit hier nie fremder Text
+      // durchrutscht.
+      if (typeof extraDetails.grund === "string" && VALID_GRUENDE[extraDetails.grund]) {
+        details.grund = extraDetails.grund;
+      }
+    }
+    // Herkunfts-Analyse (Pflege 2026-08-01): wer, wann, unter welchen
+    // Umständen. Gedeckelt und ohne Werte aus fremden Objekten.
+    var herkunft = herkunftDetails(event);
+    for (var hk in herkunft) {
+      if (Object.prototype.hasOwnProperty.call(herkunft, hk)) details[hk] = herkunft[hk];
     }
     recordEntry({
       kind: "membrane-postmessage",
@@ -409,6 +755,45 @@
     // k ist optional (Default 5) — wenn vorhanden, muss er Number sein.
     if (p.k !== undefined && (typeof p.k !== "number" || !(p.k > 0))) return false;
     return true;
+  }
+
+  // queryWithInclusion(match, text, k) -> Promise<Array>
+  //
+  // Die Kaskade A4 → A1 → einfacher Cosinus, jede Stufe fail-soft. Wird NUR
+  // aufgerufen, wenn der Betreiber `queryInclusion` gesetzt hat (siehe die
+  // Erklärung oben bei der Variable). Wirft NICHT — schlägt eine Stufe fehl,
+  // fällt sie auf die nächste durch, und die letzte ist der Pfad, der ohne
+  // diese Funktion gelaufen wäre. Schlimmstenfalls also: wie vorher.
+  async function queryWithInclusion(match, text, k) {
+    var cfg = queryInclusion || {};
+    var synonyms = (cfg.synonyms && typeof cfg.synonyms === "object") ? cfg.synonyms : null;
+    // `hybrid` ist Teil dieser Betriebsart: BM25 neben dem Vektor ist genau
+    // der Weg, auf dem ein anders formulierter Wort-Treffer hereinkommt.
+    // Wer ihn nicht will, setzt `hybrid: false` — dann bleibt die
+    // Varianten-Auffächerung, aber der Vorfilter bleibt rein semantisch.
+    var hybrid = (cfg.hybrid === false) ? false : true;
+
+    // A4 + A1: Varianten auffächern, dann Multi-Suche mit RRF-Fusion.
+    if (synonyms &&
+        typeof match.queryLocalMulti === "function" &&
+        typeof match.expandQuerySimple === "function") {
+      try {
+        var variants = match.expandQuerySimple(text, { synonyms: synonyms });
+        return await match.queryLocalMulti(variants, k, { hybrid: hybrid });
+      } catch (e1) {
+        warn("A4/A1-Multi-Pfad fehlgeschlagen — Rückfall auf Hybrid-queryLocal.", e1);
+      }
+    }
+    // A1 allein: Hybrid-queryLocal (BM25 + Vektor), ohne Varianten.
+    if (hybrid) {
+      try {
+        return await match.queryLocal(text, k, { hybrid: true });
+      } catch (e2) {
+        warn("A1-Hybrid-Pfad fehlgeschlagen — Rückfall auf einfachen Cosinus.", e2);
+      }
+    }
+    // Letzter Boden: der bewährte reine Cosinus-Pfad (Bau 04.C).
+    return await match.queryLocal(text, k);
   }
 
   function cacheSporeRef(origin, payload) {
@@ -500,6 +885,8 @@
       }
       var k = (typeof payload.k === "number" && payload.k > 0) ? payload.k : 5;
       var match = global.SbkimMatch;
+      var useInclusion = !!queryInclusion &&
+        match && typeof match.queryLocal === "function";
       // Richter-Pfad (Strang A2) nur, wenn der Betreiber ihn opt-in konfiguriert
       // hat UND queryLocalJudged vorhanden ist. Sonst der bisherige rohe
       // Vorfilter-Pfad (byte-gleiches Verhalten wie vor dieser Änderung).
@@ -523,7 +910,9 @@
       }
       if (match && typeof match.queryLocal === "function") {
         try {
-          var results = await match.queryLocal(payload.text, k);
+          var results = useInclusion
+            ? await queryWithInclusion(match, payload.text, k)
+            : await match.queryLocal(payload.text, k);
           sendQueryResultReply(event, nonce, Array.isArray(results) ? results : [], null);
           recordPostMessageEntry(event, op, nonce, "accepted");
         } catch (err) {
@@ -562,7 +951,7 @@
     }
 
     // Unbekannte op (insbesondere "handshake" — explizites Tabu).
-    recordPostMessageEntry(event, op, nonce, "ignored");
+    recordPostMessageEntry(event, op, nonce, "ignored", { grund: "unbekannte-op" });
   }
 
   function handlePostMessage(event) {
@@ -583,19 +972,19 @@
 
       // 2. Type-Check.
       if (type !== MEMBRANE_MESSAGE_TYPE) {
-        recordPostMessageEntry(event, op, nonce, "ignored");
+        recordPostMessageEntry(event, op, nonce, "ignored", { grund: "fremder-typ" });
         return;
       }
 
       // 3. Allowlist-Check.
       if (allowedOrigins.indexOf(event.origin) < 0) {
-        recordPostMessageEntry(event, op, nonce, "rejected-allowlist");
+        recordPostMessageEntry(event, op, nonce, "rejected-allowlist", { grund: "nicht-erlaubt" });
         return;
       }
 
       // 4. Nonce-Pflicht.
       if (!nonce) {
-        recordPostMessageEntry(event, op, nonce, "ignored");
+        recordPostMessageEntry(event, op, nonce, "ignored", { grund: "kein-nonce" });
         return;
       }
 
@@ -615,7 +1004,7 @@
         if (rateLimit && typeof rateLimit.checkOrigin === "function") {
           var verdict = rateLimit.checkOrigin(event.origin);
           if (verdict === "throttled") {
-            recordPostMessageEntry(event, op, nonce, "ignored", { throttled: true });
+            recordPostMessageEntry(event, op, nonce, "ignored", { throttled: true, grund: "gedrosselt" });
             return;
           }
         }
@@ -626,7 +1015,7 @@
 
       // 7. Op-Validierung (whitelist).
       if (!op || !VALID_OPS[op]) {
-        recordPostMessageEntry(event, op, nonce, "ignored");
+        recordPostMessageEntry(event, op, nonce, "ignored", { grund: "unbekannte-op" });
         return;
       }
 
@@ -732,14 +1121,14 @@
     header.style.cssText = "display:flex;align-items:center;gap:0.8rem;margin-bottom:0.8rem;";
 
     var title = doc.createElement("h2");
-    title.textContent = "Fremdzugriff-Fenster";
+    title.textContent = T("Fremdzugriff-Fenster");
     title.style.cssText = "margin:0;font-size:1.1rem;font-weight:600;flex:1;";
 
     var closeBtn = doc.createElement("button");
     closeBtn.type = "button";
     closeBtn.setAttribute("data-membran-close", "");
     closeBtn.textContent = "✕";
-    closeBtn.setAttribute("aria-label", "Schließen");
+    closeBtn.setAttribute("aria-label", T("Schließen"));
     closeBtn.style.cssText = [
       "background:transparent",
       "color:#F5F5FF",
@@ -759,12 +1148,12 @@
 
     var count = doc.createElement("span");
     count.setAttribute("data-membran-count", "");
-    count.textContent = "0 Einträge im Ringbuffer (max " + bufferMax + ")";
+    count.textContent = zaehlText(0);
 
     var clearBtn = doc.createElement("button");
     clearBtn.type = "button";
     clearBtn.setAttribute("data-membran-clear", "");
-    clearBtn.textContent = "Aufräumen";
+    clearBtn.textContent = T("Aufräumen");
     clearBtn.style.cssText = [
       "background:rgba(220,38,38,0.18)",
       "color:#F5F5FF",
@@ -784,8 +1173,8 @@
       var testBtn = doc.createElement("button");
       testBtn.type = "button";
       testBtn.setAttribute("data-membran-test", "");
-      testBtn.textContent = "🧪 Demo-Eintrag";
-      testBtn.title = "Sichttest: synthetischen endpoint-probe-Eintrag einfügen (Sage-Page-Sichttest, kein produktiver Pfad)";
+      testBtn.textContent = T("🧪 Demo-Eintrag");
+      testBtn.title = T("Sichttest: synthetischen endpoint-probe-Eintrag einfügen (Sage-Page-Sichttest, kein produktiver Pfad)");
       testBtn.style.cssText = [
         "background:rgba(110,168,254,0.18)",
         "color:#F5F5FF",
@@ -816,16 +1205,23 @@
     table.style.cssText = "width:100%;border-collapse:collapse;font-size:0.8rem;font-family:'Geist Mono',ui-monospace,monospace;";
     table.innerHTML =
       "<thead><tr>" +
-      "<th style=\"text-align:left;padding:0.35rem 0.4rem;border-bottom:1px solid rgba(255,255,255,0.18);\">Zeit</th>" +
+      "<th data-membran-th-zeit style=\"text-align:left;padding:0.35rem 0.4rem;border-bottom:1px solid rgba(255,255,255,0.18);\"></th>" +
       "<th style=\"text-align:left;padding:0.35rem 0.4rem;border-bottom:1px solid rgba(255,255,255,0.18);\">kind</th>" +
       "<th style=\"text-align:left;padding:0.35rem 0.4rem;border-bottom:1px solid rgba(255,255,255,0.18);\">origin</th>" +
       "<th style=\"text-align:left;padding:0.35rem 0.4rem;border-bottom:1px solid rgba(255,255,255,0.18);\">endpoint</th>" +
       "<th style=\"text-align:left;padding:0.35rem 0.4rem;border-bottom:1px solid rgba(255,255,255,0.18);\">decision</th>" +
       "</tr></thead><tbody data-membran-tbody></tbody>";
 
+    /* Der einzige Spaltenkopf, der ein WORT ist — die vier anderen (kind,
+     * origin, endpoint, decision) sind Feldnamen des Protokolls und stehen in
+     * beiden Sprachen gleich da. textContent statt innerHTML, wie jede Zelle
+     * in diesem Modul: eine Regel, die eine Ausnahme kennt, ist keine. */
+    var thZeit = table.querySelector("[data-membran-th-zeit]");
+    if (thZeit) thZeit.textContent = T("Zeit");
+
     var tip = doc.createElement("p");
     tip.style.cssText = "margin:0.9rem 0 0;font-size:0.78rem;color:rgba(245,245,255,0.55);";
-    tip.textContent = "Tipp: leere Tabelle = Lampe geht aus.";
+    tip.textContent = T("Tipp: leere Tabelle = Lampe geht aus.");
 
     panel.appendChild(header);
     panel.appendChild(summary);
@@ -846,10 +1242,84 @@
     modalMounted = true;
   }
 
+  // ---- Sub (e) Klartext zum Eintrag (Pflege 2026-08-01) --------------------
+  //
+  // Die Tabelle sagt WAS. Diese Zeile sagt WER, WANN und UNTER WELCHEN
+  // UMSTÄNDEN — in ganzen Sätzen, weil das Fenster für Klaus gebaut ist und
+  // nicht für eine Sitzung. Sie steht als zweite Zeile unter dem Eintrag,
+  // damit die Tabelle auf einem Tablet schmal bleibt.
+  var GRUND_TEXT = {
+    "fremder-typ": "Die Nachricht war nicht für SBKIM bestimmt",
+    "nicht-erlaubt": "Die Herkunft steht nicht auf der Erlaubnis-Liste",
+    "kein-nonce": "Der Nachricht fehlte die Pflicht-Kennung",
+    "unbekannte-op": "Die Nachricht wollte etwas, das die Membran nicht anbietet",
+    "gedrosselt": "Es kam zu viel auf einmal von dieser Herkunft"
+  };
+  var ABSENDER_TEXT = {
+    "eigenes-fenster": "dieses Fenster selbst",
+    "eingebetteter-rahmen": "ein eingebetteter Rahmen auf dieser Seite",
+    "oeffnendes-fenster": "das Fenster, das diese Seite geöffnet hat",
+    "anderes-fenster": "ein anderes Fenster",
+    "unbekannt": "nicht feststellbar"
+  };
+
+  function entryErklaerung(entry) {
+    var d = (entry && entry.details) || {};
+    var teile = [];
+
+    if (d.grund && GRUND_TEXT[d.grund]) {
+      teile.push(d.typ
+        ? Tf("{0} (sie gab sich aus als „{1}“).", T(GRUND_TEXT[d.grund]), d.typ)
+        : Tf("{0}.", T(GRUND_TEXT[d.grund])));
+    } else if (d.typ) {
+      teile.push(Tf("Sie gab sich aus als „{0}“.", d.typ));
+    }
+
+    if (d.absender) {
+      teile.push(Tf("Abgeschickt hat sie: {0}.",
+        ABSENDER_TEXT[d.absender] ? T(ABSENDER_TEXT[d.absender]) : d.absender));
+    }
+
+    if (entry && entry.origin) {
+      teile.push(Tf("Herkunft: {0}.", entry.origin));
+    } else if (entry && entry.kind === "membrane-postmessage") {
+      // Der Strich in Klaus' Befund. Er ist kein Fehler der Membran, sondern
+      // eine echte Auskunft — und die gehört ausgeschrieben, statt dass jeder
+      // sie neu erraten muss.
+      teile.push(T("Herkunft: nicht feststellbar — typisch für Skripte des Browsers selbst und für Erweiterungen."));
+    }
+
+    if (typeof d.nachLadenMs === "number") {
+      var s = d.nachLadenMs / 1000;
+      var sek = s < 10 ? s.toFixed(1) : String(Math.round(s));
+      /* ⚠ DREI GANZE SAETZE, nicht ein Anfang mit drei Enden. Die deutsche
+       * Fassung liess sich am Komma zerschneiden; im Englischen steht die
+       * Zeitangabe an anderer Stelle im Satz. Ein Satz, der am Komma
+       * auseinandergeschnitten wird, ist keine Uebersetzungs-Einheit. */
+      teile.push(d.sichtbar === true
+        ? Tf("Kam {0} s nach dem Laden der Seite, während der Tab vorn war.", sek)
+        : d.sichtbar === false
+          ? Tf("Kam {0} s nach dem Laden der Seite, während der Tab im Hintergrund lag.", sek)
+          : Tf("Kam {0} s nach dem Laden der Seite.", sek));
+    }
+
+    if (d.form === "text" && d.text) {
+      teile.push(Tf("Inhalt (gekürzt, Ziffern ersetzt): „{0}“", d.text));
+    } else if (Array.isArray(d.felder) && d.felder.length) {
+      teile.push(d.felderMehr
+        ? Tf("Felder der Nachricht: {0} und {1} weitere. (Nur die Namen — Inhalte werden nicht protokolliert.)",
+             d.felder.join(", "), d.felderMehr)
+        : Tf("Felder der Nachricht: {0}. (Nur die Namen — Inhalte werden nicht protokolliert.)",
+             d.felder.join(", ")));
+    }
+
+    return teile.join(" ");
+  }
+
   function renderModalRow(entry) {
     var doc = global.document;
     var tr = doc.createElement("tr");
-    var origin = entry.origin === null ? "(lokal)" : entry.origin;
+    var origin = entry.origin === null ? T("(lokal)") : entry.origin;
     var endpoint = entry.endpoint === null ? "—" : entry.endpoint;
     tr.innerHTML =
       "<td style=\"padding:0.3rem 0.4rem;border-bottom:1px solid rgba(255,255,255,0.06);\"></td>" +
@@ -868,6 +1338,21 @@
     return tr;
   }
 
+  // Die Erklär-Zeile. Eigene <tr> über die volle Breite, damit sie umbrechen
+  // darf statt eine Spalte zu sprengen. textContent, wie jede Zeile hier —
+  // in `details` stehen zwar nur gefilterte Werte, aber eine Regel, die eine
+  // Ausnahme kennt, ist keine.
+  function renderModalNote(entry) {
+    var text = entryErklaerung(entry);
+    if (!text) return null;
+    var doc = global.document;
+    var tr = doc.createElement("tr");
+    tr.innerHTML = "<td colspan=\"5\" style=\"padding:0 0.4rem 0.55rem;border-bottom:1px solid rgba(255,255,255,0.06);" +
+      "font-family:system-ui,sans-serif;font-size:0.78rem;line-height:1.5;color:rgba(245,245,255,0.72);\"></td>";
+    tr.children[0].textContent = text;
+    return tr;
+  }
+
   function renderModalContents() {
     if (!modalRoot) return;
     var tbody = modalRoot.querySelector("[data-membran-tbody]");
@@ -877,8 +1362,10 @@
     var snapshot = listFremdzugriff();
     for (var i = 0; i < snapshot.length; i++) {
       tbody.appendChild(renderModalRow(snapshot[i]));
+      var note = renderModalNote(snapshot[i]);
+      if (note) tbody.appendChild(note);
     }
-    countEl.textContent = snapshot.length + " Einträge im Ringbuffer (max " + bufferMax + ")";
+    countEl.textContent = zaehlText(snapshot.length);
     // Auto-Scroll nach unten — chronologische Lesart (Karte 15
     // § Fremdzugriff-Fenster Bau-Hinweis).
     if (modalRoot.scrollTop !== undefined) {
@@ -897,7 +1384,9 @@
     var countEl = modalRoot.querySelector("[data-membran-count]");
     if (!tbody || !countEl) return;
     tbody.appendChild(renderModalRow(entry));
-    countEl.textContent = buffer.length + " Einträge im Ringbuffer (max " + bufferMax + ")";
+    var note = renderModalNote(entry);
+    if (note) tbody.appendChild(note);
+    countEl.textContent = zaehlText(buffer.length);
   }
 
   function openFremdzugriffModal() {
@@ -1151,12 +1640,21 @@
       }
       allowedOrigins = filtered;
     }
+    /* Sprache. Ein unbekannter Wert laesst optLang auf null, und dann
+     * entscheidet <html lang>. Kein Throw — fail-soft wie alles hier. */
+    if (opts.lang === "de" || opts.lang === "en") optLang = opts.lang;
+
     if (opts.enableTestButton === true) {
       testButtonEnabled = true;
     }
     // Optionale KI-Richter-Konfig (Strang A2). null/false löscht sie wieder.
     if (Object.prototype.hasOwnProperty.call(opts, "queryJudge")) {
       queryJudge = (opts.queryJudge && typeof opts.queryJudge === "object") ? opts.queryJudge : null;
+    }
+    // Optionale Inklusions-Konfig (2026-08-14). null/false löscht sie wieder.
+    if (Object.prototype.hasOwnProperty.call(opts, "queryInclusion")) {
+      queryInclusion = (opts.queryInclusion && typeof opts.queryInclusion === "object")
+        ? opts.queryInclusion : null;
     }
     var mountModal = opts.mountModal !== false; // default true
 
@@ -1233,10 +1731,19 @@
     queryJudge = (cfg && typeof cfg === "object") ? cfg : null;
   }
 
+  // setQueryInclusion(cfg) — Laufzeit-Setter für die Inklusions-Konfig des
+  // op:"query"-Antwort-Pfads. cfg = {synonyms?, hybrid?} (opt-in, RAM-only)
+  // oder null/false (löscht → zurück zum rohen Vorfilter). Die Synonym-Karte
+  // gehört der App: sie kennt ihre Fachworte, der Kanon kennt sie nicht.
+  function setQueryInclusion(cfg) {
+    queryInclusion = (cfg && typeof cfg === "object") ? cfg : null;
+  }
+
   var SbkimMembrane = {
     init: init,
     read: readSnapshot,
     setQueryJudge: setQueryJudge,
+    setQueryInclusion: setQueryInclusion,
     fremdzugriff: {
       list: listFremdzugriff,
       subscribe: subscribeFremdzugriff,
@@ -1258,11 +1765,26 @@
       get modalMounted() { return modalMounted; },
       get modalOpen() { return modalOpen; },
       get ready() { return ready; },
+      /* Nach aussen sichtbar, damit die Proben MESSEN koennen statt den
+       * Quelltext zu lesen — ein Waechter auf eine Zeile misst nicht, ob sie
+       * gerufen wird. */
+      get lang() { return sprache(); },
+      get langKeys() { return Object.keys(TEXTE.en).length; },
       get allowedOrigins() { return allowedOrigins.slice(); },
       // Strang A2: nur ob der Richter-Pfad opt-in konfiguriert ist — NIE der
       // Schlüssel selbst (RAM-only, kein Leak über die Read-Fläche).
       get queryJudgeConfigured() {
         return !!(queryJudge && typeof queryJudge.apiKey === "string" && queryJudge.apiKey.length > 0);
+      },
+      // Ist der Inklusions-Pfad an? Und mit wie vielen Fachworten? Die Karte
+      // selbst wird NICHT herausgegeben — nur ihre Größe, damit eine Probe
+      // (und Klaus' Sichttest) sehen kann, ob die App sie gesetzt hat.
+      get queryInclusionConfigured() {
+        return !!queryInclusion;
+      },
+      get queryInclusionSynonymCount() {
+        var s = queryInclusion && queryInclusion.synonyms;
+        return (s && typeof s === "object") ? Object.keys(s).length : 0;
       },
       // Sub (b) Read-Anker — Größen-Getter, keine direkten Map-Referenzen
       // (Snapshot-Pattern; interne Maps bleiben modul-lokal).
@@ -1280,6 +1802,10 @@
       // § Sender-Mechanismus). Für Sichttest registrieren wir einen
       // Pending-Eintrag und liefern das Promise zurück, das bei einer
       // passenden queryResult-Message resolved.
+      // Sub (e), Pflege 2026-08-01: der Klartext zu einem Eintrag. Offen
+      // gelegt, damit eine Anzeige ihn übernehmen kann statt ihn nachzubauen —
+      // und damit prüfbar ist, dass er wirklich sagt, wer wann was wollte.
+      erklaerung: entryErklaerung,
       _registerPendingQueryForTest: function (nonce, origin) {
         var resolveFn = null;
         var p = new Promise(function (resolve) { resolveFn = resolve; });
@@ -1311,7 +1837,7 @@
   // Self-check (synchron, beim Skript-Laden — vor jedem Aufruf).
   if (typeof console !== "undefined" && console.info) {
     console.info(
-      "MODUL 15 MEMBRAN bereit, Funktionen: init/read/setQueryJudge/fremdzugriff.{list,subscribe,clear,_recordForTest}",
+      "MODUL 15 MEMBRAN bereit, Funktionen: init/read/setQueryJudge/setQueryInclusion/fremdzugriff.{list,subscribe,clear,_recordForTest}",
     );
   }
 })(typeof window !== "undefined" ? window : globalThis);
