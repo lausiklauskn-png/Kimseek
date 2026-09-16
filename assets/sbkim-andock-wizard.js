@@ -58,7 +58,191 @@
    * den niemand bestellt hat.
    *
    * Rangfolge: SBKIM_SIEGEL_WIZ.lang → <html lang> → de. */
-  var TEXTE = {};          // TEXTE.en = { "deutscher Satz": "english sentence" }
+  /* ⚠ TAFEL-EVOLUTIONS-KLAUSEL, AUSDRÜCKLICH BENANNT (2026-09-16).
+   * Hier stand: „OHNE EINSTELLUNG ÄNDERT SICH NICHTS — solange keine Tabelle
+   * vorliegt, gibt T() den deutschen Satz zurück." Der Satz war richtig,
+   * solange es keine Tabelle GAB. Jetzt gibt es eine.
+   *
+   * Die Zusicherung ist ERSETZT, nicht stillschweigend getauscht:
+   *   vorher   keine Tabelle   ⇒ überall Deutsch, auch bei <html lang="en">
+   *   nachher  lang=de/fehlt   ⇒ Deutsch, Zeichen für Zeichen (unverändert)
+   *            lang=en         ⇒ Englisch; ein Satz OHNE Eintrag fällt weiter
+   *                              fail-soft auf Deutsch zurück
+   *
+   * ⚠ EINE HALB ÜBERSETZTE TAFEL IST DIE SCHLIMMERE SORTE — sie sieht aus wie
+   * eine englische Oberfläche und streut deutsche Sätze dazwischen. Ein
+   * Wächter besteht deshalb darauf, dass JEDER Eintrag aus TEXTE_DE eine
+   * englische Fassung hat, und ein zweiter, dass keine davon wortgleich mit
+   * der deutschen ist — außer der einen, die es sein MUSS: „nodeId: {0}" ist
+   * ein Feldname, kein Satz. */
+  var TEXTE = { en: {
+    "🔑 Eigene Identität & Spore erzeugen / verwalten →":
+      "🔑 Create / manage your own identity & spore →",
+    "⚠ Das Andock-Werkzeug fehlt: diese App hat keine SBKIM_SIEGEL_WIZ-Konfiguration hinterlegt. Ohne sie wüsste der Wizard nicht, welchen Knoten er signieren soll.":
+      "⚠ The docking tool is missing: this app has no SBKIM_SIEGEL_WIZ configuration. Without it the wizard would not know which node to sign.",
+    "✍ Semantische Beschreibung — macht deinen Domain-Vektor treffender":
+      "✍ Semantic description — makes your domain vector more accurate",
+    "Beschreibe deine App neu oder kopiere die Beschreibung / README hier hinein.":
+      "Describe your app afresh, or paste its description / README in here.",
+    "Im Feld steht der Vorschlag dieser App — er wird mit der App gepflegt.":
+      "The field holds this app's suggestion — it is kept up to date with the app.",
+    "Im Feld steht der Vorschlag dieser App. Dein zuletzt signierter Text war ein anderer — er bleibt in deiner Spore, bis du neu signierst.":
+      "The field holds this app's suggestion. The text you last signed was a different one — it stays in your spore until you sign again.",
+    "Im Feld steht jetzt dein zuletzt signierter Text.":
+      "The field now holds the text you last signed.",
+    "↺ Meinen zuletzt signierten Text zurückholen":
+      "↺ Bring back the text I last signed",
+    "Im Feld steht dein zuletzt signierter Text. Die App schlägt inzwischen einen anderen vor.":
+      "The field holds the text you last signed. The app now suggests a different one.",
+    "↻ Den Vorschlag der App ansehen":
+      "↻ Look at the app's suggestion",
+    "Im Feld steht jetzt der Vorschlag dieser App.":
+      "The field now holds this app's suggestion.",
+    "Je konkreter, desto besser findet dich das Mycel. Beschreibe in eigenen Worten: was die App/Seite ist, wofür man sie nutzt, welche Themen/Stichworte sie abdeckt, für wen sie gedacht ist. Ein gut gefüllter Absatz (ca. 3–8 Sätze) ist ideal — gern auch die README hineinkopieren. Vermeide reine Schlagwort-Listen ohne Kontext.":
+      "The more concrete you are, the better the mycelium finds you. Describe in your own words: what the app/site is, what people use it for, which topics/keywords it covers, who it is meant for. A well-filled paragraph (about 3–8 sentences) is ideal — pasting the README in is fine too. Avoid bare keyword lists without context.",
+    "Beschreibung übernehmen → Vektor & Spore neu signieren":
+      "Apply description → re-sign vector & spore",
+    "Bitte zuerst eine Beschreibung eintippen.":
+      "Please type a description first.",
+    "Module 02/03 nicht geladen.":
+      "Modules 02/03 are not loaded.",
+    "Lade Sprachmodell (einmalig ~30 MB)":
+      "Loading language model (~30 MB, once)",
+    "Erzeuge / lade Identität …":
+      "Creating / loading identity …",
+    "Identität: {0} — initialisiere Embedding …":
+      "Identity: {0} — initialising embedding …",
+    "Berechne semantischen Vektor (384-dim) …":
+      "Computing semantic vector (384-dim) …",
+    "Erzeuge Satz-Schnipsel (v0.2) …":
+      "Creating sentence snippets (v0.2) …",
+    "Signiere Spore …":
+      "Signing spore …",
+    "Spore neu signiert + ⬇  ·  nodeId={0}. Datei nach sbkim/spore.json committen.":
+      "Spore re-signed + ⬇  ·  nodeId={0}. Commit the file to sbkim/spore.json.",
+    "Berechne den Vektor aus {0} eigenen Inhalten …":
+      "Computing the vector from {0} of your own entries …",
+    "Spore neu signiert + ⬇  ·  nodeId={0}  ·  Vektor aus {1} eigenen Inhalten. Datei nach sbkim/spore.json committen.":
+      "Spore re-signed + ⬇  ·  nodeId={0}  ·  vector from {1} of your own entries. Commit the file to sbkim/spore.json.",
+    "Dein Vektor kommt aus deinen eigenen Inhalten ({0} Einträge) — nicht aus dem Text oben. So wirst du nach dem gefunden, was wirklich bei dir steht.":
+      "Your vector comes from your own entries ({0} of them) — not from the text above. That way you are found by what is really in there.",
+    "Fehler: {0}":
+      "Error: {0}",
+    "_{0}-Kennungen":
+      "_{0}-ids",
+    "🛡 Was bedeutet dieses Siegel — und wie bist du geschützt?":
+      "🛡 What does this seal mean — and how are you protected?",
+    "Das Siegel ist selbst-ausgestellt: der Knoten hat beim Start geprüft, dass seine Schutz-Bausteine geladen sind, und zeigt das offen. Es wandern nur Daten, nie Programme; dein privater Schlüssel verlässt diesen Browser nie. Kein Server in der Mitte, keine Anmeldung.":
+      "The seal is self-issued: at start-up the node checked that its protective modules are loaded, and says so openly. Only data travels, never programs; your private key never leaves this browser. No server in between, no sign-up.",
+    "Die Membran zeigt, wenn eine fremde KI / ein Browser-Agent auf die App zugreift.":
+      "The membrane shows when an outside AI / a browser agent accesses the app.",
+    "Ausführlich erklärt → So funktioniert das Mycel & wie du geschützt bist":
+      "Explained in full → How the mycelium works & how you are protected",
+    "So funktioniert das Mycel & wie du geschützt bist":
+      "How the mycelium works & how you are protected",
+    "Schließen":
+      "Close",
+    "Identität & Spore erzeugen":
+      "Create identity & spore",
+    "🔑 Eigene Identität & Spore":
+      "🔑 Your own identity & spore",
+    "Erzeugt eine SBKIM-Identität <b>im Browser</b> (Ed25519, IndexedDB) — der private Schlüssel verlässt diesen Browser nie. Notfall-tauglich: jederzeit eine <b>neue</b> Spore/Identität erzeugen und sichern. Erstes Embedding lädt ~30 MB (Modul 03, einmalig).":
+      "Creates an SBKIM identity <b>in the browser</b> (Ed25519, IndexedDB) — the private key never leaves this browser. Fit for emergencies: create and back up a <b>new</b> spore/identity at any time. The first embedding downloads ~30 MB (module 03, once).",
+    "<b>Identität erzeugen</b> — Ed25519-Schlüsselpaar, nodeId aus dem Public Key.":
+      "<b>Create identity</b> — Ed25519 key pair, nodeId derived from the public key.",
+    "Identität erzeugen":
+      "Create identity",
+    "<b>Spore signieren + herunterladen</b> — mit echtem 384-dim domainVector.":
+      "<b>Sign + download spore</b> — with a real 384-dim domainVector.",
+    "Spore erzeugen + ⬇":
+      "Create spore + ⬇",
+    "<b>Verschlüsseltes Backup</b> — Passwort-Sicherung (AES-256-GCM/PBKDF2 600k) gegen IndexedDB-Verlust.":
+      "<b>Encrypted backup</b> — password-protected copy (AES-256-GCM/PBKDF2 600k) against losing IndexedDB.",
+    "Backup erzeugen + ⬇":
+      "Create backup + ⬇",
+    "<b>Identität wiederherstellen</b> — Backup-Datei (Schritt 3) + Passwort zurückspielen: Schlüssel <em>und</em> Spore landen wieder in der Browser-IndexedDB. Auch auf neuem Gerät.":
+      "<b>Restore identity</b> — play back the backup file (step 3) plus its password: key <em>and</em> spore land back in the browser's IndexedDB. On a new device too.",
+    "Backup-Datei wählen + wiederherstellen":
+      "Choose backup file + restore",
+    "<b>Identitäts-Wechsler</b> — welche Identität ist aktiv? Bei mehreren (z. B. aus altem Browser-Zustand) die kanonische wählen. Es wird nichts gelöscht.":
+      "<b>Identity switcher</b> — which identity is active? If there are several (e.g. left over from an older browser state), pick the canonical one. Nothing is deleted.",
+    "— wird geladen … —":
+      "— loading … —",
+    "Die heruntergeladene <code>spore.json</code> nach <code>sbkim/spore.json</code> ins Repo legen. Backup-Datei + Passwort sicher aufbewahren — ohne beides keine Wiederherstellung.":
+      "Put the downloaded <code>spore.json</code> into the repository as <code>sbkim/spore.json</code>. Keep the backup file and its password safe — without both there is no way back.",
+    "Modul 02 nicht geladen.":
+      "Module 02 is not loaded.",
+    "Erzeuge Identität …":
+      "Creating identity …",
+    "nodeId: {0}":
+      "nodeId: {0}",
+    "Modul 02/03 nicht geladen.":
+      "Modules 02/03 are not loaded.",
+    "Modell lädt  {0}  {1} %  (~30 MB einmalig)":
+      "Model loading  {0}  {1} %  (~30 MB, once)",
+    "Modell geladen ✓":
+      "Model loaded ✓",
+    "Lade Embedding-Modell (~30 MB, einmalig) …":
+      "Loading embedding model (~30 MB, once) …",
+    "Erzeuge domainVector (384) …":
+      "Creating domainVector (384) …",
+    "Spore erzeugt + ⬇ (nodeId={0}). Nach sbkim/spore.json committen.":
+      "Spore created + ⬇ (nodeId={0}). Commit it to sbkim/spore.json.",
+    "Modul 02 exportBackup fehlt.":
+      "Module 02 exportBackup is missing.",
+    "Backup-Passwort (mind. 8 Zeichen, KEIN Reset möglich):":
+      "Backup password (at least 8 characters, NO reset possible):",
+    "Abgebrochen — kein Passwort.":
+      "Cancelled — no password.",
+    "Erzeuge Backup (PBKDF2 600k + AES-GCM-256) …":
+      "Creating backup (PBKDF2 600k + AES-GCM-256) …",
+    "Backup ⬇ — Datei + Passwort sicher aufbewahren.":
+      "Backup ⬇ — keep the file and the password safe.",
+    "Modul 02 importBackup fehlt.":
+      "Module 02 importBackup is missing.",
+    "Keine Datei gewählt.":
+      "No file chosen.",
+    "Datei ist kein gültiges JSON-Backup.":
+      "The file is not a valid JSON backup.",
+    "Backup-Passwort eingeben (das beim Sichern vergebene):":
+      "Enter the backup password (the one you set when saving):",
+    "Entschlüssele Backup + spiele Identität zurück …":
+      "Decrypting backup + restoring identity …",
+    "Eine Identität existiert bereits im Browser. Mit der Backup-Version überschreiben? (Die jetzige lokale Identität geht verloren.)":
+      "An identity already exists in this browser. Overwrite it with the one from the backup? (The current local identity will be lost.)",
+    "Überschreibe vorhandene Identität …":
+      "Overwriting the existing identity …",
+    "Fehler beim Überschreiben: {0}":
+      "Error while overwriting: {0}",
+    "Abgebrochen — vorhandene Identität unverändert.":
+      "Cancelled — the existing identity is unchanged.",
+    "Fehler: {0} (falsches Passwort oder beschädigte Datei?)":
+      "Error: {0} (wrong password, or a damaged file?)",
+    "Identität wiederhergestellt — Schlüssel + Spore zurück in der Browser-IndexedDB.":
+      "Identity restored — key and spore are back in the browser's IndexedDB.",
+    "Nichts wiederhergestellt{0}.":
+      "Nothing was restored{0}.",
+    "Identitäts-Liste nicht verfügbar (Modul 02 zu alt).":
+      "The identity list is unavailable (module 02 is too old).",
+    "— keine geladen —":
+      "— none loaded —",
+    "Noch keine Identität — oben zuerst eine anlegen.":
+      "No identity yet — create one above first.",
+    "  (aktiv)":
+      "  (active)",
+    "Genau eine Identität — sauber.":
+      "Exactly one identity — clean.",
+    "{0} Identitäten — wähle die kanonische (aktiv markiert).":
+      "{0} identities — pick the canonical one (the active one is marked).",
+    "{0} · aktive nodeId: {1}":
+      "{0} · active nodeId: {1}",
+    "Fehler beim Lesen der Identitäten: {0}":
+      "Error while reading the identities: {0}",
+    "✔ Aktive Identität gewechselt zu {0}. Die nächste Spore-Signatur nutzt diese nodeId.":
+      "✔ Active identity switched to {0}. The next spore signature will use this nodeId.",
+    "Wechsel fehlgeschlagen: {0}":
+      "Switching failed: {0}",
+  } };
 
   /* TEXTE_DE ist die DATEN-TAFEL: jeder Anzeigetext steht hier genau einmal.
    * Drei Wächter halten sie zusammen (INTERFACES §11.9) — und der dritte ist
