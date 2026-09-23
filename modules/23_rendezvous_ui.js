@@ -1708,9 +1708,20 @@
     handle.style.touchAction = "none";
     var sx = 0, sy = 0, ox = 0, oy = 0, moved = false, dragging = false;
     handle.addEventListener("pointerdown", function (ev) {
+      /* ⚠ NICHT NUR DAS ZIEL, SONDERN SEINE VORFAHREN (Klaus 2026-09-23:
+         „lässt sich nicht minimieren oder schließen, und die Tooltips ein und
+         aus funktioniert auch nicht"). Eine Seiten-Übersetzung (Chrome/Samsung
+         „Übersetzen") wickelt den Knopftext in <font><font>…</font></font>.
+         Das Ziel ist dann das <font>, nicht der Knopf — die alte Prüfung auf
+         `tg.tagName` liess den Zug starten, der Pointer-Capture zog den Klick
+         auf die Kopfzeile, und –, ✕ und 💬 waren tot. Gemessen in Alis
+         Moderaum; Probe: tests/smoke_bau23_uebersetzung.mjs. Darum zaehlt
+         der naechste bedienbare Vorfahr bis hinauf zum Griff. */
       var tg = ev.target;
-      if (tg && tg !== handle && (tg.tagName === "BUTTON" || tg.tagName === "INPUT" ||
-          tg.tagName === "TEXTAREA" || tg.tagName === "A" || tg.tagName === "SELECT")) return;
+      if (tg && tg.nodeType !== 1) tg = tg.parentNode;
+      var bedienbar = null;
+      try { bedienbar = tg && tg.closest ? tg.closest("button,input,textarea,a,select") : null; } catch (_e) {}
+      if (bedienbar && bedienbar !== handle && handle.contains(bedienbar)) return;
       dragging = true; moved = false;
       var r = node.getBoundingClientRect();
       ox = r.left; oy = r.top; sx = ev.clientX; sy = ev.clientY;

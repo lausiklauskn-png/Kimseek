@@ -19,7 +19,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimseek-v51";
+var CACHE_VERSION = "kimseek-v52";
 
 
 /* ⚠ NUR EIGENE VORRAETE AUFRAEUMEN — `caches` gehoert dem URSPRUNG, nicht dem
