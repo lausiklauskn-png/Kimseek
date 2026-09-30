@@ -1703,6 +1703,105 @@
     return r;
   }
 
+  /*
+   * ══ AN DER OBEREN LEISTE EINRASTEN (Klaus 2026-09-30) ═══════════════════
+   *
+   * „… automatisch verankert, wenn ich das oben an die Navi-Leiste hänge,
+   *  egal welche … so dass ich das dann auch wieder abnehmen kann."
+   *
+   * Loslassen oben an der Leiste: bietet die Seite einen Platz an
+   * (`data-sbkim-mycel-platz`), geht der Knopf wie bisher HINEIN. Sonst
+   * rastet er ÜBER der Leiste ein: gemerkt wird die Seite (links/rechts) und
+   * der Abstand zu diesem Rand, die Höhe kommt bei jedem Zeichnen aus der
+   * Leiste. Eine freie Lage in Pixeln wanderte bei jeder Fenstergröße.
+   *
+   * ⚠ TAFEL-EVOLUTION, BENANNT: „die Seite bietet den Platz an" gilt weiter
+   * für das HINEINHÄNGEN. Für das Schweben über einer Leiste sucht das Modul
+   * sie jetzt selbst — Klaus will es „egal welche". Gesucht wird:
+   * `data-sbkim-leiste` · sonst ein fest/klebend oben stehendes Element über
+   * mindestens die halbe Breite · sonst die Fensteroberkante. In die fremde
+   * Leiste wird dabei nichts gehängt.
+   */
+  var OBEN_FANG_PX = 24;
+  function obenGueltig(o) {
+    if (!o || typeof o !== "object") return null;
+    if (o.seite !== "links" && o.seite !== "rechts") return null;
+    var a = Number(o.abstand);
+    if (!isFinite(a) || a < 0) return null;
+    return { seite: o.seite, abstand: Math.round(a) };
+  }
+  function findeObereLeiste() {
+    var d = doc();
+    if (!d) return null;
+    try { var ang = d.querySelector("[data-sbkim-leiste]"); if (ang) return ang; } catch (_e) {}
+    if (typeof d.elementsFromPoint !== "function") return null;
+    var vw = global.innerWidth || 1024;
+    var xs = [0.1, 0.5, 0.9], ys = [2, 10];
+    for (var i = 0; i < xs.length; i++) for (var j = 0; j < ys.length; j++) {
+      var liste = [];
+      try { liste = d.elementsFromPoint(Math.round(vw * xs[i]), ys[j]) || []; } catch (_e) {}
+      for (var k = 0; k < liste.length; k++) {
+        var n = liste[k];
+        while (n && n.nodeType === 1 && n !== d.body && n !== d.documentElement) {
+          var eigen = false;
+          try { eigen = String(n.id || "").indexOf("sbkim") === 0; } catch (_e) {}
+          if (!eigen) {
+            var cs = null;
+            try { cs = global.getComputedStyle(n); } catch (_e) {}
+            if (cs && (cs.position === "fixed" || cs.position === "sticky")) {
+              var r = n.getBoundingClientRect();
+              if (r.top <= 4 && r.width >= vw * 0.5 && r.height >= 20 && r.height <= 200) return n;
+            }
+          }
+          n = n.parentNode;
+        }
+      }
+    }
+    return null;
+  }
+  function obereKante() {
+    var l = findeObereLeiste();
+    if (!l) return { top: 0, bottom: 0, leiste: null };
+    var r = l.getBoundingClientRect();
+    return { top: Math.max(0, r.top), bottom: Math.max(0, r.bottom), leiste: l };
+  }
+  /* Aus Seite+Abstand die Lage in Pixeln — bei JEDEM Zeichnen neu. */
+  function obenPunkt(ob, node) {
+    var k = obereKante();
+    var vw = global.innerWidth || 1024;
+    var w = (node && node.offsetWidth) || 60, h = (node && node.offsetHeight) || 32;
+    var a = Math.min(ob.abstand, Math.max(0, vw - w - 4));
+    var x = ob.seite === "links" ? a : vw - w - a;
+    var y = k.leiste ? k.top + Math.max(0, (k.bottom - k.top - h) / 2) : 4;
+    return { x: Math.round(Math.max(0, x)), y: Math.round(y) };
+  }
+  /* Rechts eingerastet wird über `right` gesetzt, nicht über `left`: die
+     Blase ändert ihre Breite mit dem Fenster (schmal → kurze Beschriftung),
+     und ein aus der alten Breite gerechnetes `left` stünde danach um genau
+     diesen Unterschied falsch (gemessen: 20 px). */
+  function setzeOben(ob) {
+    var op = obenPunkt(ob, btnEl);
+    applyPos(btnEl, op);
+    if (ob.seite === "rechts") {
+      var vw = global.innerWidth || 1024, w = btnEl.offsetWidth || 60;
+      btnEl.style.left = "auto";
+      btnEl.style.right = Math.min(ob.abstand, Math.max(0, vw - w - 4)) + "px";
+    }
+    btnEl.setAttribute("data-sbkim-oben", ob.seite);
+    saveOben(ob, op);
+    return op;
+  }
+  function istOben(r) { return r && r.top <= obereKante().bottom + OBEN_FANG_PX; }
+  function obenAus(r) {
+    var vw = global.innerWidth || 1024;
+    return (r.left + r.width / 2) < vw / 2
+      ? { seite: "links", abstand: Math.max(0, Math.round(r.left)) }
+      : { seite: "rechts", abstand: Math.max(0, Math.round(vw - r.right)) };
+  }
+  function saveOben(ob, p) {
+    try { global.localStorage.setItem(POS_KEY, JSON.stringify({ x: p.x, y: p.y, oben: ob })); } catch (_e) {}
+  }
+
   function makeDraggable(node, handle) {
     handle = handle || node;
     handle.style.touchAction = "none";
@@ -1766,6 +1865,18 @@
       try { handle.releasePointerCapture(ev.pointerId); } catch (_e) {}
       if (moved) {
         var r = node.getBoundingClientRect();
+        /* Oben an der Leiste losgelassen → einrasten (nur der Knopf). */
+        if (node === btnEl && istOben(r)) {
+          if (findeAnker()) {
+            try { global.localStorage.removeItem(POS_KEY); } catch (_e) {}
+            andocken();
+            return;
+          }
+          var op = setzeOben(obenAus(r));
+          if (panelEl) applyPos(panelEl, op);
+          return;
+        }
+        if (node === btnEl) btnEl.removeAttribute("data-sbkim-oben");
         var c = clampInts(r.left, r.top, node);
         savePos(c.x, c.y);
         if (node === panelEl && btnEl) applyPos(btnEl, c);
@@ -2184,7 +2295,10 @@
      * Die Klemme braucht die echte Breite des Elements. Beim Mount steht die
      * noch nicht im Layout, darum erst anhaengen, dann klemmen. */
     var savedPos = loadPos();
-    if (savedPos) {
+    var savedOben = savedPos && obenGueltig(savedPos.oben);
+    if (savedOben) {
+      setzeOben(savedOben);
+    } else if (savedPos) {
       var sicher = clampInts(savedPos.x, savedPos.y, btnEl);
       applyPos(btnEl, sicher);
       if (sicher.x !== savedPos.x || sicher.y !== savedPos.y) savePos(sicher.x, sicher.y);
@@ -2199,6 +2313,11 @@
     try {
       global.addEventListener("resize", function () {
         var p = loadPos(); if (!p) return;
+        var obr = obenGueltig(p.oben);
+        if (obr && !isOpen()) {
+          setzeOben(obr);
+          return;
+        }
         var vis = isOpen() ? panelEl : btnEl;
         var c = clampInts(p.x, p.y, vis); applyPos(vis, c); savePos(c.x, c.y);
       });
@@ -2886,6 +3005,12 @@
   function hide() {
     if (panelEl) panelEl.style.display = "none";
     if (btnEl) btnEl.style.display = "";          // minimiert → Pille zeigt sich wieder
+    /* Eingerastet: nach dem Minimieren wieder an die Leiste — das Fenster
+       kann sich verändert haben, während das Panel offen war. */
+    try {
+      var p = loadPos(), ob = p && obenGueltig(p.oben);
+      if (ob && btnEl && !angedockt) setzeOben(ob);
+    } catch (_e) {}
   }
   // ✕ — ganz ausblenden (Panel UND Pille). Session-only, NICHT persistiert:
   // ein Neuladen der Seite mountet das Widget wieder. So kann der Nutzer es

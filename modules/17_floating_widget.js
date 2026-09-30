@@ -276,6 +276,7 @@
   var currentOffsetY = DEFAULT_OFFSET.y;
   var currentFreeX = null;     // wenn Free-Drag aktiv: abs. px von links
   var currentFreeY = null;     // wenn Free-Drag aktiv: abs. px von oben
+  var currentOben = null;      // an der oberen Leiste eingerastet: {seite, abstand}
   var visibleFlag = true;
   // Pflege 17 UX 2026-05-25: dritter Sichtbarkeits-Zustand „minimiert"
   // (nur SIEGEL sichtbar, oder LEBT als Fallback wenn kein SIEGEL).
@@ -392,7 +393,11 @@
     try {
       var parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object") return;
-      if (typeof parsed.x === "number" && typeof parsed.y === "number" &&
+      var ob = obenGueltig(parsed.oben);
+      if (ob) {
+        currentOben = ob;
+        currentFreeX = null; currentFreeY = null; currentCorner = null;
+      } else if (typeof parsed.x === "number" && typeof parsed.y === "number" &&
           isFinite(parsed.x) && isFinite(parsed.y)) {
         currentFreeX = parsed.x;
         currentFreeY = parsed.y;
@@ -422,8 +427,110 @@
       offsetY: currentOffsetY,
       x:       currentFreeX,
       y:       currentFreeY,
+      oben:    currentOben,
     };
   }
+
+  /*
+   * ══ AN DER OBEREN LEISTE EINRASTEN (Klaus 2026-09-30) ═══════════════════
+   *
+   * „Lässt sich das so machen, dass es sich automatisch verankert, wenn ich
+   *  das oben an die Navi-Leiste hänge, egal welche, egal welches
+   *  Betriebssystem, so dass ich das dann auch wieder abnehmen kann."
+   *
+   * Frei gezogen merkte sich das Widget eine Lage in Pixeln von links/oben.
+   * Wird das Fenster schmaler oder breiter, steht es danach woanders — „mal
+   * da, mal da und mal da". Eingerastet merkt es sich stattdessen die SEITE
+   * (links/rechts) und den Abstand zu DIESEM Rand; die Höhe kommt bei jedem
+   * Zeichnen aus der Leiste selbst. So bleibt es an der Leiste, bei jeder
+   * Fenstergröße.
+   *
+   * ⚠ TAFEL-EVOLUTION, BENANNT: bisher suchte kein Modul sich eine Stelle in
+   * einer fremden Leiste (Modul 23: „die Seite bietet den Platz an"). Klaus
+   * will es „egal welche" Leiste. Das Widget wird deshalb NICHT in die Leiste
+   * gehängt (das griffe in fremdes Layout ein), sondern schwebt fest über ihr.
+   * Gesucht wird so: 1) was die Seite mit `data-sbkim-leiste` anbietet;
+   * 2) sonst ein fest/klebend oben stehendes Element über mindestens die
+   * halbe Breite; 3) sonst die Oberkante des Fensters. Raten kann das nur in
+   * Fall 2, und dort nur zwischen Leisten, die oben kleben.
+   *
+   * Abnehmen: einfach wegziehen — jeder Zug unterhalb der Leiste gibt es frei.
+   */
+  var OBEN_FANG_PX = 24;
+  function obenGueltig(o) {
+    if (!o || typeof o !== "object") return null;
+    if (o.seite !== "links" && o.seite !== "rechts") return null;
+    var a = Number(o.abstand);
+    if (!isFinite(a) || a < 0) return null;
+    return { seite: o.seite, abstand: Math.round(a) };
+  }
+  function istEigenes(n) {
+    try {
+      var id = n && n.id ? String(n.id) : "";
+      if (id.indexOf("sbkim") === 0) return true;
+      return !!(widgetRoot && widgetRoot.contains(n));
+    } catch (_e) { return false; }
+  }
+  function findeObereLeiste() {
+    var d = global.document;
+    if (!d) return null;
+    try {
+      var angeboten = d.querySelector("[data-sbkim-leiste]");
+      if (angeboten) return angeboten;
+    } catch (_e) {}
+    if (typeof d.elementsFromPoint !== "function") return null;
+    var vw = global.innerWidth || 1024;
+    var xs = [0.1, 0.5, 0.9], ys = [2, 10];
+    for (var i = 0; i < xs.length; i++) {
+      for (var j = 0; j < ys.length; j++) {
+        var liste = [];
+        try { liste = d.elementsFromPoint(Math.round(vw * xs[i]), ys[j]) || []; } catch (_e) {}
+        for (var k = 0; k < liste.length; k++) {
+          var n = liste[k];
+          while (n && n.nodeType === 1 && n !== d.body && n !== d.documentElement) {
+            if (!istEigenes(n)) {
+              var cs = null;
+              try { cs = global.getComputedStyle(n); } catch (_e) {}
+              if (cs && (cs.position === "fixed" || cs.position === "sticky")) {
+                var r = n.getBoundingClientRect();
+                if (r.top <= 4 && r.width >= vw * 0.5 && r.height >= 20 && r.height <= 200) return n;
+              }
+            }
+            n = n.parentNode;
+          }
+        }
+      }
+    }
+    return null;
+  }
+  function obereKante() {
+    var l = findeObereLeiste();
+    if (!l) return { top: 0, bottom: 0, leiste: null };
+    var r = l.getBoundingClientRect();
+    return { top: Math.max(0, r.top), bottom: Math.max(0, r.bottom), leiste: l };
+  }
+  function obenLage() {
+    var k = obereKante();
+    var wr = widgetRoot.getBoundingClientRect();
+    var h = k.bottom - k.top;
+    var y = k.leiste ? k.top + Math.max(0, (h - wr.height) / 2) : 4;
+    return { y: Math.round(y) };
+  }
+  function versucheEinrasten() {
+    if (!widgetRoot) return false;
+    var r = widgetRoot.getBoundingClientRect();
+    var k = obereKante();
+    if (r.top > k.bottom + OBEN_FANG_PX) return false;
+    var vw = global.innerWidth || 1024;
+    var mitte = r.left + r.width / 2;
+    currentOben = mitte < vw / 2
+      ? { seite: "links", abstand: Math.max(0, Math.round(r.left)) }
+      : { seite: "rechts", abstand: Math.max(0, Math.round(vw - r.right)) };
+    currentFreeX = null; currentFreeY = null; currentCorner = null;
+    applyPositionToRoot();
+    return true;
+  }
+  function beiGroesse() { if (currentOben) applyPositionToRoot(); }
 
   function applyPositionToRoot() {
     if (!widgetRoot) return;
@@ -432,7 +539,17 @@
     widgetRoot.style.bottom = "";
     widgetRoot.style.left = "";
     widgetRoot.style.right = "";
+    widgetRoot.removeAttribute("data-sbkim-oben");
 
+    if (currentOben) {
+      var vw0 = global.innerWidth || 1024;
+      var a = Math.min(currentOben.abstand, Math.max(0, vw0 - 48));
+      if (currentOben.seite === "links") widgetRoot.style.left = a + "px";
+      else widgetRoot.style.right = a + "px";
+      widgetRoot.style.top = obenLage().y + "px";
+      widgetRoot.setAttribute("data-sbkim-oben", currentOben.seite);
+      return;
+    }
     if (currentFreeX !== null && currentFreeY !== null) {
       widgetRoot.style.left = currentFreeX + "px";
       widgetRoot.style.top = currentFreeY + "px";
@@ -1224,6 +1341,7 @@
       currentFreeX = newX;
       currentFreeY = newY;
       currentCorner = null;
+      currentOben = null;       // wer zieht, nimmt es von der Leiste ab
       applyPositionToRoot();
     } catch (err) {
       // Drag-Pointer-Event-Fehler (Karte 17 § Fehlerverhalten): Drag
@@ -1251,6 +1369,7 @@
       widgetRoot.removeEventListener("pointercancel", onPointerUp);
     }
     if (moved) {
+      try { versucheEinrasten(); } catch (_e) { /* fail-soft: bleibt frei */ }
       persistPosition();
     }
     // Nach kurzer Verzögerung dragState zurücksetzen, damit der pending
@@ -1282,6 +1401,13 @@
     widgetRoot = buildWidget(doc);
     doc.body.appendChild(widgetRoot);
     applyPositionToRoot();
+    /* Eingerastet steht es mittig zur Leiste — ändert sich seine Höhe
+       (minimiert, Siegel kommt dazu), wird nachgezogen. */
+    try {
+      if (typeof global.ResizeObserver === "function") {
+        new global.ResizeObserver(beiGroesse).observe(widgetRoot);
+      }
+    } catch (_e) { /* nb */ }
     applyVisibility();
     applyMinimizedState();
     applySlotActiveStatesFromCounts();
@@ -1953,6 +2079,8 @@
         registerEventListeners();
         try { global.addEventListener("keydown", onGlobalKeydown); }
         catch (_e) { /* nb */ }
+        try { global.addEventListener("resize", beiGroesse); }
+        catch (_e) { /* nb */ }
         // Pflege 17 Heartbeat 2026-05-26: 5-s-Fallback-Timer starten.
         scheduleSelfHeartbeat();
 
@@ -2078,6 +2206,8 @@
       get firstBootShown() { return firstBootShown; },
       get siegelMounted()  { return siegelMounted; },
       get minimizedFlag()  { return minimizedFlag; },
+      get oben()           { return currentOben ? { seite: currentOben.seite, abstand: currentOben.abstand } : null; },
+      obenFangPx:          OBEN_FANG_PX,
       get slots()          { return enabledSlots.slice(); },
       get eventCounts()    {
         return {

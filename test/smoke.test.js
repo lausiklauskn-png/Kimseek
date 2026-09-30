@@ -36,11 +36,11 @@ const EXPECTED_SHA256 = {
   "15_membran.js": "829a5bc01976b59c5ce428125314b87b314b6212cd5a473634c2d22c02579397",
   "16_siegel.js": "d84fa539e76e0cc54c956b648fcb1505f08843662d97854dc1a95e6ab65b7e25",
   "20_schluessel_safe.js": "e7e25c9070e93f8267171d2b626109cfd90cb481c2781242f5f7dfc203f031f3",
-  "17_floating_widget.js": "3f757b35cea544b1ee84c1cbe8e0f6dbb653ddaa319cd99433be76c0958a44e5",
+  "17_floating_widget.js": "e4ee076c1295910d0e83470ebda327e7419f29bc06f6718148369c8369e1a5ce",
   "21_spracheingabe.js": "020ca26ff52f2ed726f6344bd3ac55eb52e3472a7f97bdd41bdd0d54132777ba",
   "22_such_widget.js": "052eb5f844fd065748109e5edbbe413617de7682986a1474fba401269a7c7af5",
   "23_rendezvous.js": "3caa0bb1fbe7bf5293c90b6a59a74cccf8600bff45095a892b1f048244c61fcf",
-  "23_rendezvous_ui.js": "f6c44607a797a4acc34bf5eafa4d72dba0af890701d587394afed1accf9833eb",
+  "23_rendezvous_ui.js": "fc47f16b24d5c5f69eb4b53ca0079ec9f289ae023bede17954297f048fefe1f7",
   "24_ocr_eingabe.js": "c0d616ff763cae409f4ec3dd943326b04c8ec0275b404ddfac348dc4c402077e",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
 };
