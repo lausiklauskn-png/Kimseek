@@ -2296,7 +2296,14 @@
      * noch nicht im Layout, darum erst anhaengen, dann klemmen. */
     var savedPos = loadPos();
     var savedOben = savedPos && obenGueltig(savedPos.oben);
-    if (savedOben) {
+    /* ⚠ OBEN EINGERASTET + PLATZ ANGEBOTEN → HINEIN (Klaus 2026-10-11).
+       Eine obere Lage meint „in der Leiste". Bietet die Seite inzwischen einen
+       Platz an, gilt der — sonst bliebe ein frueher gemerktes Schweben ueber
+       der Leiste stehen, obwohl der Knopf jetzt andocken kann. */
+    if (savedOben && findeAnker()) {
+      try { global.localStorage.removeItem(POS_KEY); } catch (_e) {}
+      andocken();
+    } else if (savedOben) {
       setzeOben(savedOben);
     } else if (savedPos) {
       var sicher = clampInts(savedPos.x, savedPos.y, btnEl);
