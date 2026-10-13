@@ -562,6 +562,58 @@
         " (live ID, max ~12 s) …",
       "\n✗ Fehler: ":
         "\n✗ Error: ",
+      "🔒 Eigenes Netz: ":
+        "🔒 Own network: ",
+      "🔒 Eigenes Netz":
+        "🔒 Own network",
+      "⚠ Netz-Einstellung ungültig — es wird nicht verbunden: ":
+        "⚠ Network setting invalid — not connecting: ",
+      "… Netz-Code wird gelesen":
+        "… reading network code",
+      "Eigener Raum ohne Code (nicht verschlüsselt)":
+        "Own room without a code (not encrypted)",
+      "🌐 Öffentliches Netz (Vorgabe)":
+        "🌐 Public network (default)",
+      "Diese Version von Modul 23 kennt kein eigenes Netz.":
+        "This version of module 23 has no own network.",
+      "✓ Übernommen. Diese App verbindet sich jetzt und bei jedem Öffnen mit diesem Netz.":
+        "✓ Applied. This app now connects to this network, and does so every time it opens.",
+      "Zurück im öffentlichen Netz. Verbunden wird erst auf deinen Knopfdruck.":
+        "Back in the public network. It connects only when you press the button.",
+      "✓ Link kopiert. ":
+        "✓ Link copied. ",
+      "Link unten markieren und kopieren. ":
+        "Select and copy the link below. ",
+      "Wer den Link hat, ist im Netz — nur an eigene Geräte weitergeben.":
+        "Whoever has the link is in the network — only pass it to your own devices.",
+      "Diesem Netz beitreten?":
+        "Join this network?",
+      "Beitreten":
+        "Join",
+      "Nicht beitreten":
+        "Do not join",
+      "Nicht beigetreten. Es bleibt bei der bisherigen Einstellung.":
+        "Not joined. The previous setting stays.",
+      "🔒 Netz":
+        "🔒 Network",
+      "Name":
+        "Network name",
+      "Relais (wss://…)":
+        "Relay (wss://…)",
+      "Netz-Code":
+        "Network code",
+      "🎲 Code erzeugen":
+        "🎲 Create code",
+      "✓ Übernehmen":
+        "✓ Apply",
+      "🔗 Link kopieren":
+        "🔗 Copy link",
+      "🌐 Zurück ins öffentliche Netz":
+        "🌐 Back to the public network",
+      "Neuer Code erzeugt — erst mit „Übernehmen“ gilt er.":
+        "New code created — it applies only after “Apply”.",
+      "Im eigenen Netz sehen sich nur Apps mit demselben Code; Karten, Fragen und Antworten sind verschlüsselt. Ein neues Tool tritt bei, indem es den Link öffnet. Der Code bleibt auf dem Gerät und geht nie an einen Server.":
+        "In an own network only apps with the same code see each other; cards, questions and answers are encrypted. A new tool joins by opening the link. The code stays on the device and never goes to a server.",
   } };
 
   function sprache() {
@@ -1891,6 +1943,249 @@
     }, true);
   }
 
+  // ---- Eigenes Netz: Einstellung „Netz" (Schritt 2, 2026-10-13, INTERFACES) ----
+  // Die Regeln stehen in Modul 23 (prüfen, speichern, anwenden); hier steht nur
+  // die Oberfläche und das Weitergeben per Link. Ein zweiter Prüfer hier liefe
+  // gegen den in Modul 23 auseinander.
+  var NETZ_LINK_MARKE = "#sbkim-netz=";
+  var netBoxEl = null, netLageEl = null, netNameEl = null, netRelayEl = null, netCodeEl = null,
+      netMsgEl = null, netJoinEl = null, netLinkEl = null;
+  var netGrund = null;          // Grund einer ungültigen GESPEICHERTEN Einstellung
+  var netGestartet = false;
+
+  function netzB64(text) {
+    var u = new TextEncoder().encode(text), s = "";
+    for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function netzAusB64(b) {
+    var t = String(b).replace(/-/g, "+").replace(/_/g, "/");
+    while (t.length % 4) t += "=";
+    var s = atob(t), u = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+    return new TextDecoder().decode(u);
+  }
+  // Der Code steht im FRAGMENT — ein Fragment geht nie an einen Server.
+  function netzLink(setting) {
+    var basis = "";
+    try { basis = String(global.location.href).split("#")[0]; } catch (_e) {}
+    return basis + NETZ_LINK_MARKE + netzB64(JSON.stringify({ v: 1, n: setting.name, r: setting.relay, c: setting.code }));
+  }
+  function netzAusLink(hash) {
+    if (typeof hash !== "string" || hash.indexOf(NETZ_LINK_MARKE) !== 0) return null;
+    try {
+      var o = JSON.parse(netzAusB64(hash.slice(NETZ_LINK_MARKE.length)));
+      if (!o || o.v !== 1) return null;
+      return { name: o.n, relay: o.r, code: o.c, auto: true };
+    } catch (_e) { return null; }
+  }
+  // Die Adresse putzen, damit der Code nicht in Verlauf und Lesezeichen bleibt.
+  function netzAdressePutzen() {
+    try {
+      var h = global.history, l = global.location;
+      if (h && typeof h.replaceState === "function") h.replaceState(null, "", String(l.href).split("#")[0]);
+      else l.hash = "";
+    } catch (_e) {}
+  }
+
+  function netzLage() {
+    var r = rdv(), m = null;
+    try { m = r && r._meta; } catch (_e) {}
+    var lage = (m && m.network) || "oeffentlich";
+    var gespeichert = null;
+    try { var st = r && typeof r.readNetwork === "function" ? r.readNetwork() : null; if (st && st.ok) gespeichert = st.setting; } catch (_e) {}
+    return { lage: lage, grund: netGrund || (m && m.networkReason) || null, setting: gespeichert };
+  }
+  function netzZeigen() {
+    var z = netzLage(), text;
+    if (z.lage === "eigen" && z.setting) text = T("🔒 Eigenes Netz: ") + z.setting.name + " · " + z.setting.relay;
+    else if (z.lage === "eigen") text = T("🔒 Eigenes Netz");
+    else if (z.lage === "ungueltig") text = T("⚠ Netz-Einstellung ungültig — es wird nicht verbunden: ") + (z.grund || "");
+    else if (z.lage === "wird-abgeleitet") text = T("… Netz-Code wird gelesen");
+    else if (z.lage === "raum") text = T("Eigener Raum ohne Code (nicht verschlüsselt)");
+    else text = T("🌐 Öffentliches Netz (Vorgabe)");
+    if (netLageEl) { netLageEl.textContent = text;
+    netLageEl.setAttribute("data-lage", z.lage);
+    };
+    if (btnEl) btnEl.setAttribute("data-sbkim-netz", z.lage);
+    return z;
+  }
+  function netzMeldung(text) { if (netMsgEl) netMsgEl.textContent = text || ""; }
+  function netzAusFeldern() {
+    return { name: netNameEl ? netNameEl.value : "", relay: netRelayEl ? netRelayEl.value.trim() : "",
+      code: netCodeEl ? netCodeEl.value : "", auto: true };
+  }
+  function netzFelderFuellen(s) {
+    if (!s) return;
+    if (netNameEl) netNameEl.value = s.name || "";
+    if (netRelayEl) netRelayEl.value = s.relay || "";
+    if (netCodeEl) netCodeEl.value = s.code || "";
+  }
+
+  // Übernehmen: speichern UND anwenden; im eigenen Netz danach verbinden.
+  function netzUebernehmen(setting) {
+    var r = ensureRdv();
+    if (!r || typeof r.saveNetwork !== "function") {
+      netzMeldung(T("Diese Version von Modul 23 kennt kein eigenes Netz."));
+      return Promise.resolve({ ok: false });
+    }
+    var sv = r.saveNetwork(setting);
+    if (!sv.ok) { netzMeldung("✗ " + sv.reason); return Promise.resolve(sv); }
+    netGrund = null;
+    netzMeldung(T("… Netz-Code wird gelesen"));
+    return r.applyNetwork(sv.setting).then(function (res) {
+      netzZeigen();
+      if (!res.ok) { netzMeldung("✗ " + (res.reason || "")); return res; }
+      netzFelderFuellen(sv.setting);
+      netzMeldung(T("✓ Übernommen. Diese App verbindet sich jetzt und bei jedem Öffnen mit diesem Netz."));
+      if (sv.setting.auto) onConnect({ auto: true });
+      return res;
+    });
+  }
+  function netzZurueck() {
+    var r = ensureRdv();
+    if (!r || typeof r.applyNetwork !== "function") return Promise.resolve({ ok: false });
+    r.clearNetwork();
+    netGrund = null;
+    return r.applyNetwork(null).then(function (res) {
+      netzZeigen();
+      netzMeldung(T("Zurück im öffentlichen Netz. Verbunden wird erst auf deinen Knopfdruck."));
+      return res;
+    });
+  }
+  function netzLinkZeigen() {
+    var r = ensureRdv();
+    if (!r || typeof r.checkNetSetting !== "function") return null;
+    var c = r.checkNetSetting(netzAusFeldern());
+    if (!c.ok) { netzMeldung("✗ " + c.reason); return null; }
+    var link = netzLink(c.setting);
+    if (netLinkEl) { netLinkEl.value = link; netLinkEl.style.display = ""; }
+    var kopiert = false;
+    try {
+      if (global.navigator && global.navigator.clipboard && typeof global.navigator.clipboard.writeText === "function") {
+        global.navigator.clipboard.writeText(link).then(function () {}, function () {});
+        kopiert = true;
+      }
+    } catch (_e) {}
+    netzMeldung((kopiert ? T("✓ Link kopiert. ") : T("Link unten markieren und kopieren. ")) +
+      T("Wer den Link hat, ist im Netz — nur an eigene Geräte weitergeben."));
+    return link;
+  }
+  // Ein Netz-Link wurde geöffnet: fragen, nie still übernehmen.
+  function netzBeitrittFragen(setting) {
+    if (!netJoinEl) return;
+    while (netJoinEl.firstChild) netJoinEl.removeChild(netJoinEl.firstChild);
+    netJoinEl.style.display = "block";
+    netJoinEl.appendChild(el("div", "margin-bottom:6px", T("Diesem Netz beitreten?")));
+    netJoinEl.appendChild(el("div", "color:#c7d2de", String(setting.name || "") + " · " + String(setting.relay || "")));
+    var zeile = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+    var ja = el("button", idBtnCss(true), T("Beitreten"));
+    ja.type = "button";
+    ja.setAttribute("data-sbkim-netz-ja", "");
+    var nein = el("button", idBtnCss(false), T("Nicht beitreten"));
+    nein.type = "button";
+    nein.setAttribute("data-sbkim-netz-nein", "");
+    ja.addEventListener("click", function () { netJoinEl.style.display = "none"; netzUebernehmen(setting); });
+    nein.addEventListener("click", function () { netJoinEl.style.display = "none"; netzMeldung(T("Nicht beigetreten. Es bleibt bei der bisherigen Einstellung.")); });
+    zeile.appendChild(ja); zeile.appendChild(nein);
+    netJoinEl.appendChild(zeile);
+    if (netBoxEl) netBoxEl.open = true;
+    show();
+  }
+
+  function bauNetzBox() {
+    var feldCss = "width:100%;box-sizing:border-box;margin:2px 0 6px;padding:6px 9px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:inherit";
+    netBoxEl = el("details", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
+    netBoxEl.setAttribute("data-sbkim-netz-box", "");
+    var sum = el("summary", "cursor:pointer;color:#c7d2de", T("🔒 Netz"));
+    netBoxEl.appendChild(sum);
+    netLageEl = el("div", "margin:6px 0;color:#eef2f8");
+    netLageEl.setAttribute("data-sbkim-netz-lage", "");
+    netBoxEl.appendChild(netLageEl);
+    netJoinEl = el("div", "display:none;margin:4px 0 8px;padding:7px 10px;border-radius:8px;border:1px solid " + accent() + ";background:rgba(110,231,211,.10)");
+    netJoinEl.setAttribute("data-sbkim-netz-beitritt", "");
+    netBoxEl.appendChild(netJoinEl);
+    netBoxEl.appendChild(el("div", "color:#9aa7b6", T("Name")));
+    netNameEl = el("input", feldCss);
+    netNameEl.setAttribute("data-sbkim-netz-name", "");
+    netNameEl.maxLength = 60;
+    netBoxEl.appendChild(netNameEl);
+    netBoxEl.appendChild(el("div", "color:#9aa7b6", T("Relais (wss://…)")));
+    netRelayEl = el("input", feldCss);
+    netRelayEl.setAttribute("data-sbkim-netz-relais", "");
+    netRelayEl.setAttribute("placeholder", "wss://…");
+    netBoxEl.appendChild(netRelayEl);
+    netBoxEl.appendChild(el("div", "color:#9aa7b6", T("Netz-Code")));
+    netCodeEl = el("input", feldCss);
+    netCodeEl.setAttribute("data-sbkim-netz-code", "");
+    netCodeEl.setAttribute("autocomplete", "off");
+    netCodeEl.spellcheck = false;
+    netBoxEl.appendChild(netCodeEl);
+    var zeile = el("div", "display:flex;gap:6px;flex-wrap:wrap");
+    var neuBtn = el("button", idBtnCss(false), T("🎲 Code erzeugen"));
+    neuBtn.type = "button";
+    neuBtn.setAttribute("data-sbkim-netz-neu", "");
+    var okBtn = el("button", idBtnCss(true), T("✓ Übernehmen"));
+    okBtn.type = "button";
+    okBtn.setAttribute("data-sbkim-netz-ok", "");
+    var linkBtn = el("button", idBtnCss(false), T("🔗 Link kopieren"));
+    linkBtn.type = "button";
+    linkBtn.setAttribute("data-sbkim-netz-link", "");
+    var wegBtn = el("button", idBtnCss(false), T("🌐 Zurück ins öffentliche Netz"));
+    wegBtn.type = "button";
+    wegBtn.setAttribute("data-sbkim-netz-weg", "");
+    neuBtn.addEventListener("click", function () {
+      var r = ensureRdv();
+      if (r && typeof r.newNetCode === "function") { netCodeEl.value = r.newNetCode(); netzMeldung(T("Neuer Code erzeugt — erst mit „Übernehmen“ gilt er.")); }
+    });
+    okBtn.addEventListener("click", function () { netzUebernehmen(netzAusFeldern()); });
+    linkBtn.addEventListener("click", function () { netzLinkZeigen(); });
+    wegBtn.addEventListener("click", function () { netzZurueck(); });
+    zeile.appendChild(neuBtn); zeile.appendChild(okBtn); zeile.appendChild(linkBtn); zeile.appendChild(wegBtn);
+    netBoxEl.appendChild(zeile);
+    netLinkEl = el("input", feldCss + ";display:none;margin-top:6px"); netLinkEl.readOnly = true;
+    netLinkEl.setAttribute("data-sbkim-netz-linkfeld", "");
+    netBoxEl.appendChild(netLinkEl);
+    netMsgEl = el("div", "margin-top:4px;color:#9aa7b6;white-space:pre-wrap");
+    netMsgEl.setAttribute("data-sbkim-netz-meldung", "");
+    netBoxEl.appendChild(netMsgEl);
+    netBoxEl.appendChild(el("div", "margin-top:6px;color:#7e8b9a;font-size:.7rem;line-height:1.45",
+      T("Im eigenen Netz sehen sich nur Apps mit demselben Code; Karten, Fragen und Antworten sind verschlüsselt. Ein neues Tool tritt bei, indem es den Link öffnet. Der Code bleibt auf dem Gerät und geht nie an einen Server.")));
+    return netBoxEl;
+  }
+
+  // Beim Laden: Link? → fragen. Gespeichert? → anwenden, im eigenen Netz verbinden.
+  function netzStart() {
+    if (netGestartet) return;
+    netGestartet = true;
+    var r = rdv();
+    if (!r || typeof r.readNetwork !== "function") { netzZeigen(); return; }
+    configModule();
+    var ausLink = null;
+    try { ausLink = netzAusLink(String(global.location.hash || "")); } catch (_e) {}
+    try { if (String(global.location.hash || "").indexOf(NETZ_LINK_MARKE) === 0) netzAdressePutzen(); } catch (_e) {}
+    var st = r.readNetwork();
+    if (st.present && st.ok) netzFelderFuellen(st.setting);
+    var weiter;
+    if (!st.present) weiter = Promise.resolve(null);
+    else if (!st.ok) {
+      netGrund = st.reason;
+      // Riegel: eine kaputte Einstellung wird NICHT zu „öffentlich".
+      weiter = r.applyNetwork(st.value || {}).then(function () { return null; });
+    } else {
+      weiter = r.applyNetwork(st.setting).then(function (res) {
+        if (res.ok && st.setting.auto) onConnect({ auto: true });
+        return res;
+      });
+    }
+    weiter.then(function () {
+      netzZeigen();
+      if (ausLink) netzBeitrittFragen(ausLink);
+    }, function () { netzZeigen(); });
+  }
+
   function mount() {
     if (mounted) return;
     var d = doc();
@@ -2073,6 +2368,8 @@
     panelEl.appendChild(idBoxEl);
     refreshIdentityBox();
     startIdentityWatch();   // Kennung anderswo entstanden (Siegel) → Anzeige zieht nach
+    panelEl.appendChild(bauNetzBox());
+    netzZeigen();
 
     // A15 — Zwei-Stufen-Hinweis (ehrliche Kosten-Benennung, reine Anzeige):
     // „nur stöbern" ist anonym (kein Modell/keine Identität, man wird nicht
@@ -2398,11 +2695,12 @@
     if (!(opts && opts.skipIdentityGate)) {
       readIdentityState().then(function (st) {
         if (st.known && !st.nodeId) {
+          if (opts && opts.auto) show();   // Auto-Verbinden: die Frage muss zu sehen sein
           setOut(T("🪪 Bitte einmal entscheiden — siehe „Kennung sichern“ oben."));
           askBeforeCreate();
           return;
         }
-        onConnect({ skipIdentityGate: true });
+        onConnect({ skipIdentityGate: true, auto: !!(opts && opts.auto) });
       });
       return;
     }
@@ -3052,8 +3350,8 @@
     configModule();
     var d = doc();
     if (!d) return Promise.resolve();
-    if (d.readyState === "loading") d.addEventListener("DOMContentLoaded", mount);
-    else mount();
+    if (d.readyState === "loading") d.addEventListener("DOMContentLoaded", function () { mount(); netzStart(); });
+    else { mount(); netzStart(); }
     return Promise.resolve();
   }
 
@@ -3153,6 +3451,16 @@
         return true;
       },
       connect: function (o) { onConnect(o); },
+      netz: {
+        lage: function () { return netzLage(); },
+        uebernehmen: function (s) { return netzUebernehmen(s); },
+        zurueck: function () { return netzZurueck(); },
+        link: function (s) { return netzLink(s); },
+        ausLink: function (h) { return netzAusLink(h); },
+        linkZeigen: function () { return netzLinkZeigen(); },
+        meldung: function () { return netMsgEl ? netMsgEl.textContent : null; },
+        lageText: function () { return netLageEl ? netLageEl.textContent : null; },
+      },
     },
   };
 

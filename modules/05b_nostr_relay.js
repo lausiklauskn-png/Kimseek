@@ -217,10 +217,39 @@ import { schnorr, utils } from "./noble-secp256k1.js";
       };
     }
 
+    // Eigenes Netz (Schritt 1, 2026-10-13, INTERFACES §Modul 05b
+    // „Relais-Einstellung"): nur `wss://`-Adressen. Eine ungültige Adresse
+    // weist die GANZE Liste ab — nie ein stiller Teil-Wechsel. Verbindungen zu
+    // Adressen, die nicht mehr in der Liste stehen, werden geschlossen; sonst
+    // ginge publish() weiter auch an das alte Relais (liveSockets zählt jede
+    // offene Verbindung). Rückgabe additiv: { ok, relays, reason? }.
+    function istRelaisAdresse(url) {
+      return typeof url === "string" && url.length <= 200 &&
+        /^wss:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?(\/[^\s]*)?$/.test(url);
+    }
+
     function configure(opts) {
-      if (opts && Array.isArray(opts.relays) && opts.relays.length > 0) {
-        relays = opts.relays.slice();
+      var neu = null;
+      if (opts && opts.reset === true) {
+        neu = DEFAULT_RELAYS.slice();
+      } else if (opts && Array.isArray(opts.relays) && opts.relays.length > 0) {
+        for (var i = 0; i < opts.relays.length; i++) {
+          if (!istRelaisAdresse(opts.relays[i])) {
+            return { ok: false, relays: relays.slice(),
+              reason: "Ungültige Relais-Adresse (nur wss://…): " + String(opts.relays[i]).slice(0, 80) };
+          }
+        }
+        neu = opts.relays.slice();
       }
+      if (!neu) return { ok: false, relays: relays.slice(), reason: "Keine Relais-Liste angegeben." };
+      relays = neu;
+      for (var url in conns) {
+        if (relays.indexOf(url) === -1) {
+          try { conns[url].close(); } catch (e) {}
+          delete conns[url];
+        }
+      }
+      return { ok: true, relays: relays.slice() };
     }
 
     function close() {
@@ -239,6 +268,7 @@ import { schnorr, utils } from "./noble-secp256k1.js";
       _meta: {
         transportPubKey: pubHex,   // ephemerer Nostr-Transport-Key (NICHT SBKIM-Identität)
         get relays() { return relays.slice(); },
+        get defaultRelays() { return DEFAULT_RELAYS.slice(); },
         get liveCount() { return liveSockets().length; },
       },
     };
