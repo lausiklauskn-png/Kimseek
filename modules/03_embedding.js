@@ -7,7 +7,7 @@
  * applied internally — there is no mode parameter.
  *
  * Public surface (registered on window.SbkimEmbedding):
- *   init() -> Promise<void>                          // loads the model (~30 MB on first run)
+ *   init() -> Promise<void>                          // loads the model (model_quantized.onnx 118 MB, measured 2026-10-13)
  *   isReady() -> boolean
  *   embedQuery(text) -> Promise<Float32Array(384)>
  *   embedPassage(text) -> Promise<Float32Array(384)>
@@ -15,6 +15,7 @@
  *   embedPassageBatch(texts) -> Promise<Float32Array[]>
  *   embedContentVector(samples, opts?) -> Promise<{vector,count,source}>  // inhalts-treuer Domänen-Vektor
  *   embedSnippets(text|string[], opts?) -> Promise<[{vec:Float32Array(384), text}]>  // A10 Satz-Schnipsel
+ *   getModelSource() / getModelRoot()   // "local"|"remote" · Wurzel des eigenen Servers (window.SBKIM_MODEL_ROOT)
  *
  * Self-check: console.info after init() succeeds — not on script load,
  * because the model download is asynchronous. See INTERFACES.md and
@@ -56,6 +57,24 @@
   var LOCAL_MODEL_ROOT = "/models/"; // = transformers.js env.localModelPath
   var LOCAL_MODEL_PROBE = LOCAL_MODEL_ROOT + EMBEDDING_MODEL + "/config.json";
   var modelSource = null; // "local" | "remote" | null (noch nicht bestimmt)
+
+  // Modell von einem ANDEREN eigenen Server (Klaus 2026-10-13): eine App auf
+  // einer fremden Adresse (z. B. GitHub Pages) setzt VOR dem ersten init()
+  //   window.SBKIM_MODEL_ROOT = "https://family-projekt.de/models/";
+  // Gelesen wird spät (beim Laden), angenommen nur https:// oder ein Pfad ab
+  // "/". Der Server muss Access-Control-Allow-Origin senden. Liegt dort nichts
+  // (oder antwortet er nicht), wird wie bisher "/models/" geprobt, dann
+  // HuggingFace. Ohne Einstellung: Verhalten unverändert.
+  var MODEL_ROOT_SETTING = "SBKIM_MODEL_ROOT";
+  var modelRoot = LOCAL_MODEL_ROOT; // Wurzel, aus der "local" kam
+  function configuredModelRoot() {
+    var v = global ? global[MODEL_ROOT_SETTING] : null;
+    if (typeof v !== "string") return null;
+    v = v.trim();
+    var ok = /^https:\/\/[^\s\/?#]+(\/[^\s?#]*)?$/.test(v) || /^\/(?!\/)[^\s?#]*$/.test(v);
+    if (!ok) return null;
+    return v.charAt(v.length - 1) === "/" ? v : v + "/";
+  }
 
   function makeError(name, message, cause) {
     var e = new Error(message);
@@ -102,6 +121,10 @@
     return modelSource; // "local" | "remote" | null (vor dem ersten init)
   }
 
+  function getModelRoot() {
+    return modelSource === "local" ? modelRoot : null; // Wurzel des eigenen Servers
+  }
+
   function warnTruncateOnce() {
     if (truncateWarned) return;
     truncateWarned = true;
@@ -122,7 +145,7 @@
         "MODUL 03 EMBEDDING bereit, Funktionen: " +
         "init/isReady/embedQuery/embedPassage/embedQueryBatch/embedPassageBatch/embedContentVector/embedSnippets, " +
         "Modell: " + EMBEDDING_MODEL + ", Dim: " + EMBEDDING_DIM +
-        ", Quelle: " + (modelSource === "local" ? "lokal (eigener Server)" : "HuggingFace"),
+        ", Quelle: " + (modelSource === "local" ? "lokal (" + modelRoot + ")" : "HuggingFace"),
       );
     }
   }
@@ -163,18 +186,29 @@
   // reicht der HTTP-Status nicht, wir müssen in den Inhalt schauen. Nur wenn
   // wirklich JSON zurückkommt (`{`…), ist das Modell selbst-gehostet.
   // Fail-soft: jeder Fehler (offline, Netz, kein Modell) → "remote".
-  async function detectModelSource() {
+  async function probeModelRoot(root) {
     try {
-      if (!global || typeof global.fetch !== "function") return "remote";
-      var res = await global.fetch(LOCAL_MODEL_PROBE, { cache: "no-store" });
-      if (!res || !res.ok) return "remote";
+      var res = await global.fetch(root + EMBEDDING_MODEL + "/config.json", { cache: "no-store" });
+      if (!res || !res.ok) return false;
       var ct = (res.headers && res.headers.get("content-type")) || "";
-      if (ct.indexOf("html") !== -1) return "remote";
+      if (ct.indexOf("html") !== -1) return false;
       var txt = await res.text();
-      return txt.trim().charAt(0) === "{" ? "local" : "remote";
+      return txt.trim().charAt(0) === "{";
     } catch (_e) {
-      return "remote";
+      return false;
     }
+  }
+
+  async function detectModelSource() {
+    modelRoot = LOCAL_MODEL_ROOT;
+    if (!global || typeof global.fetch !== "function") return "remote";
+    var roots = [], eigen = configuredModelRoot();
+    if (eigen) roots.push(eigen);
+    if (roots.indexOf(LOCAL_MODEL_ROOT) === -1) roots.push(LOCAL_MODEL_ROOT);
+    for (var i = 0; i < roots.length; i++) {
+      if (await probeModelRoot(roots[i])) { modelRoot = roots[i]; return "local"; }
+    }
+    return "remote";
   }
 
   function configureModelSource(env, source) {
@@ -182,7 +216,7 @@
     if (source === "local") {
       // Modell liegt im Repo (models/…): nur lokal laden, echtes Offline.
       env.allowLocalModels = true;
-      env.localModelPath = LOCAL_MODEL_ROOT;
+      env.localModelPath = modelRoot;
       env.allowRemoteModels = false;
     } else {
       // Kein lokales Modell: die eingebaute Lokal-Erkennung überspringen
@@ -201,7 +235,7 @@
       cdn: TRANSFORMERS_CDN,
       model: EMBEDDING_MODEL,
       source: modelSource, // "local" | "remote"
-      localRoot: LOCAL_MODEL_ROOT,
+      localRoot: modelRoot,
     };
   }
 
@@ -674,6 +708,7 @@
     init: init,
     isReady: isReady,
     getModelSource: getModelSource,
+    getModelRoot: getModelRoot,
     embedQuery: embedQuery,
     embedPassage: embedPassage,
     embedQueryBatch: embedQueryBatch,
@@ -683,6 +718,8 @@
     // Test-Brücke: Modell-Quellen-Erkennung (Body-Probe) headless prüfbar —
     // unterscheidet echtes JSON (selbst-gehostet) von der SPA-index.html-Falle.
     _detectModelSource: detectModelSource,
+    _configuredModelRoot: configuredModelRoot,
+    _modelRoot: function () { return modelRoot; },
     // Test-Brücke (A3): reine, deterministische Text-Assemblierung VOR dem
     // Embedding — beweist die Contextual-Chunking-Logik headless.
     _assembleContentTexts: function (samples, opts) {
@@ -721,6 +758,7 @@
       transformersCdn: TRANSFORMERS_CDN,
       localModelRoot: LOCAL_MODEL_ROOT,
       localModelProbe: LOCAL_MODEL_PROBE,
+      modelRootSetting: MODEL_ROOT_SETTING,
       contentSampleMax: CONTENT_SAMPLE_MAX,
       contentContextSep: CONTENT_CONTEXT_SEP,
       sporeSnippetMax: SPORE_SNIPPET_MAX,

@@ -167,6 +167,7 @@
        Modul 01 die eigene Schublade `sbkim_kimseek` reihenfolge-unabhängig als
        Default nimmt (schließt die Race, wenn ein Modul vor storage-init öffnet). -->
   <script>window.SBKIM_DB_SUFFIX="kimseek"; window.SBKIM_VORRAT_PRAEFIX="kimseek-"; /* fuer den ⟳ des Such-Widgets (Modul 22): nur EIGENE Vorraete */</script>
+  <script>/* Sprachmodell vom eigenen Server (Klaus 2026-10-13, Weg A: die App setzt die Adresse, Modul 03 bleibt neutral). Antwortet er nicht, nimmt Modul 03 Hugging Face. */window.SBKIM_MODEL_ROOT=window.SBKIM_MODEL_ROOT||"https://family-projekt.de/models/";</script>
   <script src="./modules/01_storage.js"></script>
   <script src="modules/20_schluessel_safe.js"></script>
   <!-- Modus A / eigene Schublade: MUSS direkt nach dem Storage-Kern laufen -->

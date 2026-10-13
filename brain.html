@@ -386,6 +386,7 @@
 
   <!-- Kim-Brain-Kern (rein, getestet) + SBKIM-Kern-Module (byte-1:1-Kopien) -->
   <script src="./assets/brain-core.js"></script>
+  <script>/* Sprachmodell vom eigenen Server (Klaus 2026-10-13, Weg A: die App setzt die Adresse, Modul 03 bleibt neutral). Antwortet er nicht, nimmt Modul 03 Hugging Face. */window.SBKIM_MODEL_ROOT=window.SBKIM_MODEL_ROOT||"https://family-projekt.de/models/";</script>
   <script src="./modules/03_embedding.js"></script>
   <script src="./modules/04_match.js"></script>
   <script src="./modules/24_ocr_eingabe.js"></script>
