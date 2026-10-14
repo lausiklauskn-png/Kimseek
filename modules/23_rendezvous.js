@@ -64,8 +64,10 @@
  *   ensureIdentity(opts?) -> Promise<{ ok, created, nodeId?, reason? }>  (Modus A)
  *   cleanupSharedOrigin() -> Promise<{ dbDeleted, swUnregistered, cachesDeleted, notes }>
  *   repairAndReconnect(opts?) -> Promise<{ ok, cleaned, created, nodeId?, reason?, reloadHint }>  (Modus B)
- *   announce(opts?) -> Promise<{ ok, nodeId?, reason? }>
+ *   announce(opts?) -> Promise<{ ok, nodeId?, reason?, bestaetigung? }>
  *       Lauscht (listenNostr) + heftet die lebende Visitenkarte ans Brett.
+ *       bestaetigung = { stand: "ja"|"nein"|"unbekannt", relais:[{relay,ergebnis,grund}] }
+ *       aus den OK-Antworten der Relais (Modul 05b, 2026-10-14). "nein" ⇒ ok:false.
  *       Setzt eine vorhandene Identität voraus.
  *   connectAndAnnounce(opts?) -> Promise<{ ok, created, nodeId?, reason? }>
  *       Wie announce, erzeugt aber die Identität, falls noch keine da ist —
@@ -729,7 +731,7 @@
     return {
       ok: res.ok, cleaned: cleaned, created: res.created,
       protectedIdentity: protectShared, migratedIdentity: migrated, identityNote: identityNote,
-      nodeId: res.nodeId, reason: res.reason, reloadHint: RELOAD_HINT,
+      nodeId: res.nodeId, reason: res.reason, reloadHint: RELOAD_HINT, bestaetigung: res.bestaetigung,
     };
   }
 
@@ -774,7 +776,21 @@
 
   // ---- Kern: lauschen + lebende Visitenkarte ans Brett heften ----
   // Geteilt von announce() und connectAndAnnounce().
-  async function doAnnounce(own) {
+  // Relais-Antwort deuten (INTERFACES §Modul 05b „Relais-Antwort", 2026-10-14).
+  // "ja" = mindestens ein Relais meldete OK true · "nein" = alle antworteten,
+  // alle lehnten ab · "unbekannt" = alles andere (auch ein Client ohne antwort).
+  function bestaetigungAus(a) {
+    if (!a || !Array.isArray(a.relais)) return { stand: "unbekannt", relais: [] };
+    var liste = a.relais.map(function (r) {
+      return { relay: String(r && r.relay || ""), ergebnis: String(r && r.ergebnis || "unbekannt"),
+        grund: String(r && r.grund || "").slice(0, 200) };
+    });
+    var ja = liste.some(function (r) { return r.ergebnis === "angenommen"; });
+    var alleNein = liste.length > 0 && liste.every(function (r) { return r.ergebnis === "abgelehnt"; });
+    return { stand: ja ? "ja" : (alleNein ? "nein" : "unbekannt"), relais: liste };
+  }
+
+  async function doAnnounce(own, ohneWarten) {
     var relay = resolveRelay();
     if (!relay) {
       return { ok: false, reason: "Kein Nostr-Relais-Client (Modul 05b) verfügbar." };
@@ -793,8 +809,9 @@
       spore: own,
       ts: nowSec(),
     };
+    var pr;
     try {
-      await relay.publish({
+      pr = await relay.publish({
         kind: NOSTR_KIND,
         created_at: nowSec(),
         tags: [["t", netRaum()]],
@@ -804,7 +821,18 @@
       return { ok: false, reason: "Anmelden fehlgeschlagen: " + (e && e.message ? e.message : e) };
     }
     signalListening(true);
-    return { ok: true, nodeId: own.id };
+    var antwort = null;
+    if (!ohneWarten && pr && pr.antwort && typeof pr.antwort.then === "function") {
+      try { antwort = await pr.antwort; } catch (_e) { antwort = null; }
+    }
+    var best = bestaetigungAus(antwort);
+    if (best.stand === "nein") {
+      return { ok: false, nodeId: own.id, bestaetigung: best,
+        reason: "Kein Relais hat die Anmeldung angenommen: " + best.relais.map(function (r) {
+          return r.relay + " — " + (r.grund || "ohne Grund");
+        }).join("; ") };
+    }
+    return { ok: true, nodeId: own.id, bestaetigung: best };
   }
 
   // ---- announce(): nur (neu) anmelden — setzt Identität voraus ----
@@ -832,7 +860,7 @@
     var own = await getOwnLiveSpore();
     if (own && own.id) {
       var rA = await doAnnounce(own);
-      return { ok: rA.ok, created: false, nodeId: rA.nodeId, reason: rA.reason };
+      return { ok: rA.ok, created: false, nodeId: rA.nodeId, reason: rA.reason, bestaetigung: rA.bestaetigung };
     }
     // Keine Identität — über den app-eigenen Callback erzeugen (opts oder cfg).
     var makeId = (typeof opts.createIdentity === "function") ? opts.createIdentity : cfg.createIdentity;
@@ -853,7 +881,7 @@
       return { ok: false, created: false, reason: "Identität nach createIdentity nicht lesbar." };
     }
     var rB = await doAnnounce(fresh);
-    return { ok: rB.ok, created: true, nodeId: rB.nodeId, reason: rB.reason };
+    return { ok: rB.ok, created: true, nodeId: rB.nodeId, reason: rB.reason, bestaetigung: rB.bestaetigung };
   }
 
   // ---- discover(): lebende Visitenkarten lesen ----
@@ -1096,7 +1124,7 @@
     // eine FRISCHE Präsenz-Karte unter GENAU dieser lauschenden ID ans Brett
     // heften. So ist die neueste Karte im Raum immer die, die auch wirklich
     // Fragen beantwortet — der Frager (discover: newest-per-name) trifft sie.
-    try { await doAnnounce(own); } catch (_e) { /* fail-soft: Lauschen läuft trotzdem */ }
+    try { await doAnnounce(own, true); } catch (_e) { /* fail-soft: Lauschen läuft trotzdem */ }
     var kCap = (typeof opts.k === "number" && isFinite(opts.k) && opts.k >= 1)
       ? Math.min(Math.floor(opts.k), RDV_QUERY_K_MAX) : RDV_QUERY_K_MAX;
     // Korpus-leer-Falle absichern: vor dem Lauschen den lokalen Korpus aktiv

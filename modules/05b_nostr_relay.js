@@ -5,7 +5,10 @@
  * Nostr-Pfad von Modul 05 (Anastomose). Implementiert das von Modul 05
  * erwartete, abstrakte Relay-Client-Interface:
  *
- *   publish(eventBody) -> Promise<void>
+ *   publish(eventBody) -> Promise<{ id, gesendetAn, antwort }>
+ *       antwort = Promise mit dem Ergebnis je Relais aus `["OK", …]`
+ *       (angenommen · abgelehnt samt Grund · unbekannt nach 5 s Frist;
+ *       INTERFACES §Modul 05b „Relais-Antwort", 2026-10-14).
  *       eventBody = { kind, created_at, tags, content }  (von Modul 05 gebaut)
  *       Dieses Modul vervollständigt zu einem vollen NIP-01-Event
  *       (id = sha256, pubkey + sig über schnorr), öffnet/nutzt die
@@ -97,6 +100,11 @@ import { schnorr, utils } from "./noble-secp256k1.js";
     var conns = {};            // url -> WebSocket
     var subs = [];             // aktive Subscriptions
     var subCounter = 0;
+    // Relais-Antwort (2026-10-14, INTERFACES §Modul 05b „Relais-Antwort"):
+    // eventId -> { url -> { ergebnis, grund } }. Frist GEWÄHLT, NICHT GEMESSEN.
+    var OK_FRIST_MS = 5000;
+    var okFrist = OK_FRIST_MS;
+    var offen = {};
 
     function liveSockets() {
       var out = [];
@@ -138,7 +146,9 @@ import { schnorr, utils } from "./noble-secp256k1.js";
             return;
           }
           conns[url] = ws;
+          var aufgegangen = false;
           ws.onopen = function () {
+            aufgegangen = true;
             pending = Math.max(0, pending - 1);
             // Alle aktiven Subscriptions an diese Verbindung (re)senden.
             subs.forEach(function (s) {
@@ -152,15 +162,56 @@ import { schnorr, utils } from "./noble-secp256k1.js";
             if (!Array.isArray(m)) return;
             if (m[0] === "EVENT" && typeof m[1] === "string" && m[2]) {
               dispatchEvent(m[1], m[2]);
+            } else if (m[0] === "OK" && typeof m[1] === "string") {
+              okEmpfangen(url, m[1], m[2], m[3]);
             }
           };
-          ws.onclose = function () { /* kein Auto-Reconnect-Daemon — Empfangsmodus */ };
+          ws.onclose = function () {
+            /* kein Auto-Reconnect-Daemon — Empfangsmodus. Offene Antworten
+               dieses Relais bleiben „unbekannt", nie „angenommen". */
+            verbindungZu(url);
+            // Nie geöffnet: dieses Relais zählt nicht mehr als „unterwegs".
+            // Ohne das wartete publish() für immer, wenn kein Relais aufgeht.
+            if (!aufgegangen) { aufgegangen = true; pending = Math.max(0, pending - 1); maybeResolve(); }
+          };
           ws.onerror = function () { /* onclose folgt */ };
         });
         if (relays.length === 0) maybeResolve();
         // Sicherheits-Timeout, falls keine Verbindung zustande kommt.
-        setTimeout(maybeResolve, 6000);
+        // Nach Ablauf wird entschieden, auch wenn noch ein Relais „unterwegs" ist.
+        setTimeout(function () { pending = 0; maybeResolve(); }, 6000);
       });
+    }
+
+    // Eine OK-Zeile zählt nur für ein Ereignis, das an GENAU dieses Relais
+    // ging, und nur die erste je Relais. Alles andere wird verworfen.
+    function okEmpfangen(url, id, ok, nachricht) {
+      var e = offen[id];
+      if (!e || !e.relais[url] || e.relais[url].ergebnis !== "unbekannt") return;
+      e.relais[url] = ok === true
+        ? { ergebnis: "angenommen", grund: "" }
+        : { ergebnis: "abgelehnt", grund: String(nachricht == null ? "" : nachricht).slice(0, 200) };
+      e.pruefen();
+    }
+
+    function verbindungZu(url) {
+      for (var id in offen) {
+        var e = offen[id];
+        if (e.relais[url] && e.relais[url].ergebnis === "unbekannt" && !e.relais[url].grund) {
+          e.relais[url].grund = "Verbindung geschlossen, bevor das Relais antwortete";
+          e.relais[url].zu = true;
+          e.pruefen();
+        }
+      }
+    }
+
+    function liveUrls() {
+      var out = [];
+      for (var url in conns) {
+        var ws = conns[url];
+        if (ws && ws.readyState === 1 /* OPEN */) out.push(url);
+      }
+      return out;
     }
 
     function dispatchEvent(subId, ev) {
@@ -188,14 +239,49 @@ import { schnorr, utils } from "./noble-secp256k1.js";
     async function publish(body) {
       var ev = await finalizeEvent(body);
       await ensureConnections();
-      var live = liveSockets();
-      if (live.length === 0) {
+      var urls = liveUrls();
+      if (urls.length === 0) {
         throw new Error("Kein Nostr-Relais verbunden — Publish nicht möglich.");
       }
       var msg = JSON.stringify(["EVENT", ev]);
-      for (var i = 0; i < live.length; i++) {
-        try { live[i].send(msg); } catch (e) { /* einzelnes Relais down */ }
+      var eintrag = { relais: {} };
+      var gesendet = [];
+      for (var i = 0; i < urls.length; i++) {
+        try {
+          conns[urls[i]].send(msg);
+          gesendet.push(urls[i]);
+          eintrag.relais[urls[i]] = { ergebnis: "unbekannt", grund: "" };
+        } catch (e) { /* einzelnes Relais down */ }
       }
+      var antwort = new Promise(function (resolve) {
+        var fertig = false;
+        function abschluss() {
+          if (fertig) return;
+          fertig = true;
+          clearTimeout(uhr);
+          if (offen[ev.id] === eintrag) delete offen[ev.id];
+          var liste = [], z = { angenommen: 0, abgelehnt: 0, unbekannt: 0 };
+          for (var j = 0; j < gesendet.length; j++) {
+            var r = eintrag.relais[gesendet[j]];
+            var grund = r.grund || (r.ergebnis === "unbekannt" ? "keine Antwort binnen " + okFrist + " ms" : "");
+            liste.push({ relay: gesendet[j], ergebnis: r.ergebnis, grund: grund });
+            z[r.ergebnis]++;
+          }
+          resolve({ id: ev.id, relais: liste, angenommen: z.angenommen,
+            abgelehnt: z.abgelehnt, unbekannt: z.unbekannt });
+        }
+        eintrag.pruefen = function () {
+          for (var k = 0; k < gesendet.length; k++) {
+            var r = eintrag.relais[gesendet[k]];
+            if (r.ergebnis === "unbekannt" && !r.zu) return;
+          }
+          abschluss();
+        };
+        var uhr = setTimeout(abschluss, okFrist);
+        offen[ev.id] = eintrag;
+        if (gesendet.length === 0) abschluss();
+      });
+      return { id: ev.id, gesendetAn: gesendet.slice(), antwort: antwort };
     }
 
     function subscribe(filter, onEvent) {
@@ -230,6 +316,17 @@ import { schnorr, utils } from "./noble-secp256k1.js";
 
     function configure(opts) {
       var neu = null;
+      if (opts && opts.okFristMs !== undefined) {
+        var f = opts.okFristMs;
+        if (typeof f !== "number" || !isFinite(f) || f < 100 || f > 60000) {
+          return { ok: false, relays: relays.slice(), okFristMs: okFrist,
+            reason: "Ungültige Antwort-Frist (100–60000 ms): " + String(f).slice(0, 40) };
+        }
+        okFrist = Math.round(f);
+        if (!opts.reset && !Array.isArray(opts.relays)) {
+          return { ok: true, relays: relays.slice(), okFristMs: okFrist };
+        }
+      }
       if (opts && opts.reset === true) {
         neu = DEFAULT_RELAYS.slice();
       } else if (opts && Array.isArray(opts.relays) && opts.relays.length > 0) {
@@ -249,7 +346,7 @@ import { schnorr, utils } from "./noble-secp256k1.js";
           delete conns[url];
         }
       }
-      return { ok: true, relays: relays.slice() };
+      return { ok: true, relays: relays.slice(), okFristMs: okFrist };
     }
 
     function close() {
@@ -270,6 +367,8 @@ import { schnorr, utils } from "./noble-secp256k1.js";
         get relays() { return relays.slice(); },
         get defaultRelays() { return DEFAULT_RELAYS.slice(); },
         get liveCount() { return liveSockets().length; },
+        get okFristMs() { return okFrist; },
+        okFristVorgabe: OK_FRIST_MS,
       },
     };
   }
