@@ -376,6 +376,12 @@
         "✓ Identity created: ",
       "✓ Neu im Raum angemeldet.\n":
         "✓ Signed in to the room again.\n",
+      "  ✗ Relais lehnt ab: ":
+        "  ✗ Relay rejects: ",
+      "ohne Grund":
+        "no reason given",
+      "⚠ Angemeldet, Bestätigung fehlt — kein Relais hat binnen der Frist geantwortet. Ob deine Visitenkarte hängt, ist nicht belegt.\n":
+        "⚠ Signed in, confirmation missing — no relay answered within the time limit. Whether your calling card is pinned is not confirmed.\n",
       "✓ Sicherung eingespielt — die Kennung aus der Datei ist wieder aktiv.\nOben unter „Meine Kennung“ steht sie jetzt. Danach einmal „🌐 Mit dem Knotennetz verbinden“, damit die Visitenkarte wieder im Raum hängt.":
         "✓ Backup played in — the identifier from the file is active again.\nIt now stands under “My identifier” above. After that, press “🌐 Connect to the node network” once so the calling card hangs in the room again.",
       "✓ Sicherung erzeugt, aber der Download ging in diesem Browser nicht. Bitte nochmal versuchen.":
@@ -1567,6 +1573,22 @@
 
   function setOut(text) { if (outEl) outEl.textContent = text; if (cardsEl) clear(cardsEl); }
   function appendOut(text) { if (outEl) outEl.textContent += text; }
+
+  // Relais-Antwort (Modul 05b, 2026-10-14): „im Raum" heißt erst, dass ein
+  // Relais OK true gemeldet hat. Ein offener Socket allein beweist das nicht.
+  // Jede Ablehnung wird mit Relais und Grund genannt (nur textContent).
+  function imRaum(res) { return !!(res && res.bestaetigung && res.bestaetigung.stand === "ja"); }
+  function ablehnungen(res) {
+    var b = res && res.bestaetigung, z = "";
+    if (!b || !Array.isArray(b.relais)) return z;
+    b.relais.forEach(function (r) {
+      if (r.ergebnis === "abgelehnt") z += T("  ✗ Relais lehnt ab: ") + r.relay + " — " + (r.grund || T("ohne Grund")) + "\n";
+    });
+    return z;
+  }
+  function ohneBestaetigung() {
+    return T("⚠ Angemeldet, Bestätigung fehlt — kein Relais hat binnen der Frist geantwortet. Ob deine Visitenkarte hängt, ist nicht belegt.\n");
+  }
   function clear(node) { while (node && node.firstChild) node.removeChild(node.firstChild); }
 
   // PFLICHT (Klaus 2026-07-08): jede Operation, die das ~30-MB-Embedding-Modell
@@ -2676,7 +2698,8 @@
       if (res && res.ok) {
         if (res.created) appendOut(T("✓ Frische Identität: ") + res.nodeId + "\n");
         else appendOut(T("Identität (eigene Schublade bleibt): ") + res.nodeId + "\n");
-        appendOut(T("✓ Neu im Raum angemeldet.\n"));
+        appendOut(imRaum(res) ? T("✓ Neu im Raum angemeldet.\n") : ohneBestaetigung());
+        appendOut(ablehnungen(res));
       } else {
         appendOut("✗ " + ((res && res.reason) || "Neu-Anmelden fehlgeschlagen.") + "\n");
       }
@@ -2713,7 +2736,8 @@
       if (res.ok) {
         if (res.created) appendOut(T("✓ Identität erzeugt: ") + res.nodeId + "\n");
         else appendOut(T("Identität vorhanden: ") + res.nodeId + "\n");
-        appendOut(T("✓ Du bist im Raum — deine Visitenkarte hängt, du lauschst.\n"));
+        appendOut(imRaum(res) ? T("✓ Du bist im Raum — deine Visitenkarte hängt, du lauschst.\n") : ohneBestaetigung());
+        appendOut(ablehnungen(res));
         appendOut(T("  Dieses Fenster darfst du schließen und weiterarbeiten — nur die App-Seite offen lassen (eine ganz geschlossene Seite ist nicht erreichbar)."));
       } else {
         appendOut("✗ " + (res.reason || "Verbinden fehlgeschlagen.") +
@@ -2731,8 +2755,10 @@
       stopModelProgress(); if (outEl) outEl.textContent = "";
       refreshStatus();   // Stufe 0a
       refreshIdentityBox();   // Stufe 0b
-      if (res.ok) appendOut(T("✓ Du bist im Raum (nodeId ") + res.nodeId + T("). Fenster darf zu — nur die App-Seite offen lassen."));
+      if (res.ok && imRaum(res)) appendOut(T("✓ Du bist im Raum (nodeId ") + res.nodeId + T("). Fenster darf zu — nur die App-Seite offen lassen."));
+      else if (res.ok) appendOut(ohneBestaetigung());
       else appendOut("✗ " + (res.reason || "Anmelden fehlgeschlagen."));
+      appendOut(ablehnungen(res));
     }).catch(function (e) { stopModelProgress(); setOut(T("✗ Anmelden fehlgeschlagen: ") + (e && e.message ? e.message : e)); });
   }
 
