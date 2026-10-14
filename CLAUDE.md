@@ -47,3 +47,19 @@ git diff --stat origin/main origin/<branch>     # leer = der PR wäre leer
 > verbindlich; sie sind zwanzig Stellen, an denen sie auseinanderlaufen kann.
 > Genau das war passiert. Die alte Fassung dieser Datei steht vollständig in
 > [`docs/archiv/CLAUDE-2026-08-22.md`](docs/archiv/CLAUDE-2026-08-22.md).
+
+## 🛡 Prüfliste vor dem KI-Richter · Reinigung vor der Texterkennung (Sage Bau 04.J/24.R, 2026-10-14)
+
+Modul 04, 22 und 24 kommen neu aus dem Kanon (Sage #1082, verteilt mit `kanon-verteilen`). Damit gilt:
+
+- Der KI-Richter prüft Suchfrage und Kandidaten mit der Prüfliste (`modules/pruefer-mail.js`, byte-1:1 aus dem
+  Auslieferungsprüfer, im Drift-Guard gepinnt). Fehlt sie, läuft er nicht. Die Liste steht in `index.html` und
+  `brain.html` **direkt nach 04** und im Vorrat (`sbkim-sw.js`).
+- Ein Kandidat mit einer Anweisung an eine KI geht nicht an die KI. In `brain.html` steht er mit „⚠️ nicht an die
+  KI — …“ da; lehnt 04 den Richter ab (Anweisung in der Frage, Liste fehlt), steht der Grund in der Statuszeile.
+- Modul 24 sendet nie das Original (Foto neu gezeichnet bzw. JPEG ohne Metadaten, PDF als gereinigte Seitenbilder
+  von `/Workflow-PDF/`). `brain.html` übergibt `onVersteckt` (einmal anhalten: OK = ohne den Text senden ·
+  Abbrechen = nichts) und nimmt Zeilen mit einer Anweisung an eine KI nicht in den Katalog.
+- Gemessen im Browser: auf beiden Seiten `prueflisteGeladen === true`; ohne die Zeile in `brain.html` `false` und
+  der neue Test rot. `npm test` 12 grün.
+- ⚠ Nicht gemessen: Richter und Texterkennung mit einem echten Schlüssel (das Modell lädt im Behälter nicht), das Tablet.

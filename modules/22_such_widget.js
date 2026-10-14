@@ -942,6 +942,9 @@
       "#" + WIDGET_ID + " .sbkim-sw-result .sbkim-sw-relscore.is-related {",
       "  color: rgba(196, 181, 253, 0.95);",
       "}",
+      "#" + WIDGET_ID + " .sbkim-sw-result[data-ausgeschlossen] .sbkim-sw-reason {",
+      "  color: #fca5a5;",
+      "}",
       "#" + WIDGET_ID + " .sbkim-sw-result .sbkim-sw-reason {",
       "  color: rgba(245, 245, 255, 0.6);",
       "  font-size: 0.7rem;",
@@ -1742,12 +1745,27 @@
       var reader = new global.FileReader();
       reader.onload = function (ev) {
         ocr.recognize(String(ev.target.result),
-          { provider: "mistral", apiKey: ocrKey, mimeType: file.type, euPolicy: optEuPolicy })
+          { provider: "mistral", apiKey: ocrKey, mimeType: file.type, euPolicy: optEuPolicy,
+            // Bau 24.R (Klaus 2026-10-14): versteckter Text → einmal anhalten.
+            onVersteckt: function (liste) { return Promise.resolve(ocrVerstecktFragen(liste)); },
+            onSeite: function (i, n) { setHint("📷 Texterkennung läuft … Seite " + i + " von " + n); } })
           .then(function (r) {
             if (r && r.available) {
-              appendToField(target, r.text || "");
+              // Bau 24.R: eine Anweisung an eine KI im erkannten Text → einmal anhalten.
+              var text = r.text || "", zusatz = "";
+              if (r.kiAnweisung && r.kiAnweisung.length) {
+                if (!ocrAnweisungFragen(r.kiAnweisung)) { setHint("Nichts übernommen: im erkannten Text stand eine Anweisung an eine KI."); return; }
+                text = ocr.ohneZeilen ? ocr.ohneZeilen(text, r.kiAnweisung) : text;
+                zusatz = " · " + r.kiAnweisung.length + " Zeile(n) mit Anweisung an eine KI herausgenommen";
+              } else if (r.textGeprueft === false) {
+                zusatz = " · Text ungeprüft (Prüfliste fehlt)";
+              }
+              var weg = (r.entfernt || []).filter(function (e) { return e.grund !== "meta"; }).length;
+              if (weg) zusatz += " · " + weg + " versteckte Stelle(n) vor dem Senden entfernt";
+              if (r.gesamt > r.seiten) zusatz += " · nur die ersten " + r.seiten + " von " + r.gesamt + " Seiten gelesen";
+              appendToField(target, text);
               var ver = r.model ? (" · Mistral OCR " + r.model) : "";
-              setHint((r.text ? ("Erkannt (" + r.text.length + " Zeichen)") : "Kein Text erkannt") + ver);
+              setHint((text ? ("Erkannt (" + text.length + " Zeichen)") : "Kein Text erkannt") + ver + zusatz);
             } else {
               var reason = (r && r.reason) || "Texterkennung nicht möglich.";
               if (/Schlüssel/.test(reason)) ocrKey = "";
@@ -1763,6 +1781,24 @@
     });
     (doc.body || doc.documentElement).appendChild(inp);
     inp.click();
+  }
+
+  // Bau 24.R: die zwei Halte der Texterkennung. confirm ist hier der eine Weg,
+  // der in jeder App ohne eigenes Fenster da ist. OK = weiter, Abbrechen = nichts.
+  function ocrVerstecktFragen(liste) {
+    if (typeof global.confirm !== "function") return false;   // ohne Frage nichts hinaus
+    var zeilen = liste.slice(0, 6).map(function (e) {
+      return "· " + (e.seite ? "Seite " + e.seite + ": " : "") + "„" + String(e.text).slice(0, 80) + "“";
+    });
+    return global.confirm("Versteckter Text gefunden (unsichtbar, weiß, winzig oder außerhalb der Seite):\n" +
+      zeilen.join("\n") + (liste.length > 6 ? "\n… und " + (liste.length - 6) + " weitere" : "") +
+      "\n\nOK = ohne ihn an die Texterkennung senden · Abbrechen = nichts senden");
+  }
+  function ocrAnweisungFragen(zeilen) {
+    if (typeof global.confirm !== "function") return false;
+    return global.confirm("Im erkannten Text steht eine Anweisung an eine KI:\n" +
+      zeilen.slice(0, 4).map(function (z) { return "· Zeile " + z.zeile + ": „" + String(z.inhalt).slice(0, 80) + "“"; }).join("\n") +
+      "\n\nOK = ohne diese Zeilen übernehmen · Abbrechen = nichts übernehmen");
   }
 
   // ---- Komponierte Suche (Vorfilter → Richter → Fail-soft) ----
@@ -2792,7 +2828,18 @@
                      text: c.text, url: c.url, begruendung: v.begruendung, passageVec: c.passageVec || null };
           })
           .sort(function (a, b) { return (b.score || 0) - (a.score || 0); });
-        return { mode: "richter", treffer: treffer, attestation: judgment.attestation };
+        // Bau 04.J (Klaus 2026-10-14, „Ausschließen und zeigen"): ein Treffer, in
+        // dessen Text eine Anweisung an eine KI stand, ging NICHT an die KI. Er
+        // verschwindet nicht still, sondern steht markiert am Ende — ohne Link,
+        // ohne Prozent: geurteilt hat niemand.
+        var ausgeschlossen = (judgment.verdicts || []).filter(function (v) { return v.ausgeschlossen; })
+          .map(function (v) {
+            var c = byKey[v.anchorId || v.label] || {};
+            return { label: v.label, anchorId: v.anchorId, source: c.source, text: c.text,
+                     begruendung: v.begruendung, ausgeschlossen: v.ausgeschlossen };
+          });
+        return { mode: "richter", treffer: treffer.concat(ausgeschlossen), attestation: judgment.attestation,
+                 ausgeschlossen: ausgeschlossen.length };
       })
       .catch(function (err) {
         return { mode: "semantisch", treffer: candidates, reason: (err && err.message) || String(err) };
@@ -2958,7 +3005,8 @@
         return richterRerank(query, top).then(function (judged) {
           lastSearchMode = judged.mode;
           return { mode: judged.mode, treffer: judged.treffer, webLink: webLink,
-                   reason: judged.reason, attestation: judged.attestation };
+                   reason: judged.reason, attestation: judged.attestation,
+                   ausgeschlossen: judged.ausgeschlossen || 0 };
         });
       }
       lastSearchMode = "semantisch";
@@ -2999,7 +3047,8 @@
       merged.sort(function (a, b) { return (b.score || 0) - (a.score || 0); });
       if (merged.length > MAX_RANK) merged = merged.slice(0, MAX_RANK);
       baseRes = { mode: baseRes.mode, treffer: merged, webLink: baseRes.webLink,
-                  reason: baseRes.reason, attestation: baseRes.attestation };
+                  reason: baseRes.reason, attestation: baseRes.attestation,
+                  ausgeschlossen: baseRes.ausgeschlossen || 0 };
       renderResults(baseRes);
       setHint("Live-Antwort vom Knoten ergänzt.");
     }
@@ -3206,9 +3255,11 @@
       "fehler": "Suche fehlgeschlagen" + (res.reason ? " (" + res.reason + ")" : "") + ".",
       "leer": res.reason || "Keine Treffer.",
       "semantisch": treffer.length
-        ? "Semantische Suche" + (richterOn && !optApiKey ? " (Richter aus — kein Schlüssel)." : ".")
+        ? "Semantische Suche" + (richterOn && !optApiKey ? " (Richter aus — kein Schlüssel)."
+            : (richterOn && optApiKey && res.reason ? " (KI-Richter aus: " + res.reason + ")." : "."))
         : (res.webLink ? "Im Internet weitersuchen:" : "Keine Treffer."),
-      "richter": "KI-Richter-Urteil." + (res.reason ? " (Hinweis: " + res.reason + ")" : ""),
+      "richter": "KI-Richter-Urteil." + (res.reason ? " (Hinweis: " + res.reason + ")" : "") +
+        (res.ausgeschlossen ? " ⚠ " + res.ausgeschlossen + " Treffer nicht an die KI gegeben: Anweisung an eine KI im Text." : ""),
     };
     setHint(modeHint[res.mode] || "");
 
@@ -3299,7 +3350,8 @@
       line.appendChild(makeBadge(doc, t.source || "app"));
 
       var titleEl;
-      if (t.url) {
+      if (t.ausgeschlossen) el.setAttribute("data-ausgeschlossen", t.ausgeschlossen);
+      if (t.url && !t.ausgeschlossen) {
         titleEl = doc.createElement("a");
         titleEl.className = "sbkim-sw-result-link";
         titleEl.href = t.url; // rechte Maustaste → „in neuem Tab öffnen" bleibt
@@ -3310,7 +3362,7 @@
       } else {
         titleEl = doc.createElement("span");
         titleEl.className = "sbkim-sw-result-title";
-        titleEl.textContent = t.label;
+        titleEl.textContent = (t.ausgeschlossen ? "⚠ " : "") + t.label;
         attachDetailHandler(titleEl, detailItemForRow);
       }
       line.appendChild(titleEl);
