@@ -29,7 +29,7 @@ const EXPECTED_SHA256 = {
   "01_storage.js": "5a5a4bf64dfcc107da7ed70fb755d7db5cce7d80e963b3e2fbc2004537747820",
   "02_spore.js": "6789fe6e903ad2e53f39b2dee576c640698555ef71ef4e9134eb75573fdb7d68",
   "03_embedding.js": "a6ac64d7536da3fa5cc426d0f7db9440fdaf5ab4460f0bdc66a10eb8203b1b68",
-  "04_match.js": "9e2648729758f644fe8e35b0e049ba8d66668a72dc6b7e4b41ebd75d52c0826a",
+  "04_match.js": "721eecc3c0d6ea4c259259e6071215ec1cd16f1c43c87b42ce9e72e9a0b5e41c",
   "05_anastomose.js": "255ac79aeb3b0203e92f0cebd0a905e47c488b43efe18f41332a7d35520bbf23",
   "05b_nostr_relay.js": "37eee5b196b3efad57131edd1cc3c0ee23acb97b5ca40740d6a0771db4b4a421",
   "07_apoptose.js": "0acdd6ab2d95e131fa6953061cc0e95a2396e05fff091a7dc690b2668a4c035a",
@@ -38,10 +38,11 @@ const EXPECTED_SHA256 = {
   "20_schluessel_safe.js": "e7e25c9070e93f8267171d2b626109cfd90cb481c2781242f5f7dfc203f031f3",
   "17_floating_widget.js": "e4ee076c1295910d0e83470ebda327e7419f29bc06f6718148369c8369e1a5ce",
   "21_spracheingabe.js": "020ca26ff52f2ed726f6344bd3ac55eb52e3472a7f97bdd41bdd0d54132777ba",
-  "22_such_widget.js": "052eb5f844fd065748109e5edbbe413617de7682986a1474fba401269a7c7af5",
+  "22_such_widget.js": "ef4d5eb707ebc12a2a53e060fbb0367df5103ee12b76195b207e6c6b7f2fe8de",
   "23_rendezvous.js": "9464fba75e5a4ed46ebabcd05b2b62f118a5a056f10ebf929421b282d4f6631f",
   "23_rendezvous_ui.js": "a81fc9081271544e94ee8921ea692ebe1dc7ee9ab8a59f2c6a3187871f7b45c3",
-  "24_ocr_eingabe.js": "c0d616ff763cae409f4ec3dd943326b04c8ec0275b404ddfac348dc4c402077e",
+  "24_ocr_eingabe.js": "f638f1cf4aaaa22e91186249f91cb1d4ac630f44a374a3de08192ea144948faa",
+  "pruefer-mail.js": "cdf3ca7881bfa68763a2c0be7436d35a65bea4dbd03f606e02eaec5c613632d7",   // Prüfliste vor dem KI-Richter, byte-1:1 aus dem Auslieferungsprüfer
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
 };
 
@@ -94,5 +95,17 @@ test("Modul 23 (Rendezvous-Kopie) lädt + zeigt die Hygiene-Oberfläche", async 
   for (const fn of ["init", "ensureIdentity", "cleanupSharedOrigin", "repairAndReconnect",
                     "connectAndAnnounce", "discover", "handshakeCard"]) {
     assert.equal(typeof R[fn], "function", `Rendezvous.${fn}`);
+  }
+});
+
+// Sage Bau 04.J (2026-10-14): Modul 04 lässt den KI-Richter ohne window.PrueferMail
+// nicht laufen. Die Liste steht deshalb in JEDER Seite, die 04 lädt, direkt danach.
+test("Prüfliste vor dem KI-Richter: direkt nach 04 geladen (index.html, brain.html)", () => {
+  for (const seite of ["index.html", "brain.html"]) {
+    const html = readFileSync(join(ROOT, seite), "utf8");
+    const srcs = [...html.matchAll(/<script src="\.\/modules\/([^"]+)"/g)].map((m) => m[1]);
+    const i = srcs.indexOf("04_match.js");
+    assert.ok(i >= 0, seite + ": 04 wird geladen");
+    assert.equal(srcs[i + 1], "pruefer-mail.js", seite + ": die Prüfliste steht direkt nach 04");
   }
 });

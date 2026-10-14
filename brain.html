@@ -389,6 +389,7 @@
   <script>/* Sprachmodell vom eigenen Server (Klaus 2026-10-13, Weg A: die App setzt die Adresse, Modul 03 bleibt neutral). Antwortet er nicht, nimmt Modul 03 Hugging Face. */window.SBKIM_MODEL_ROOT=window.SBKIM_MODEL_ROOT||"https://family-projekt.de/models/";</script>
   <script src="./modules/03_embedding.js"></script>
   <script src="./modules/04_match.js"></script>
+  <script src="./modules/pruefer-mail.js"></script>  <!-- Prüfliste vor dem KI-Richter (Sage Bau 04.J), direkt nach 04 -->
   <script src="./modules/24_ocr_eingabe.js"></script>
   <script>
   (function () {
@@ -469,8 +470,19 @@
       var key = $("aiKey").value.trim();
       if (!key) return Promise.resolve({ text: "", ok: false, reason: "kein Schlüssel" });
       try {
-        return Promise.resolve(window.SbkimOcr.recognize(file, { provider: $("ocrProvider").value, apiKey: key }))
-          .then(function (r) { return (r && r.available && r.text) ? { text: r.text, ok: true } : { text: "", ok: false, reason: (r && r.reason) || "OCR nicht verfügbar" }; })
+        // Sage Bau 24.R (2026-10-14): Modul 24 sendet nie das Original. Versteckter Text
+        // im Bild/PDF hält EINMAL an; Zeilen mit einer Anweisung an eine KI kommen nicht
+        // in den Katalog (sonst gingen sie später als Kandidat an den KI-Richter).
+        return Promise.resolve(window.SbkimOcr.recognize(file, { provider: $("ocrProvider").value, apiKey: key,
+            onVersteckt: function (liste) {
+              return confirm("Versteckter Text in „" + file.name + "“ (" + liste.length + " Stelle(n)).\n\nOK = ohne ihn an die Texterkennung senden · Abbrechen = nichts senden");
+            } }))
+          .then(function (r) {
+            if (!(r && r.available && r.text)) return { text: "", ok: false, reason: (r && r.reason) || "OCR nicht verfügbar" };
+            var t = r.text, weg = (r.kiAnweisung || []).length;
+            if (weg) t = window.SbkimOcr.ohneZeilen ? window.SbkimOcr.ohneZeilen(t, r.kiAnweisung) : "";
+            return { text: t, ok: true, kiWeg: weg };
+          })
           .catch(function () { return { text: "", ok: false }; });
       } catch (e) { return Promise.resolve({ text: "", ok: false }); }
     }
@@ -520,7 +532,7 @@
             var pr = await extractPdf(file); text = C.normalizeWhitespace(pr.text); if (!pr.ok) note = " (PDF-Text nicht lesbar)";
           } else if (typ === "image") {
             var or = await ocrImage(file);
-            if (or.ok) { text = C.normalizeWhitespace(or.text); ocrOn = true; } else { note = " (nur Dateiname" + (or.reason ? ", " + or.reason : "") + ")"; }
+            if (or.ok) { text = C.normalizeWhitespace(or.text); ocrOn = true; if (or.kiWeg) note = " (" + or.kiWeg + " Zeile(n) mit Anweisung an eine KI herausgenommen)"; } else { note = " (nur Dateiname" + (or.reason ? ", " + or.reason : "") + ")"; }
           }
 
           var snippet = C.makeSnippet(text || file.name, 600);
@@ -650,7 +662,7 @@
             var cands = ranked.slice(0, 8).map(function (r) { return { label: r.entry.name, text: (r.entry.kiKurzfassung || r.entry.textSchnipsel || r.entry.name), cosine: r.score, anchorId: r.entry.id }; });
             var hj = await window.SbkimMatch.hybridMatch(q, cands, { apiKey: key, provider: $("aiProvider").value, euOnly: $("euOnly").checked });
             if (hj && hj.available && hj.verdicts) verdicts = hj.verdicts;
-            setSearchStat(verdicts ? "" : "KI-Richter nicht verfügbar — gratis Bedeutungs-Rangfolge.");
+            setSearchStat(verdicts ? "" : "KI-Richter nicht verfügbar" + (hj && hj.reason ? " (" + hj.reason + ")" : "") + " — gratis Bedeutungs-Rangfolge.");
           } catch (e) { setSearchStat("KI-Richter fehlgeschlagen — gratis Bedeutungs-Rangfolge."); }
         }
       }
@@ -666,6 +678,8 @@
         resBox.innerHTML = top.map(function (r) {
           var v = vById[r.entry.id];
           var why = v ? (v.begruendung || (v.passt ? "passt inhaltlich." : "eher nicht passend.")) : "Bedeutungs-Nähe.";
+          // Sage Bau 04.J: ein Kandidat mit Anweisung an eine KI ging NICHT an die KI.
+          if (v && v.ausgeschlossen) why = "nicht an die KI — " + why;
           var danger = v && v.sicherheit === "gefahr";
           return resCard(r.entry, v ? v.score : r.score, (danger ? "⚠️ " : "") + why, true, q, danger);
         }).join("");
