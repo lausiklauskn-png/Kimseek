@@ -157,6 +157,9 @@
   var NETZ_CODE_ZEICHEN = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   var NETZ_SPEICHER_PRAEFIX = "sbkim_netz_";
   var net = { lage: "oeffentlich", rdvTag: null, qryTag: null, key: null, reason: null, pending: null };
+  // S5 Teil 2: Netzadmin eines eigenen Netzes / Raums (aus der Einstellung).
+  var netzAdmin = null;
+  var NETZ_ADMIN_MUSTER = /^[A-Za-z0-9_-]{16,128}$/;
 
   function netRaum() { return net.rdvTag || RDV_TAG; }
   function netFragen() { return net.qryTag || RDV_QUERY_TAG; }
@@ -212,6 +215,7 @@
     if (answerUnsub) { try { answerUnsub(); } catch (_e) {} answerUnsub = null; }
     var code = (typeof opts.code === "string") ? opts.code : null;
     var raum = (typeof opts.roomTag === "string") ? opts.roomTag : null;
+    netzAdmin = (typeof opts.admin === "string" && NETZ_ADMIN_MUSTER.test(opts.admin)) ? opts.admin : null;
     if (code !== null && code.trim() !== "") {
       net = { lage: "wird-abgeleitet", rdvTag: null, qryTag: null, key: null, reason: null, pending: null };
       var mein = net;
@@ -296,7 +300,14 @@
       return { ok: false, reason: "Netz-Code ungültig (mindestens " + NETZ_CODE_MIN + " Zeichen, nur Buchstaben und Ziffern)." };
     }
     var name = (typeof s.name === "string") ? s.name.trim().slice(0, 60) : "";
-    return { ok: true, setting: { v: 1, name: name || "Eigenes Netz", relay: s.relay, code: String(s.code).trim(), auto: s.auto !== false } };
+    var setting = { v: 1, name: name || "Eigenes Netz", relay: s.relay, code: String(s.code).trim(), auto: s.auto !== false };
+    // S5 Teil 2: optional der Netzadmin dieses Netzes (eine Kennung, nie ein Name).
+    var admin = (typeof s.admin === "string") ? s.admin.trim() : "";
+    if (admin) {
+      if (!NETZ_ADMIN_MUSTER.test(admin)) return { ok: false, reason: "Netzadmin-Kennung ungültig (16–128 Zeichen, A–Z, a–z, 0–9, _ und -)." };
+      setting.admin = admin;
+    }
+    return { ok: true, setting: setting };
   }
   function netStore(store) {
     if (store && typeof store.getItem === "function") return store;
@@ -368,7 +379,7 @@
       net = { lage: "ungueltig", rdvTag: null, qryTag: null, key: null, pending: null, reason: rc.reason };
       return { ok: false, network: "ungueltig", reason: rc.reason };
     }
-    var r1 = await setNetwork({ code: chk.setting.code });
+    var r1 = await setNetwork({ code: chk.setting.code, admin: chk.setting.admin });
     return { ok: r1.ok, network: r1.network, relays: rc && rc.relays, reason: r1.reason };
   }
 
@@ -585,12 +596,20 @@
     enriched.sort(function (a, b) {
       var ma = meaningFails(a), mb = meaningFails(b);   // S2: „passt nicht" ans Ende
       if (ma !== mb) return ma ? 1 : -1;
+      var va = vouchVorn(a), vb = vouchVorn(b);         // S5 Teil 2: Verbürgte nach vorne
+      if (va !== vb) return va ? -1 : 1;
       var fa = (typeof a.queryFit === "number") ? a.queryFit : -Infinity;
       var fb = (typeof b.queryFit === "number") ? b.queryFit : -Infinity;
       if (fb !== fa) return fb - fa;      // beste Passung zuerst
       return a._idx - b._idx;             // sonst Eingabe-Reihenfolge (stabil)
     });
     return enriched.map(function (c) { delete c._idx; return c; });
+  }
+
+  // S5 Teil 2 (Klaus 2026-10-15: „verbürgte Karten rücken nach vorne").
+  function vouchVorn(c) {
+    var st = c && c.vouch && c.vouch.status;
+    return st === "anker" || st === "kontakt" || st === "verbuergt";
   }
 
   // ---- S5 „Bürgen" — Teil 1 (2026-10-15, docs/PLAN_MYCEL_SCHICHTEN.md) ----
@@ -606,9 +625,15 @@
   var RDV_VOUCH_PER_CARD_MAX = 8;
   var RDV_REVOKE_PER_CARD_MAX = 32;
   var RDV_VOUCH_SEEN_MAX = 400;                // Zettel je discover()-Lauf
-  // Anker: Klaus' Kennung (Klaus 2026-10-15: „Klaus + eigene Kontakte").
-  // LEER, bis Klaus nennt, mit welcher Identität er bürgt.
-  var RDV_VOUCH_ANCHORS = [];
+  // Netzadmin des OFFENEN Mycels (Klaus 2026-10-15: er bürgt mit Sage-Protokol,
+  // sbkim/spore.json). Gilt NUR im öffentlichen Netz; in einem eigenen Netz
+  // ist dessen Betreiber der Netzadmin (Feld `admin` der Netz-Einstellung).
+  var RDV_OPEN_MYCEL_ADMIN = ["BgjXhSApoOrJD6zFJ4uuEpAliGWPokpKn7UMWRm94PA"];
+  function currentNetAdmin() {
+    if (net.lage === "oeffentlich") return RDV_OPEN_MYCEL_ADMIN[0] || null;
+    if (net.lage === "eigen" || net.lage === "raum") return netzAdmin;
+    return null;   // wird abgeleitet / ungültig → kein Netzadmin
+  }
   var BUERGEN_SPEICHER_PRAEFIX = "sbkim_buergen_";
   var vouchCfg = { anchors: [], flagged: [] };
 
@@ -700,7 +725,7 @@
     var o = opts || {};
     var list = Array.isArray(cards) ? cards : [];
     var jetzt = nowSec();
-    var anker = idListe(RDV_VOUCH_ANCHORS).concat(idListe(vouchCfg.anchors), idListe(o.anchors));
+    var anker = idListe([currentNetAdmin()]).concat(idListe(vouchCfg.anchors), idListe(o.anchors));
     var kontakte = loadVouchContacts().map(function (c) { return c.nodeId; }).concat(idListe(o.contacts));
     var aufgefallen = idListe(vouchCfg.flagged).concat(idListe(o.flagged));
     var zettel = [];
@@ -766,6 +791,31 @@
     catch (e) { return { ok: false, reason: "Unterschrift fehlgeschlagen: " + (e && e.message ? e.message : e) }; }
     return { ok: true, zettel: z };
   }
+  // Sicherheitsnummer (S5 Teil 2): symmetrisch aus beiden Schlüsseln, wie B7.
+  // Beide Seiten sehen dieselbe Nummer; vergleichen auf einem zweiten Weg.
+  // Schlüssel-Bytes einer Spore: publicKey ist ein JWK (Ed25519) → `x`.
+  function sasSchluessel(sp) {
+    var k = sp && typeof sp === "object" ? sp.publicKey : null;
+    if (k && typeof k === "object" && typeof k.x === "string" && k.x) return k.x;
+    return null;
+  }
+  async function vouchSafetyNumber(fremd) {
+    var pubF = sasSchluessel(fremd);
+    if (!pubF) return { ok: false, reason: "Die Karte trägt keinen Schlüssel." };
+    var s = resolveSpore();
+    var own = null;
+    try { own = s && typeof s.getOwnSpore === "function" ? await s.getOwnSpore() : null; } catch (_e) { own = null; }
+    var pubE = sasSchluessel(own);
+    if (!pubE) return { ok: false, reason: "Noch keine eigene Identität." };
+    if (pubE === pubF) return { ok: false, reason: "Das ist die eigene Karte." };
+    var c = netSubtle();
+    if (!c) return { ok: false, reason: "Kein WebCrypto." };
+    var paar = [pubE, pubF].sort();
+    var h = new Uint8Array(await c.subtle.digest("SHA-256", new TextEncoder().encode("sbkim-vouch-sas-v1|" + paar[0] + "|" + paar[1])));
+    var ziffern = "";
+    for (var i = 0; i < 15; i++) ziffern += String(h[i] % 100).padStart(2, "0");
+    return { ok: true, number: ziffern.replace(/(\d{5})(?=\d)/g, "$1 ") };
+  }
   function createVouch(subjectId, opts) { return vouchAusstellen(RDV_VOUCH_KIND, subjectId, opts); }
   function createRevocation(subjectId) { return vouchAusstellen(RDV_REVOKE_KIND, subjectId, null); }
 
@@ -787,6 +837,14 @@
     var r = c.filter(function (z) { return z.kind === RDV_REVOKE_KIND; })
       .sort(function (a, b) { return b.ts - a.ts; }).slice(0, RDV_REVOKE_PER_CARD_MAX);
     return { vouches: v, revocations: r };
+  }
+
+  // Weitergeben (S5 Teil 2): die neue Bürgschaft plus die eigenen mitgetragenen
+  // Bürgschaften, damit die Kette beim Empfänger lesbar ist.
+  function vouchPassOn(z) {
+    var liste = (z && typeof z === "object") ? [z] : [];
+    cardCarried().vouches.forEach(function (x) { if (!z || x.sig !== z.sig) liste.push(x); });
+    return liste;
   }
 
   // VERKEHR-Lampe (Modul 17 / Status-Widget) ehrlich setzen: aktiv, solange
@@ -1797,6 +1855,9 @@
     addCarried: addCarried,                   // S5 — erhaltene Bürgschaft / eigenen Widerruf mittragen
     loadVouchContacts: loadVouchContacts,     // S5 — eigene Kontakte (Wurzeln)
     saveVouchContacts: saveVouchContacts,     // S5
+    vouchPassOn: vouchPassOn,                 // S5 Teil 2 — Text zum Weitergeben (Liste)
+    vouchSafetyNumber: vouchSafetyNumber,     // S5 Teil 2 — Sicherheitsnummer zum Vergleich
+    currentNetAdmin: currentNetAdmin,         // S5 Teil 2 — Netzadmin des aktuellen Netzes
     ensureIdentity: ensureIdentity,             // Modus A (sanft, automatisch, idempotent)
     cleanupSharedOrigin: cleanupSharedOrigin,   // Modus-B-Reinigung (nur eigene Origin)
     repairAndReconnect: repairAndReconnect,     // Modus B (zerstörend, nutzer-ausgelöst)
@@ -1856,7 +1917,8 @@
         meaningMin: RDV_MEANING_MIN,              // S2
         vouchChainMax: RDV_VOUCH_CHAIN_MAX,       // S5
         vouchTtlSec: RDV_VOUCH_TTL_SEC,           // S5
-        vouchAnchors: idListe(RDV_VOUCH_ANCHORS).length + idListe(vouchCfg.anchors).length, // S5                  // Bau 23.R
+        vouchAnchors: idListe(vouchCfg.anchors).length, // S5 (init-Anker, ohne Netzadmin)
+        netAdmin: currentNetAdmin(),              // S5 Teil 2
         rankByQueryNote: "rankCardsByQuery(cards, queryVec, {raw?}) rankt Raum-Karten nach Frage-Passung (Modul 04 relatedness, zentriert; raw→match). REINE Anzeige/Auswahl, gatet nichts, 0.80-Riegel unberührt; fail-soft ohne Vektor → Eingabe-Reihenfolge.", // A11
       };
     },

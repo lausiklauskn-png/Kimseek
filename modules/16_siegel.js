@@ -209,6 +209,12 @@
       aspect:      "Die Bedeutung wird nachgerechnet (S2)",
       description: "Jeder Knoten sagt mit einem Bedeutungs-Vektor, worum es bei ihm geht. Bisher ließ sich dieser Vektor von einem anderen Knoten abschreiben, ohne dass es auffiel. Jetzt rechnet der Empfänger ihn aus der Beschreibung der Karte nach, sobald sein Sprachmodell ohnehin geladen ist. Passt er nicht, steht an der Karte „Bedeutung passt nicht zur Beschreibung“, und der Knoten bekommt beim Suchen keinen Vorrang; sichtbar bleibt er. Ist der Vektor aus den Inhalten der App gerechnet, lässt er sich nicht nachrechnen und wird so benannt, ohne Abzug. Ohne geladenes Sprachmodell steht dort „nicht geprüft“, nie still ein Haken.",
     },
+    {
+      since:       "2026-10-15",
+      module:      "23",
+      aspect:      "Knoten können füreinander bürgen (S5)",
+      description: "Ein Knoten kann für einen anderen unterschreiben: „Diese Kennung kenne ich.“ Vorher vergleichen beide eine Sicherheitsnummer auf einem zweiten Weg, etwa am Telefon. Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust: dem Netzadmin deines Netzes oder einem eigenen Kontakt, höchstens zwei Schritte weit und ein Jahr lang. Ein Bürge kann zurückziehen, und wer für einen auffälligen Knoten bürgt, verliert das Gewicht seiner Bürgschaften. Im offenen Mycel ist Sage-Protokol der Netzadmin, in einem eigenen Netz dessen Betreiber. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.",
+    },
   ];
 
   // ---- Aspekt-4-Anker (Karte 16 § Sub (e) dynamische Render-Variante) ----
@@ -404,6 +410,10 @@
         "The meaning is recomputed (S2)",
       "Jeder Knoten sagt mit einem Bedeutungs-Vektor, worum es bei ihm geht. Bisher ließ sich dieser Vektor von einem anderen Knoten abschreiben, ohne dass es auffiel. Jetzt rechnet der Empfänger ihn aus der Beschreibung der Karte nach, sobald sein Sprachmodell ohnehin geladen ist. Passt er nicht, steht an der Karte „Bedeutung passt nicht zur Beschreibung“, und der Knoten bekommt beim Suchen keinen Vorrang; sichtbar bleibt er. Ist der Vektor aus den Inhalten der App gerechnet, lässt er sich nicht nachrechnen und wird so benannt, ohne Abzug. Ohne geladenes Sprachmodell steht dort „nicht geprüft“, nie still ein Haken.":
         "Every node states what it is about with a meaning vector. Until now another node could copy that vector without anyone noticing. Now the receiver recomputes it from the card's description whenever its language model is loaded anyway. If it does not match, the card says “Meaning does not match the description”, and the node gets no priority in searches; it stays visible. If the vector was computed from the app's content, it cannot be recomputed and is labelled as such, without any penalty. Without a loaded language model the card says “not checked”, never a silent tick.",
+      "Knoten können füreinander bürgen (S5)":
+        "Nodes can vouch for each other (S5)",
+      "Ein Knoten kann für einen anderen unterschreiben: „Diese Kennung kenne ich.“ Vorher vergleichen beide eine Sicherheitsnummer auf einem zweiten Weg, etwa am Telefon. Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust: dem Netzadmin deines Netzes oder einem eigenen Kontakt, höchstens zwei Schritte weit und ein Jahr lang. Ein Bürge kann zurückziehen, und wer für einen auffälligen Knoten bürgt, verliert das Gewicht seiner Bürgschaften. Im offenen Mycel ist Sage-Protokol der Netzadmin, in einem eigenen Netz dessen Betreiber. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.":
+        "A node can sign for another one: “I know this identifier.” Before that, both compare a safety number over a second channel, for example by phone. A vouch only counts for you if you already trust the voucher: the network admin of your network or an own contact, at most two steps away and for one year. A voucher can withdraw, and whoever vouches for a node that has been flagged loses the weight of their vouches. In the open mycelium Sage-Protokol is the network admin; in an own network it is whoever runs it. When you ask, vouched cards come first; cards without a vouch stay visible and are still asked.",
   } };
 
   /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */
