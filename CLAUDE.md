@@ -63,3 +63,12 @@ Modul 04, 22 und 24 kommen neu aus dem Kanon (Sage #1082, verteilt mit `kanon-ve
 - Gemessen im Browser: auf beiden Seiten `prueflisteGeladen === true`; ohne die Zeile in `brain.html` `false` und
   der neue Test rot. `npm test` 12 grün.
 - ⚠ Nicht gemessen: Richter und Texterkennung mit einem echten Schlüssel (das Modell lädt im Behälter nicht), das Tablet.
+
+## 🛡 Echtheit im Raum (Sage Bau 23.R, nachgezogen 2026-10-15)
+
+Modul 02, 16, 23 und 23-UI kommen neu aus dem Kanon (`kanon-verteilen`, Sammel-Brief Schritt 2, Paket A1). Die Echtheit
+einer Karte im Raum wird jetzt wirklich geprüft (`.valid`), und zwar vor dem Zusammenfassen gleicher Namen. Antworten tragen
+Spore und Unterschrift und gelten nur vom gefragten Knoten. Fremde Namen und Texte stehen nur als Text da. Pins in
+`test/smoke.test.js` nachgezogen, Cache `kimseek-v63`. Die eigene Glue (`assets/rendezvous-init.js`, `brain.html`) ist
+nachgesehen: fremder Text geht nur über `textContent` bzw. `esc`. Gemessen: `npm test` 12 grün. Gegenprobe von Hand (alte
+23-Fassung zurück): Drift-Guard rot. ⚠ Nicht gemessen: das Tablet, ein Raum mit echten fremden Knoten.

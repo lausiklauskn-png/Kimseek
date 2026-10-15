@@ -18,6 +18,8 @@
  *   regenerateOwnSpore(updates, key?) -> Promise<SporeJson>  // gleiche nodeId, neu signiert
  *   getOwnSpore(key?) -> Promise<SporeJson | null>
  *   verifyForeignSpore(spore) -> Promise<{ valid, reason? }>
+ *   signDetached(obj, key?) -> Promise<string>            // Bau 02.Z
+ *   verifyDetached(obj, signature, publicKeyJwk) -> Promise<boolean>
  *   setActiveIdentity(key) -> Promise<void>
  *   getActiveIdentityKey() -> Promise<string>
  *   listIdentities() -> Promise<string[]>
@@ -907,6 +909,37 @@
     }
   }
 
+  // ---- Losgelöste Unterschrift (Bau 02.Z, 2026-10-14) ----
+  //
+  // Modul 23 schickt Antwort-Zettel, die bis hierher UNSIGNIERT waren — jeder
+  // Mithörer konnte im Namen eines anderen Knotens antworten (Befund
+  // docs/sessions/archiv/2026-10-14_angriffsflaeche_mycel.md, N1). Der private
+  // Schlüssel bleibt in diesem Modul: wer etwas unterschreiben will, reicht das
+  // Objekt herein und bekommt nur die Unterschrift zurück.
+  //   signDetached(obj, key?)                    → base64url(Ed25519(canonicalJson(obj)))
+  //   verifyDetached(obj, signature, publicJwk)  → true | false, wirft nie
+  async function signDetached(obj, key) {
+    if (!obj || typeof obj !== "object") {
+      throw makeError("InvalidSporeMetaError", "signDetached: obj muss ein Objekt sein.");
+    }
+    var slotKey = key || await getActiveIdentityKey();
+    var identity = await loadIdentity(slotKey);
+    if (!identity) throw UnknownIdentityError("signDetached: keine Identität in Slot '" + slotKey + "'.");
+    var sigBuf = await getSubtle().sign({ name: "Ed25519" }, identity.privateKey, canonicalJsonBytes(obj));
+    return base64urlEncode(sigBuf);
+  }
+
+  async function verifyDetached(obj, signature, publicKeyJwk) {
+    try {
+      if (!obj || typeof obj !== "object" || typeof signature !== "string" || !publicKeyJwk) return false;
+      var subtle = getSubtle();
+      var pub = await subtle.importKey("jwk", publicKeyJwk, { name: "Ed25519" }, true, ["verify"]);
+      return await subtle.verify({ name: "Ed25519" }, pub, base64urlDecode(signature), canonicalJsonBytes(obj));
+    } catch (_e) {
+      return false;
+    }
+  }
+
   // Sync, idempotent. Leert In-Memory-identityCache + activeIdentityKey-
   // Cache, ohne den Storage anzufassen. Pflicht-Aufruf für externe
   // Cleanup-Pfade, die sbkim_keys/sbkim_spore/sbkim_meta selbst leeren
@@ -1270,6 +1303,8 @@
     regenerateOwnSpore: regenerateOwnSpore,
     getOwnSpore: getOwnSpore,
     verifyForeignSpore: verifyForeignSpore,
+    signDetached: signDetached,
+    verifyDetached: verifyDetached,
     setActiveIdentity: setActiveIdentity,
     getActiveIdentityKey: getActiveIdentityKey,
     listIdentities: listIdentities,

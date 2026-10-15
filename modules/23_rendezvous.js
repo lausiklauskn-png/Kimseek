@@ -957,6 +957,32 @@
             };
           })
           .sort(function (a, b) { return b.ts - a.ts; });
+        // ECHTHEIT (Stufe 2b): Ed25519-Prüfung je Karte über Modul 02. Erst hier,
+        // weil verifyForeignSpore async ist und der Empfangs-Callback es nicht
+        // abwarten kann. Ungültige Karten fallen raus — niemand kann sich mehr
+        // unter fremder Identität ins Brett hängen.
+        // ⚠ Modul 02 liefert {valid, reason}, NIE `false` (INTERFACES §2 Modul 02).
+        //   Bis 2026-10-14 stand hier `!== false` — damit galt JEDE Spore als echt,
+        //   auch eine mit kaputter Signatur (Befund 2026-10-14, N2). Gelesen wird
+        //   jetzt `.valid === true`; ein Prüfer mit nacktem Boolean (alte Proben,
+        //   Forker) wird weiter verstanden.
+        // ⚠ Die Prüfung steht VOR dem Zusammenfassen nach Namen: sonst verdrängt
+        //   eine unechte Karte mit neuerer Zeit die echte gleichen Namens und fällt
+        //   danach selbst heraus — beide wären weg.
+        var verifier = resolveVerifier();
+        var cardsVerified = !!verifier;
+        if (verifier) {
+          var geprueft = [];
+          for (var vi = 0; vi < cards.length; vi++) {
+            var okSpore = false;
+            try {
+              var vr = await verifier.verifyForeignSpore(cards[vi].spore);
+              okSpore = (vr === true) || !!(vr && typeof vr === "object" && vr.valid === true);
+            } catch (e) { okSpore = false; }   // wirft bei ungültiger Spore → unecht
+            if (okSpore) geprueft.push(cards[vi]); else rejected++;
+          }
+          cards = geprueft;
+        }
         // Adress-Wand-Härtung (Klaus 2026-07-10): ein Knoten kann durch
         // wiederholtes „Aufräumen & neu anmelden" mehrere Alt-Identitäten
         // hinterlassen — deren Präsenz-Kärtchen leben ~30 min weiter und
@@ -964,30 +990,18 @@
         // NEUESTE Karte zeigen (Liste ist bereits ts-absteigend sortiert). So
         // trifft „❓ Fragen" immer die frischeste, lauschende ID; die toten
         // Alt-Kärtchen verschwinden aus Raum + Karte. Opt-out: collapseByName:false.
+        // ⚠ Der Name ist NICHT geprüft (er steht außerhalb der Spore). Eine echt
+        //   signierte fremde Identität kann denselben Namen tragen. Die gezeigte
+        //   Karte zählt deshalb mit, wie viele andere Kennungen gleichen Namens
+        //   ausgeblendet wurden (`gleicherName`) — die Anzeige nennt es.
         if (opts.collapseByName !== false) {
           var seenName = Object.create(null);
           cards = cards.filter(function (c) {
             var key = (c.nodeName || "").toLowerCase();
             if (!key) return true;
-            if (seenName[key]) return false;
-            seenName[key] = true; return true;
+            if (seenName[key]) { seenName[key].gleicherName = (seenName[key].gleicherName || 0) + 1; return false; }
+            seenName[key] = c; return true;
           });
-        }
-        // ECHTHEIT (Stufe 2b): Ed25519-Prüfung je Karte über Modul 02. Erst hier,
-        // weil verifyForeignSpore async ist und der Empfangs-Callback es nicht
-        // abwarten kann. Ungültige Karten fallen raus — niemand kann sich mehr
-        // unter fremder Identität ins Brett hängen.
-        var verifier = resolveVerifier();
-        var cardsVerified = !!verifier;
-        if (verifier) {
-          var geprueft = [];
-          for (var vi = 0; vi < cards.length; vi++) {
-            var okSpore = false;
-            try { okSpore = await verifier.verifyForeignSpore(cards[vi].spore) !== false; }
-            catch (e) { okSpore = false; }   // wirft bei ungültiger Spore → unecht
-            if (okSpore) geprueft.push(cards[vi]); else rejected++;
-          }
-          cards = geprueft;
         }
         // Reine Anzeige-Anreicherung: zentrierter Verwandtschafts-Score je Karte
         // (gatet nichts; Handshake bleibt 0.80-Riegel). Fail-soft ohne Modul 04.
@@ -1055,6 +1069,61 @@
   // Fenster nach (fetchAnswers). Empfangsmodus-treu: nutzer-ausgelöst beim
   // Öffnen, KEIN Dauer-Ticker. Reale Grenze = Aufbewahrungsdauer des Relais.
   var RDV_ANSWER_LOOKBACK_SEC = 1800; // 30 min zurück (Frage/Antwort nachholen)
+  // ---- Antworten an den Antworter binden (Bau 23.R, 2026-10-14) ----
+  // Befund docs/sessions/archiv/2026-10-14_angriffsflaeche_mycel.md (N1): die
+  // Antwort-Zettel waren unsigniert, `fromNodeId` nur eine Behauptung. Wer den
+  // öffentlichen Frage-Tag mithörte, antwortete im Namen des gefragten Knotens,
+  // schneller als dieser, und überschrieb in fetchAnswers mit selbst gesetzter Zeit.
+  // Jetzt: der Antworter legt seine Spore bei und unterschreibt den Zettel
+  // (Modul 02 signDetached). Der Frager prüft Spore, Bindung an fromNodeId,
+  // Unterschrift und dass fromNodeId der GEFRAGTE Knoten ist.
+  //   bestaetigt   → genommen, schlägt jede unbestätigte Antwort
+  //   unbestaetigt → ohne Unterschrift (alte Fassung, oder Modul 02 ohne Sign-Pfad);
+  //                  wird nur genommen, wenn keine bestätigte kommt, und trägt
+  //                  bestaetigt:false — die Oberfläche sagt es, der KI-Richter bekommt sie nicht
+  //   falsch       → Unterschrift/Spore/Bindung passt nicht, oder ein anderer als der
+  //                  gefragte Knoten antwortet → verworfen
+  var RDV_LABEL_MAX = 200;              // Treffer-Titel hart gekappt (untrusted input)
+  var RDV_UNBESTAETIGT_WARTE_MS = 3000; // so lange wartet askNode nach einer unbestätigten
+                                        // Antwort noch auf eine bestätigte
+  function antwortOhneSig(a) {
+    var o = {};
+    for (var key in a) { if (Object.prototype.hasOwnProperty.call(a, key) && key !== "sig") o[key] = a[key]; }
+    return o;
+  }
+  async function antwortSignieren(zettel) {
+    var s = resolveSpore();
+    if (!s || typeof s.signDetached !== "function") return zettel;     // fail-soft: unsigniert
+    try {
+      var own = await s.getOwnSpore();
+      if (!own || own.id !== zettel.fromNodeId) return zettel;
+      zettel.spore = own;
+      zettel.sig = await s.signDetached(antwortOhneSig(zettel));
+    } catch (_e) { delete zettel.spore; delete zettel.sig; }
+    return zettel;
+  }
+  async function antwortPruefen(a, erwartetVon) {
+    if (erwartetVon && a.fromNodeId !== erwartetVon) return "falsch";
+    if (typeof a.sig !== "string" || !a.spore || typeof a.spore !== "object") {
+      return (a.sig === undefined && a.spore === undefined) ? "unbestaetigt" : "falsch";
+    }
+    var v = resolveVerifier();
+    if (!v || typeof v.verifyDetached !== "function") return "unbestaetigt";   // nicht prüfbar
+    if (a.spore.id !== a.fromNodeId) return "falsch";
+    try {
+      var vr = await v.verifyForeignSpore(a.spore);
+      if (!(vr === true || (vr && vr.valid === true))) return "falsch";
+      return (await v.verifyDetached(antwortOhneSig(a), a.sig, a.spore.publicKey)) ? "bestaetigt" : "falsch";
+    } catch (_e) { return "falsch"; }
+  }
+  function ergebnisseLesen(a) {
+    return (Array.isArray(a.results) ? a.results : []).slice(0, RDV_QUERY_K_MAX).map(function (r) {
+      var o = { label: String((r && r.label) || "").slice(0, RDV_LABEL_MAX), score: (r && typeof r.score === "number") ? r.score : null };
+      if (r && typeof r.anchorId === "string" && r.anchorId) o.anchorId = r.anchorId.slice(0, 120);
+      return o;
+    });
+  }
+  var antwortVerworfen = 0;            // _meta: wie viele Antworten die Prüfung nicht bestanden
 
   var answerUnsub = null;            // aktiver Antwort-Lauscher (null = AUS)
   var answeredCount = 0;
@@ -1175,11 +1244,11 @@
                 kind: NOSTR_KIND,
                 created_at: nowSec(),
                 tags: [["t", fragTagA]],
-                content: await netPacke({
+                content: await netPacke(await antwortSignieren({
                   kind: RDV_QUERY_RES_KIND, qid: q.qid,
                   toNodeId: q.fromNodeId, fromNodeId: ownId,
                   fromName: cfg.nodeName, results: results, ts: nowSec(),
-                }, fragTagA),
+                }), fragTagA),
               });
               answeredCount++;
             } catch (_e) { /* fail-soft: Antwort verloren, kein Bruch */ }
@@ -1251,15 +1320,22 @@
             netEmpfange(ev, fragTagQ, antwortNehmen, null);
           },
         );
+        // Bau 23.R: nur der GEFRAGTE Knoten, und eine unterschriebene Antwort
+        // schlägt jede unbestätigte (siehe antwortPruefen).
+        var vorlaeufig = null, graceTimer = null;
         function antwortNehmen(a) {
             if (!a || a.kind !== RDV_QUERY_RES_KIND || a.qid !== qid || a.toNodeId !== ownId) return;
-            var results = (Array.isArray(a.results) ? a.results : []).slice(0, RDV_QUERY_K_MAX)
-              .map(function (r) {
-                var o = { label: String((r && r.label) || ""), score: (r && typeof r.score === "number") ? r.score : null };
-                if (r && typeof r.anchorId === "string" && r.anchorId) o.anchorId = r.anchorId;
-                return o;
-              });
-            finish({ ok: true, qid: qid, results: results, fromNodeId: a.fromNodeId || null, tookMs: Date.now() - started });
+            antwortPruefen(a, toNodeId).then(function (stand) {
+              if (done) return;
+              if (stand === "falsch") { antwortVerworfen++; return; }
+              var res = { ok: true, qid: qid, results: ergebnisseLesen(a), fromNodeId: a.fromNodeId || null,
+                          bestaetigt: stand === "bestaetigt", tookMs: Date.now() - started };
+              if (stand === "bestaetigt") { if (graceTimer) clearTimeout(graceTimer); finish(res); return; }
+              if (!vorlaeufig) {
+                vorlaeufig = res;
+                graceTimer = setTimeout(function () { finish(vorlaeufig); }, RDV_UNBESTAETIGT_WARTE_MS);
+              }
+            });
         }
       } catch (e) {
         finish({ ok: false, reason: "Antwort-Lauscher fehlgeschlagen: " + (e && e.message ? e.message : e) });
@@ -1279,6 +1355,7 @@
         finish({ ok: false, reason: "Frage-Zettel konnte nicht publiziert werden: " + (e && e.message ? e.message : e) });
       });
       timer = setTimeout(function () {
+        if (vorlaeufig) { if (graceTimer) clearTimeout(graceTimer); finish(vorlaeufig); return; }
         // A12: qid mitgeben — der Frager merkt die Frage als „offen" und liest
         // die Antwort später über fetchAnswers([qid]) nach (Briefkasten).
         finish({ ok: false, pending: true, qid: qid, reason: "Noch keine Antwort in " + Math.round(timeoutMs / 1000) + " s — Gegenknoten evtl. offline. Die Frage bleibt offen; beim nächsten Öffnen „Antworten abholen“." });
@@ -1294,8 +1371,15 @@
   // Reale Grenze: Aufbewahrungsdauer des Relais. Fail-soft, DOM-frei.
   async function fetchAnswers(qids, opts) {
     opts = (opts && typeof opts === "object") ? opts : {};
+    // Bau 23.R: qids = Strings ODER {qid, toNodeId}. Mit toNodeId wird nur die
+    // Antwort genau dieses Knotens genommen.
     var want = {};
-    (Array.isArray(qids) ? qids : []).forEach(function (id) { if (typeof id === "string" && id) want[id] = true; });
+    (Array.isArray(qids) ? qids : []).forEach(function (id) {
+      if (typeof id === "string" && id) want[id] = { von: null };
+      else if (id && typeof id === "object" && typeof id.qid === "string" && id.qid) {
+        want[id.qid] = { von: (typeof id.toNodeId === "string" && id.toNodeId) ? id.toNodeId : null };
+      }
+    });
     if (!Object.keys(want).length) return { ok: true, answers: [] };
     var relay = resolveRelay();
     if (!relay) return { ok: false, reason: "Kein Nostr-Relais-Client (Modul 05b) verfügbar.", answers: [] };
@@ -1316,7 +1400,9 @@
         if (done) return; done = true;
         if (timer) clearTimeout(timer);
         if (unsub) { try { unsub(); } catch (_e) {} }
-        if (wartenF.length) { try { await Promise.all(wartenF); } catch (_e) {} }
+        // Bau 23.R: die Prüfung einer Antwort hängt sich erst NACH dem Entschlüsseln an —
+        // so lange warten, bis keine neue mehr dazukommt.
+        for (var wn = -1; wn !== wartenF.length;) { wn = wartenF.length; try { await Promise.all(wartenF.slice()); } catch (_e) {} }
         var out = Object.keys(byQid).map(function (q) { return byQid[q]; });
         resolve({ ok: true, answers: out });
       }
@@ -1331,15 +1417,21 @@
             if (!a || a.kind !== RDV_QUERY_RES_KIND) return;      // nur Antwort-Zettel
             if (a.toNodeId !== ownId) return;                     // nur an mich
             if (typeof a.qid !== "string" || !want[a.qid]) return; // nur meine offenen Fragen
-            var ts = (typeof a.ts === "number") ? a.ts : 0;
-            var prev = byQid[a.qid];
-            if (prev && typeof prev.ts === "number" && prev.ts >= ts) return; // newest-per-qid
-            var results = (Array.isArray(a.results) ? a.results : []).slice(0, RDV_QUERY_K_MAX).map(function (r) {
-              var o = { label: String((r && r.label) || ""), score: (r && typeof r.score === "number") ? r.score : null };
-              if (r && typeof r.anchorId === "string" && r.anchorId) o.anchorId = r.anchorId;
-              return o;
+            var p = antwortPruefen(a, want[a.qid].von).then(function (stand) {
+              if (stand === "falsch") { antwortVerworfen++; return; }
+              var best = stand === "bestaetigt";
+              var ts = (typeof a.ts === "number") ? a.ts : 0;
+              var prev = byQid[a.qid];
+              // Bau 23.R: bestätigt schlägt unbestätigt, egal welche Zeit; erst
+              // innerhalb derselben Stufe gilt die neueste (newest-per-qid).
+              if (prev) {
+                if (prev.bestaetigt && !best) return;
+                if (prev.bestaetigt === best && typeof prev.ts === "number" && prev.ts >= ts) return;
+              }
+              byQid[a.qid] = { qid: a.qid, fromNodeId: a.fromNodeId || null, fromName: a.fromName || null,
+                               results: ergebnisseLesen(a), ts: ts, bestaetigt: best };
             });
-            byQid[a.qid] = { qid: a.qid, fromNodeId: a.fromNodeId || null, fromName: a.fromName || null, results: results, ts: ts };
+            wartenF.push(p);
         }
       } catch (e) {
         resolve({ ok: false, reason: "Nachlese-Lauscher fehlgeschlagen: " + (e && e.message ? e.message : e), answers: [] });
@@ -1412,6 +1504,9 @@
         queryKind: RDV_QUERY_KIND,                // Bau 23.B
         queryResKind: RDV_QUERY_RES_KIND,         // Bau 23.B
         queryMaxPerMin: RDV_QUERY_MAX_PER_MIN,    // Bau 23.B
+        antwortVerworfen: antwortVerworfen,       // Bau 23.R: Antworten, die die Prüfung nicht bestanden
+        antwortSigniert: (function () { var s = resolveSpore(); return !!(s && typeof s.signDetached === "function"); })(), // Bau 23.R
+        labelMax: RDV_LABEL_MAX,                  // Bau 23.R
         rankByQueryNote: "rankCardsByQuery(cards, queryVec, {raw?}) rankt Raum-Karten nach Frage-Passung (Modul 04 relatedness, zentriert; raw→match). REINE Anzeige/Auswahl, gatet nichts, 0.80-Riegel unberührt; fail-soft ohne Vektor → Eingabe-Reihenfolge.", // A11
       };
     },

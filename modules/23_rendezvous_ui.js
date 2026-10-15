@@ -196,6 +196,14 @@
         "There is already an identifier in this browser. Playing a backup in REPLACES it with the one from the file.\nThe present identifier is gone afterwards — other nodes will know the old one again.",
       "KI bewertet die Antworten (eigener Schlüssel)":
         "An AI judges the answers (your own key)",
+      " ⚠ unbestätigt (nicht unterschrieben)":
+        " ⚠ unconfirmed (not signed)",
+      "⚠ Derselbe Name noch ":
+        "⚠ The same name appears ",
+      "× im Raum, mit anderer Kennung — der Name ist nicht geprüft.":
+        " more time(s) in the room, with another identifier — the name is not verified.",
+      "\n\n🧠 KI-Richter: nicht gefragt — die Antwort ist nicht unterschrieben.":
+        "\n\n🧠 AI judge: not asked — the answer is not signed.",
       "KI-Anbieter wählen":
         "Choose an AI provider",
       "Kein gemerkter Schlüssel oder falsches Passwort. ":
@@ -802,14 +810,15 @@
     if (!r || typeof r.fetchAnswers !== "function") { updateMailBadge(); if (opts.show) renderMail(); return; }
     var open = loadPending().filter(function (e) { return e.status === "offen"; });
     if (!open.length) { updateMailBadge(); if (opts.show) renderMail(); return; }
-    r.fetchAnswers(open.map(function (e) { return e.qid; })).then(function (res) {
+    // Bau 23.R: je Frage den GEFRAGTEN Knoten mitgeben — nur dessen Antwort zählt.
+    r.fetchAnswers(open.map(function (e) { return e.toNodeId ? { qid: e.qid, toNodeId: e.toNodeId } : e.qid; })).then(function (res) {
       if (res && res.ok && Array.isArray(res.answers) && res.answers.length) {
         var byQid = {}; res.answers.forEach(function (a) { if (a && a.qid) byQid[a.qid] = a; });
         var cur = loadPending().map(function (e) {
           if (e.status === "offen" && byQid[e.qid]) {
             var a = byQid[e.qid];
             return { qid: e.qid, toNodeId: e.toNodeId || null, toName: e.toName, text: e.text, ts: e.ts, status: "beantwortet", seen: false,
-                     answer: { fromName: a.fromName || e.toName, results: Array.isArray(a.results) ? a.results : [] } };
+                     answer: { fromName: e.toName, bestaetigt: a.bestaetigt === true, results: Array.isArray(a.results) ? a.results : [] } };
           }
           return e;
         });
@@ -833,7 +842,7 @@
       return Promise.resolve(r.askNode(e.toNodeId, e.text)).then(function (res) {
         var cur = loadPending();
         var upd = (res && res.ok)
-          ? { qid: res.qid || e.qid, toNodeId: e.toNodeId, toName: e.toName, endpoint: e.endpoint || null, tries: e.tries || 1, text: e.text, ts: Date.now(), status: "beantwortet", seen: false, answer: { fromName: res.fromNodeId || e.toName, results: Array.isArray(res.results) ? res.results : [] } }
+          ? { qid: res.qid || e.qid, toNodeId: e.toNodeId, toName: e.toName, endpoint: e.endpoint || null, tries: e.tries || 1, text: e.text, ts: Date.now(), status: "beantwortet", seen: false, answer: { fromName: e.toName, bestaetigt: res.bestaetigt === true, results: Array.isArray(res.results) ? res.results : [] } }
           : { qid: (res && res.qid) || e.qid, toNodeId: e.toNodeId, toName: e.toName, endpoint: e.endpoint || null, tries: (typeof e.tries === "number" ? e.tries : 1) + 1, text: e.text, ts: Date.now(), status: "offen", seen: true };
         var idx = -1;
         for (var i = 0; i < cur.length; i++) { if (cur[i].qid === e.qid) { idx = i; break; } }
@@ -868,7 +877,7 @@
       var meta = (e.tries > 1 ? "×" + e.tries + " · " : "") + (timeAgo(e.ts) ? "zuletzt " + timeAgo(e.ts) : "");
       if (e.status === "beantwortet" && e.answer) {
         var res = (e.answer.results || []).map(function (r) { return r.label; }).filter(Boolean);
-        lines.push("✓ „" + e.text + "“ → " + (e.answer.fromName || e.toName) + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)") + (meta ? "  (" + meta + ")" : ""));
+        lines.push("✓ „" + e.text + "“ → " + (e.answer.fromName || e.toName) + (e.answer.bestaetigt === false ? T(" ⚠ unbestätigt (nicht unterschrieben)") : "") + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)") + (meta ? "  (" + meta + ")" : ""));
       } else if (e.status === "abgelaufen") {
         lines.push("🕗 abgelaufen: „" + e.text + "“ an " + e.toName + (meta ? "  (" + meta + ")" : "") + " — „🔁 nochmal fragen“ stellt sie neu.");
       } else {
@@ -905,7 +914,7 @@
         info.appendChild(el("b", null, "✓ „" + e.text + "“"));
         info.appendChild(el("br"));
         info.appendChild(el("span", "font-size:.72rem;color:#cfe0ff",
-          (e.answer.fromName || e.toName) + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)")));
+          (e.answer.fromName || e.toName) + (e.answer.bestaetigt === false ? T(" ⚠ unbestätigt (nicht unterschrieben)") : "") + ": " + (res.length ? res.join(", ") : "(ehrlich leer — nichts Passendes im Buch)")));
       } else if (e.status === "abgelaufen") {
         info.appendChild(el("b", null, "🕗 „" + e.text + "“"));
         info.appendChild(el("br"));
@@ -2860,6 +2869,13 @@
       info.appendChild(el("b", null, c.nodeName || T("Knoten")));
       info.appendChild(el("br"));
       info.appendChild(el("span", "font:.66rem/1.3 var(--mono,monospace);color:#9aa7b6;word-break:break-all", c.nodeId));
+      // Bau 23.R: der Name ist nicht geprüft — tragen andere Kennungen denselben
+      // Namen, steht das hier (Modul 23 zeigt nur die neueste).
+      if (typeof c.gleicherName === "number" && c.gleicherName > 0) {
+        info.appendChild(el("br"));
+        info.appendChild(el("span", "font-size:.7rem;color:#f5c26b",
+          T("⚠ Derselbe Name noch ") + c.gleicherName + T("× im Raum, mit anderer Kennung — der Name ist nicht geprüft.")));
+      }
       info.appendChild(el("br"));
       info.appendChild(el("span", "font-size:.7rem;color:#9aa7b6", T("angemeldet ") + ageTxt));
       // Verwandtschafts-Badge (reine Anzeige; nur wenn Modul 04 einen Score lieferte).
@@ -3032,6 +3048,7 @@
       outEl.textContent = head + T("\n  (keine Treffer in seinem Buch — ehrlich leer)");
       return;
     }
+    if (res.bestaetigt === false) head += T(" ⚠ unbestätigt (nicht unterschrieben)");
     function cosineLines() {
       var lines = [head];
       res.results.forEach(function (h, i) {
@@ -3043,6 +3060,11 @@
     var m = matchMod();
     if (!(kiOn && kiKey && kiKey.length && m)) {
       outEl.textContent = cosineLines();
+      return;
+    }
+    // Bau 23.R: eine unbestätigte Antwort kann von jedem stammen — sie geht nicht an die KI.
+    if (res.bestaetigt === false) {
+      outEl.textContent = cosineLines() + T("\n\n🧠 KI-Richter: nicht gefragt — die Antwort ist nicht unterschrieben.");
       return;
     }
     // KI-Richter-Pfad (opt-in, BYOK). Erst Cosinus zeigen + „urteilt …", dann
