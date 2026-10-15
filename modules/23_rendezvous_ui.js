@@ -220,8 +220,66 @@
         " (via ",
       " weiteren Schritt)":
         " more step)",
-      "🤝 Anker":
-        "🤝 Anchor",
+      "🤝 Netzadmin":
+        "🤝 Network admin",
+      "🤝 Bürgen":
+        "🤝 Vouch",
+      "Für diese Kennung bürgen, Kontakt merken oder widerrufen":
+        "Vouch for this identifier, keep it as a contact, or revoke",
+      "… Sicherheitsnummer wird berechnet":
+        "… computing the safety number",
+      "Sicherheitsnummer: ":
+        "Safety number: ",
+      "Vergleicht diese Nummer auf einem zweiten Weg (Telefon, persönlich). Die andere App zeigt dieselbe Nummer, wenn die Karte wirklich zu der Person gehört, die ihr kennt.":
+        "Compare this number over a second channel (phone, in person). The other app shows the same number if the card really belongs to the person you know.",
+      "Die Nummer stimmt überein":
+        "The number matches",
+      "Name (nur bei dir gespeichert)":
+        "Name (stored only on your device)",
+      "✍ Bürgschaft unterschreiben":
+        "✍ Sign a vouch",
+      "📇 Als eigenen Kontakt merken":
+        "📇 Keep as own contact",
+      "↩ Bürgschaft widerrufen":
+        "↩ Revoke the vouch",
+      "Erst die Sicherheitsnummer vergleichen und den Haken setzen.":
+        "Compare the safety number first and tick the box.",
+      "✓ Unterschrieben. Diesen Text an die andere Person geben; sie fügt ihn bei sich unter „🤝 Bürgschaften“ ein.":
+        "✓ Signed. Give this text to the other person; they paste it under “🤝 Vouches” in their app.",
+      "✓ Als eigenen Kontakt gemerkt. Bürgschaften dieser Kennung zählen jetzt bei dir.":
+        "✓ Kept as own contact. Vouches from this identifier now count for you.",
+      "✓ Widerrufen. Der Widerruf reist mit deiner nächsten Anmeldung im Raum.":
+        "✓ Revoked. The revocation travels with your next announcement in the room.",
+      "🤝 Bürgschaften":
+        "🤝 Vouches",
+      "Netzadmin dieses Netzes: ":
+        "Network admin of this network: ",
+      " (Sage-Protokol, offenes Mycel)":
+        " (Sage-Protokol, open mycelium)",
+      "keiner":
+        "none",
+      "Erhaltene Bürgschaft einfügen":
+        "Paste a received vouch",
+      "✓ Bürgschaft übernehmen":
+        "✓ Accept the vouch",
+      "Übernommen: ":
+        "Accepted: ",
+      " · ungültig: ":
+        " · invalid: ",
+      "✗ Der Text ist keine Bürgschaft.":
+        "✗ The text is not a vouch.",
+      "Eigene Kontakte":
+        "Own contacts",
+      "Noch keine eigenen Kontakte.":
+        "No own contacts yet.",
+      "entfernen":
+        "remove",
+      "Bürgen heißt: „Diese Kennung kenne ich.“ Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und ein Jahr lang. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.":
+        "Vouching means: “I know this identifier.” A vouch only counts for you if you already trust the voucher (network admin or own contact), at most two steps away and for one year. When you ask, vouched cards come first; cards without a vouch stay visible and are still asked.",
+      "Diese Version von Modul 23 kann keine Sicherheitsnummer rechnen.":
+        "This version of module 23 cannot compute a safety number.",
+      "Netzadmin (Kennung, optional)":
+        "Network admin (identifier, optional)",
       "🤝 eigener Kontakt":
         "🤝 own contact",
       "Bürgschaft geprüft (S5) — gatet nichts, unverbürgte Knoten bleiben sichtbar":
@@ -2004,7 +2062,7 @@
   // gegen den in Modul 23 auseinander.
   var NETZ_LINK_MARKE = "#sbkim-netz=";
   var netBoxEl = null, netLageEl = null, netNameEl = null, netRelayEl = null, netCodeEl = null,
-      netMsgEl = null, netJoinEl = null, netLinkEl = null;
+      netMsgEl = null, netJoinEl = null, netLinkEl = null, netAdminEl = null;
   var netGrund = null;          // Grund einer ungültigen GESPEICHERTEN Einstellung
   var netGestartet = false;
 
@@ -2024,14 +2082,18 @@
   function netzLink(setting) {
     var basis = "";
     try { basis = String(global.location.href).split("#")[0]; } catch (_e) {}
-    return basis + NETZ_LINK_MARKE + netzB64(JSON.stringify({ v: 1, n: setting.name, r: setting.relay, c: setting.code }));
+    var o = { v: 1, n: setting.name, r: setting.relay, c: setting.code };
+    if (setting.admin) o.a = setting.admin;   // S5 Teil 2: Netzadmin reist mit
+    return basis + NETZ_LINK_MARKE + netzB64(JSON.stringify(o));
   }
   function netzAusLink(hash) {
     if (typeof hash !== "string" || hash.indexOf(NETZ_LINK_MARKE) !== 0) return null;
     try {
       var o = JSON.parse(netzAusB64(hash.slice(NETZ_LINK_MARKE.length)));
       if (!o || o.v !== 1) return null;
-      return { name: o.n, relay: o.r, code: o.c, auto: true };
+      var s = { name: o.n, relay: o.r, code: o.c, auto: true };
+      if (typeof o.a === "string" && o.a) s.admin = o.a;
+      return s;
     } catch (_e) { return null; }
   }
   // Die Adresse putzen, damit der Code nicht in Verlauf und Lesezeichen bleibt.
@@ -2068,13 +2130,14 @@
   function netzMeldung(text) { if (netMsgEl) netMsgEl.textContent = text || ""; }
   function netzAusFeldern() {
     return { name: netNameEl ? netNameEl.value : "", relay: netRelayEl ? netRelayEl.value.trim() : "",
-      code: netCodeEl ? netCodeEl.value : "", auto: true };
+      code: netCodeEl ? netCodeEl.value : "", admin: netAdminEl ? netAdminEl.value.trim() : "", auto: true };
   }
   function netzFelderFuellen(s) {
     if (!s) return;
     if (netNameEl) netNameEl.value = s.name || "";
     if (netRelayEl) netRelayEl.value = s.relay || "";
     if (netCodeEl) netCodeEl.value = s.code || "";
+    if (netAdminEl) netAdminEl.value = s.admin || "";
   }
 
   // Übernehmen: speichern UND anwenden; im eigenen Netz danach verbinden.
@@ -2148,6 +2211,173 @@
     show();
   }
 
+  // ---- S5 Teil 2: Bürgen (INTERFACES § Modul 23 S5 Teil 2) ----
+  // Die Regeln (prüfen, Kette, Ablauf, Widerruf) stehen in Modul 23; hier nur
+  // die Oberfläche. Fremde Namen und Texte gehen nur über textContent.
+  var buergBoxEl = null, buergAdminEl = null, buergKontakteEl = null, buergMsgEl = null;
+  function kopieren(text) {
+    try {
+      if (global.navigator && global.navigator.clipboard && typeof global.navigator.clipboard.writeText === "function") {
+        global.navigator.clipboard.writeText(text).then(function () {}, function () {});
+      }
+    } catch (_e) {}
+  }
+  function bauBuergenFeld(c) {
+    var r = ensureRdv();
+    var f = el("div", "flex-basis:100%;margin-top:6px;padding:7px 9px;border-radius:8px;border:1px solid rgba(154,167,182,.3);" +
+      "background:rgba(10,16,24,.45);font-size:.72rem;line-height:1.5");
+    f.setAttribute("data-sbkim-buergen-feld", "");
+    var nr = el("div", "font:.78rem/1.4 var(--mono,monospace);color:#eef2f8;word-break:break-word", T("… Sicherheitsnummer wird berechnet"));
+    nr.setAttribute("data-sbkim-sas", "");
+    f.appendChild(nr);
+    if (r && typeof r.vouchSafetyNumber === "function") {
+      r.vouchSafetyNumber(c && c.spore).then(function (x) {
+        nr.textContent = x && x.ok ? T("Sicherheitsnummer: ") + x.number : "✗ " + ((x && x.reason) || "");
+        if (x && x.ok) nr.setAttribute("data-sbkim-sas-wert", x.number);
+      }, function (e) { nr.textContent = "✗ " + errText(e); });
+    } else nr.textContent = "✗ " + T("Diese Version von Modul 23 kann keine Sicherheitsnummer rechnen.");
+    f.appendChild(el("div", "color:#9aa7b6;margin:3px 0",
+      T("Vergleicht diese Nummer auf einem zweiten Weg (Telefon, persönlich). Die andere App zeigt dieselbe Nummer, wenn die Karte wirklich zu der Person gehört, die ihr kennt.")));
+    var lab = el("label", "display:flex;gap:6px;align-items:center;margin:4px 0;color:#eef2f8");
+    var hak = el("input");
+    hak.type = "checkbox";
+    hak.setAttribute("data-sbkim-sas-ok", "");
+    lab.appendChild(hak); lab.appendChild(el("span", null, T("Die Nummer stimmt überein")));
+    f.appendChild(lab);
+    var name = el("input", "width:100%;box-sizing:border-box;margin:2px 0 6px;padding:5px 8px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:inherit");
+    name.maxLength = 60; name.setAttribute("placeholder", T("Name (nur bei dir gespeichert)"));
+    name.setAttribute("data-sbkim-kontakt-name", "");
+    f.appendChild(name);
+    var zeile = el("div", "display:flex;gap:6px;flex-wrap:wrap");
+    var sign = el("button", idBtnCss(true), T("✍ Bürgschaft unterschreiben")); sign.type = "button";
+    sign.setAttribute("data-sbkim-buergen-sign", "");
+    var merk = el("button", idBtnCss(false), T("📇 Als eigenen Kontakt merken")); merk.type = "button";
+    merk.setAttribute("data-sbkim-kontakt-merken", "");
+    var weg = el("button", idBtnCss(false), T("↩ Bürgschaft widerrufen")); weg.type = "button";
+    weg.setAttribute("data-sbkim-widerruf", "");
+    zeile.appendChild(sign); zeile.appendChild(merk); zeile.appendChild(weg);
+    f.appendChild(zeile);
+    var text = el("textarea", "display:none;width:100%;box-sizing:border-box;margin-top:6px;min-height:70px;padding:5px 8px;" +
+      "border-radius:8px;border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:.68rem/1.35 var(--mono,monospace)");
+    text.readOnly = true; text.setAttribute("data-sbkim-buergen-text", "");
+    f.appendChild(text);
+    var msg = el("div", "margin-top:4px;color:#9aa7b6;white-space:pre-wrap");
+    msg.setAttribute("data-sbkim-buergen-meldung", "");
+    f.appendChild(msg);
+    var id = c && c.nodeId;
+    sign.addEventListener("click", function () {
+      if (!hak.checked) { msg.textContent = T("Erst die Sicherheitsnummer vergleichen und den Haken setzen."); return; }
+      if (!r || typeof r.createVouch !== "function") return;
+      r.createVouch(id).then(function (x) {
+        if (!x || !x.ok) { msg.textContent = "✗ " + ((x && x.reason) || ""); return; }
+        var t = JSON.stringify(typeof r.vouchPassOn === "function" ? r.vouchPassOn(x.zettel) : [x.zettel]);
+        text.value = t; text.style.display = "";
+        kopieren(t);
+        msg.textContent = T("✓ Unterschrieben. Diesen Text an die andere Person geben; sie fügt ihn bei sich unter „🤝 Bürgschaften“ ein.");
+      }, function (e) { msg.textContent = "✗ " + errText(e); });
+    });
+    merk.addEventListener("click", function () {
+      if (!hak.checked) { msg.textContent = T("Erst die Sicherheitsnummer vergleichen und den Haken setzen."); return; }
+      if (!r || typeof r.saveVouchContacts !== "function") return;
+      var liste = (r.loadVouchContacts() || []).filter(function (k) { return k.nodeId !== id; });
+      liste.push({ nodeId: id, name: String(name.value || "").trim().slice(0, 60) });
+      var x = r.saveVouchContacts(liste);
+      msg.textContent = x && x.ok ? T("✓ Als eigenen Kontakt gemerkt. Bürgschaften dieser Kennung zählen jetzt bei dir.") : "✗ " + ((x && x.reason) || "");
+      buergenZeigen();
+    });
+    weg.addEventListener("click", function () {
+      if (!r || typeof r.createRevocation !== "function") return;
+      r.createRevocation(id).then(function (x) {
+        if (!x || !x.ok) { msg.textContent = "✗ " + ((x && x.reason) || ""); return null; }
+        return r.addCarried(x.zettel).then(function (y) {
+          msg.textContent = y && y.ok ? T("✓ Widerrufen. Der Widerruf reist mit deiner nächsten Anmeldung im Raum.") : "✗ " + ((y && y.reason) || "");
+        });
+      }).then(null, function (e) { msg.textContent = "✗ " + errText(e); });
+    });
+    return f;
+  }
+  function buergenZeigen() {
+    var r = rdv();
+    if (buergAdminEl) {
+      var a = null;
+      try { a = r && typeof r.currentNetAdmin === "function" ? r.currentNetAdmin() : null; } catch (_e) { a = null; }
+      buergAdminEl.textContent = T("Netzadmin dieses Netzes: ") + (a ? a.slice(0, 12) + "…" +
+        (netzLage().lage === "oeffentlich" ? T(" (Sage-Protokol, offenes Mycel)") : "") : T("keiner"));
+      buergAdminEl.setAttribute("data-sbkim-netzadmin", a || "");
+    }
+    if (!buergKontakteEl) return;
+    clear(buergKontakteEl);
+    var liste = [];
+    try { liste = r && typeof r.loadVouchContacts === "function" ? r.loadVouchContacts() : []; } catch (_e) { liste = []; }
+    if (!liste.length) { buergKontakteEl.appendChild(el("div", "color:#7e8b9a", T("Noch keine eigenen Kontakte."))); return; }
+    liste.forEach(function (k) {
+      var z = el("div", "display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:3px 0");
+      z.setAttribute("data-sbkim-kontakt", k.nodeId);
+      var t = el("span", "flex:1;min-width:120px");
+      if (k.name) { t.appendChild(el("b", null, k.name)); t.appendChild(el("br")); }
+      t.appendChild(el("span", "font:.64rem/1.3 var(--mono,monospace);color:#9aa7b6;word-break:break-all", k.nodeId));
+      z.appendChild(t);
+      var b = el("button", idBtnCss(false), T("entfernen")); b.type = "button";
+      b.setAttribute("data-sbkim-kontakt-weg", "");
+      b.addEventListener("click", function () {
+        r.saveVouchContacts(r.loadVouchContacts().filter(function (x) { return x.nodeId !== k.nodeId; }));
+        buergenZeigen();
+      });
+      z.appendChild(b);
+      buergKontakteEl.appendChild(z);
+    });
+  }
+  function buergenEinfuegen(roh) {
+    var r = ensureRdv();
+    var o;
+    try { o = JSON.parse(String(roh || "")); } catch (_e) { o = null; }
+    var liste = Array.isArray(o) ? o : (o && typeof o === "object" ? [o] : null);
+    if (!liste || !liste.length || !r || typeof r.addCarried !== "function") {
+      if (buergMsgEl) buergMsgEl.textContent = T("✗ Der Text ist keine Bürgschaft.");
+      return Promise.resolve({ ok: 0, bad: 0 });
+    }
+    liste = liste.slice(0, 16);
+    var gut = 0, schlecht = 0;
+    return liste.reduce(function (p, z) {
+      return p.then(function () {
+        return r.addCarried(z).then(function (x) { if (x && x.ok) gut++; else schlecht++; }, function () { schlecht++; });
+      });
+    }, Promise.resolve()).then(function () {
+      if (buergMsgEl) buergMsgEl.textContent = T("Übernommen: ") + gut + T(" · ungültig: ") + schlecht;
+      return { ok: gut, bad: schlecht };
+    });
+  }
+  function bauBuergenBox() {
+    buergBoxEl = el("details", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
+    buergBoxEl.setAttribute("data-sbkim-buergen-box", "");
+    buergBoxEl.appendChild(el("summary", "cursor:pointer;color:#c7d2de", T("🤝 Bürgschaften")));
+    buergAdminEl = el("div", "margin:6px 0;color:#eef2f8;word-break:break-word");
+    buergBoxEl.appendChild(buergAdminEl);
+    buergBoxEl.appendChild(el("div", "color:#9aa7b6", T("Erhaltene Bürgschaft einfügen")));
+    var ein = el("textarea", "width:100%;box-sizing:border-box;margin:2px 0 6px;min-height:56px;padding:5px 8px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:.68rem/1.35 var(--mono,monospace)");
+    ein.setAttribute("data-sbkim-buergen-einfuegen", "");
+    ein.spellcheck = false;
+    buergBoxEl.appendChild(ein);
+    var ok = el("button", idBtnCss(true), T("✓ Bürgschaft übernehmen")); ok.type = "button";
+    ok.setAttribute("data-sbkim-buergen-uebernehmen", "");
+    ok.addEventListener("click", function () { buergenEinfuegen(ein.value).then(function (x) { if (x.ok) ein.value = ""; }); });
+    buergBoxEl.appendChild(ok);
+    buergMsgEl = el("div", "margin-top:4px;color:#9aa7b6;white-space:pre-wrap");
+    buergMsgEl.setAttribute("data-sbkim-buergen-box-meldung", "");
+    buergBoxEl.appendChild(buergMsgEl);
+    buergBoxEl.appendChild(el("div", "margin-top:8px;color:#9aa7b6", T("Eigene Kontakte")));
+    buergKontakteEl = el("div", "margin:2px 0 6px");
+    buergKontakteEl.setAttribute("data-sbkim-kontakte", "");
+    buergBoxEl.appendChild(buergKontakteEl);
+    buergBoxEl.appendChild(el("div", "margin-top:6px;color:#7e8b9a;font-size:.7rem;line-height:1.45",
+      T("Bürgen heißt: „Diese Kennung kenne ich.“ Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und ein Jahr lang. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.")));
+    buergBoxEl.addEventListener("toggle", function () { if (buergBoxEl.open) { configModule(); buergenZeigen(); } });
+    return buergBoxEl;
+  }
+
   function bauNetzBox() {
     var feldCss = "width:100%;box-sizing:border-box;margin:2px 0 6px;padding:6px 9px;border-radius:8px;" +
       "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:inherit";
@@ -2178,6 +2408,13 @@
     netCodeEl.setAttribute("autocomplete", "off");
     netCodeEl.spellcheck = false;
     netBoxEl.appendChild(netCodeEl);
+    netBoxEl.appendChild(el("div", "color:#9aa7b6", T("Netzadmin (Kennung, optional)")));
+    netAdminEl = el("input", feldCss);
+    netAdminEl.setAttribute("data-sbkim-netz-admin", "");
+    netAdminEl.setAttribute("autocomplete", "off");
+    netAdminEl.spellcheck = false;
+    netAdminEl.maxLength = 128;
+    netBoxEl.appendChild(netAdminEl);
     var zeile = el("div", "display:flex;gap:6px;flex-wrap:wrap");
     var neuBtn = el("button", idBtnCss(false), T("🎲 Code erzeugen"));
     neuBtn.type = "button";
@@ -2425,6 +2662,7 @@
     startIdentityWatch();   // Kennung anderswo entstanden (Siegel) → Anzeige zieht nach
     panelEl.appendChild(bauNetzBox());
     netzZeigen();
+    panelEl.appendChild(bauBuergenBox());
 
     // A15 — Zwei-Stufen-Hinweis (ehrliche Kosten-Benennung, reine Anzeige):
     // „nur stöbern" ist anonym (kein Modell/keine Identität, man wird nicht
@@ -2948,7 +3186,7 @@
           vText = T("🤝 verbürgt von ") + (vonName ? vonName + " · " : "") + vonId.slice(0, 8) + "…" +
             (c.vouch.depth > 1 ? T(" (über ") + (c.vouch.depth - 1) + T(" weiteren Schritt)") : "");
         } else {
-          vText = c.vouch.status === "anker" ? T("🤝 Anker") : T("🤝 eigener Kontakt");
+          vText = c.vouch.status === "anker" ? T("🤝 Netzadmin") : T("🤝 eigener Kontakt");
         }
         info.appendChild(el("br"));
         var vBadge = el("span", "display:inline-block;margin-top:3px;font-size:.68rem;color:" + ac, vText);
@@ -2972,6 +3210,16 @@
       qb.title = T("Gezielt diesen Knoten fragen");
       qb.addEventListener("click", function () { onAsk(c); });
       rowEl.appendChild(qb);
+      // S5 Teil 2 — bürgen, Kontakt merken, widerrufen (Feld klappt unter der Zeile auf).
+      var vb = el("button", bs + ";margin-left:6px;opacity:.72;font-size:.72rem", T("🤝 Bürgen")); vb.type = "button";
+      vb.title = T("Für diese Kennung bürgen, Kontakt merken oder widerrufen");
+      vb.setAttribute("data-sbkim-buergen-knopf", "");
+      vb.addEventListener("click", function () {
+        var da = rowEl.querySelector("[data-sbkim-buergen-feld]");
+        if (da) { rowEl.removeChild(da); return; }
+        rowEl.appendChild(bauBuergenFeld(c));
+      });
+      rowEl.appendChild(vb);
       // Partner-Link (Klaus 2026-07-12): direkt die App/PWA des Knotens öffnen,
       // um selbst dort zu suchen — ohne auf die Cross-Knoten-Antwort zu warten
       // (die server-los nur kommt, wenn der andere Tab offen+wach ist). Adresse
