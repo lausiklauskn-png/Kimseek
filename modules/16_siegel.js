@@ -197,6 +197,12 @@
       aspect:      "Echtheit im Raum wirkt wieder, Antworten sind unterschrieben",
       description: "Ein Befund vom 2026-10-14: die Prüfung der Visitenkarten im gemeinsamen Raum las die Antwort von Modul 02 falsch und ließ jede Karte durch, auch eine mit gefälschter Unterschrift. Das ist behoben, und die Prüfung steht jetzt vor dem Zusammenfassen nach Namen, damit eine gefälschte Karte die echte nicht mehr verdrängt. Ein Name bleibt ungeprüft; trägt eine andere Kennung denselben Namen, steht das an der Karte. Antworten auf eine Frage tragen jetzt die Spore des Antworters und seine Unterschrift; genommen wird nur die des gefragten Knotens. Eine Antwort ohne Unterschrift (ältere Fassung) erscheint als „unbestätigt“ und geht nicht an den KI-Richter.",
     },
+    {
+      since:       "2026-10-15",
+      module:      "23",
+      aspect:      "Fragen sind unterschrieben (S1)",
+      description: "Eine Frage an einen anderen Knoten trägt jetzt die Spore des Fragers und seine Unterschrift, wie die Antworten seit dem 2026-10-14. Der gefragte Knoten prüft sie: eine gefälschte oder nachträglich veränderte Frage wird nicht beantwortet. Eine Frage ohne Unterschrift (ältere Fassung) wird weiter beantwortet, aber höchstens zwei solche Fragen je Minute; unterschriebene Fragen haben Vorrang.",
+    },
   ];
 
   // ---- Aspekt-4-Anker (Karte 16 § Sub (e) dynamische Render-Variante) ----
@@ -384,6 +390,10 @@
         "Authenticity in the room works again, answers are signed",
       "Ein Befund vom 2026-10-14: die Prüfung der Visitenkarten im gemeinsamen Raum las die Antwort von Modul 02 falsch und ließ jede Karte durch, auch eine mit gefälschter Unterschrift. Das ist behoben, und die Prüfung steht jetzt vor dem Zusammenfassen nach Namen, damit eine gefälschte Karte die echte nicht mehr verdrängt. Ein Name bleibt ungeprüft; trägt eine andere Kennung denselben Namen, steht das an der Karte. Antworten auf eine Frage tragen jetzt die Spore des Antworters und seine Unterschrift; genommen wird nur die des gefragten Knotens. Eine Antwort ohne Unterschrift (ältere Fassung) erscheint als „unbestätigt“ und geht nicht an den KI-Richter.":
         "A finding from 2026-10-14: the check of the calling cards in the shared room misread the reply of module 02 and let every card through, including one with a forged signature. That is fixed, and the check now runs before cards are merged by name, so a forged card can no longer push out the real one. A name stays unverified; if another identifier carries the same name, the card says so. Answers to a question now carry the answering node's spore and its signature; only the answer of the node that was asked is taken. An answer without a signature (older version) appears as “unconfirmed” and does not go to the AI judge.",
+      "Fragen sind unterschrieben (S1)":
+        "Questions are signed (S1)",
+      "Eine Frage an einen anderen Knoten trägt jetzt die Spore des Fragers und seine Unterschrift, wie die Antworten seit dem 2026-10-14. Der gefragte Knoten prüft sie: eine gefälschte oder nachträglich veränderte Frage wird nicht beantwortet. Eine Frage ohne Unterschrift (ältere Fassung) wird weiter beantwortet, aber höchstens zwei solche Fragen je Minute; unterschriebene Fragen haben Vorrang.":
+        "A question to another node now carries the asker's spore and signature, like the answers since 2026-10-14. The node being asked checks it: a forged or afterwards altered question is not answered. A question without a signature (older version) is still answered, but at most two such questions per minute; signed questions take precedence.",
   } };
 
   /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */

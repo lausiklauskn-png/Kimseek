@@ -101,7 +101,9 @@
  *              listenMs, nodeName, hasRelay, hasAnastomose, hasSpore, hasMatch,
  *              hasStorage, hasCreateIdentity,
  *              answering, answeredCount, hasPrepareCorpus, answerCorpusEnsured,
- *              queryTag, queryKind, queryResKind, queryMaxPerMin }
+ *              queryTag, queryKind, queryResKind, queryMaxPerMin,
+ *              frageVerworfen, fragenBestaetigt, fragenUnbestaetigt,
+ *              queryUnsignedMaxPerMin }  (S1, 2026-10-15)
  *
  * Self-check: emits a console.info line on script load. Siehe
  * docs/components/23_rendezvous.md + INTERFACES.md §1 Modul 23.
@@ -1059,6 +1061,7 @@
   var RDV_QUERY_KIND = "sbkim-query";
   var RDV_QUERY_RES_KIND = "sbkim-query-res";
   var RDV_QUERY_MAX_PER_MIN = 6;     // Antwort-Rate-Limit (Vorgriff Modul 11)
+  var RDV_QUERY_UNSIGNED_MAX_PER_MIN = 2; // S1: davon höchstens so viele für unsignierte Fragen (Klaus 2026-10-15)
   var RDV_QUERY_TEXT_MAX = 300;      // Frage-Text hart gekappt (untrusted input)
   var RDV_QUERY_K_MAX = 5;           // maximal 5 Treffer je Antwort
   var RDV_ASK_TIMEOUT_MS = 60000; // 15 s war zu knapp: der Antworter lädt beim ersten Mal sein ~30-MB-Modell
@@ -1086,12 +1089,19 @@
   var RDV_LABEL_MAX = 200;              // Treffer-Titel hart gekappt (untrusted input)
   var RDV_UNBESTAETIGT_WARTE_MS = 3000; // so lange wartet askNode nach einer unbestätigten
                                         // Antwort noch auf eine bestätigte
+  // ---- S1 „Fragen unterschreiben" (2026-10-15, docs/PLAN_MYCEL_SCHICHTEN.md) ----
+  // Der Frage-Zettel trägt jetzt dieselbe spore + sig wie der Antwort-Zettel;
+  // zettelSignieren/zettelPruefen dienen beiden. Der Antworter prüft die Frage:
+  //   bestaetigt   → beantwortet (Rate-Limit RDV_QUERY_MAX_PER_MIN)
+  //   unbestaetigt → alte Fassung ohne spore/sig: weiter beantwortet, aber nur
+  //                  RDV_QUERY_UNSIGNED_MAX_PER_MIN davon je Minute
+  //   falsch       → nicht beantwortet, gezählt in _meta.frageVerworfen
   function antwortOhneSig(a) {
     var o = {};
     for (var key in a) { if (Object.prototype.hasOwnProperty.call(a, key) && key !== "sig") o[key] = a[key]; }
     return o;
   }
-  async function antwortSignieren(zettel) {
+  async function zettelSignieren(zettel) {
     var s = resolveSpore();
     if (!s || typeof s.signDetached !== "function") return zettel;     // fail-soft: unsigniert
     try {
@@ -1102,7 +1112,7 @@
     } catch (_e) { delete zettel.spore; delete zettel.sig; }
     return zettel;
   }
-  async function antwortPruefen(a, erwartetVon) {
+  async function zettelPruefen(a, erwartetVon) {
     if (erwartetVon && a.fromNodeId !== erwartetVon) return "falsch";
     if (typeof a.sig !== "string" || !a.spore || typeof a.spore !== "object") {
       return (a.sig === undefined && a.spore === undefined) ? "unbestaetigt" : "falsch";
@@ -1124,6 +1134,7 @@
     });
   }
   var antwortVerworfen = 0;            // _meta: wie viele Antworten die Prüfung nicht bestanden
+  var frageVerworfen = 0, fragenBestaetigt = 0, fragenUnbestaetigt = 0;   // _meta (S1)
 
   var answerUnsub = null;            // aktiver Antwort-Lauscher (null = AUS)
   var answeredCount = 0;
@@ -1171,10 +1182,17 @@
     seenQids.push(qid);
     if (seenQids.length > 200) seenQids.splice(0, seenQids.length - 200);
   }
-  function underRateLimit() {
+  function forgetQid(qid) {
+    var i = seenQids.indexOf(qid);
+    if (i !== -1) seenQids.splice(i, 1);
+  }
+  // answerTimestamps: [{ t: ms, u: unsigniert? }]
+  function underRateLimit(unsigniert) {
     var cut = Date.now() - 60000;
-    answerTimestamps = answerTimestamps.filter(function (t) { return t > cut; });
-    return answerTimestamps.length < RDV_QUERY_MAX_PER_MIN;
+    answerTimestamps = answerTimestamps.filter(function (e) { return e.t > cut; });
+    if (answerTimestamps.length >= RDV_QUERY_MAX_PER_MIN) return false;
+    if (!unsigniert) return true;
+    return answerTimestamps.filter(function (e) { return e.u; }).length < RDV_QUERY_UNSIGNED_MAX_PER_MIN;
   }
 
   // ---- enableAnswering(): Antwortrecht bewusst einschalten ----
@@ -1215,14 +1233,23 @@
           if (!q || q.kind !== RDV_QUERY_KIND || q.toNodeId !== ownId) return;
           if (typeof q.qid !== "string" || !q.qid || typeof q.text !== "string" || !q.text.trim()) return;
           if (qidSeen(q.qid)) return;
-          rememberQid(q.qid);
-          if (!underRateLimit()) return;          // Überschuss still verwerfen
-          answerTimestamps.push(Date.now());
+          rememberQid(q.qid);                     // sofort: Doppel-Zustellung während der Prüfung
           var text = q.text.slice(0, RDV_QUERY_TEXT_MAX);
           var k = (typeof q.k === "number" && isFinite(q.k) && q.k >= 1)
             ? Math.min(Math.floor(q.k), kCap) : kCap;
-          // Lokale Bedeutungs-Suche (fail-soft) → Antwort-Zettel publizieren.
+          // S1: erst die Frage prüfen, dann Rate-Limit, dann lokale Bedeutungs-
+          // Suche (fail-soft) → Antwort-Zettel publizieren.
           (async function () {
+            var stand = await zettelPruefen(q, null);
+            if (stand === "falsch") {
+              frageVerworfen++;
+              forgetQid(q.qid);                   // eine Fälschung sperrt die echte qid nicht
+              return;
+            }
+            var unsigniert = stand !== "bestaetigt";
+            if (!underRateLimit(unsigniert)) return;   // Überschuss still verwerfen
+            answerTimestamps.push({ t: Date.now(), u: unsigniert });
+            if (unsigniert) fragenUnbestaetigt++; else fragenBestaetigt++;
             var results = [];
             var match = resolveQueryMatch();
             if (match) {
@@ -1244,7 +1271,7 @@
                 kind: NOSTR_KIND,
                 created_at: nowSec(),
                 tags: [["t", fragTagA]],
-                content: await netPacke(await antwortSignieren({
+                content: await netPacke(await zettelSignieren({
                   kind: RDV_QUERY_RES_KIND, qid: q.qid,
                   toNodeId: q.fromNodeId, fromNodeId: ownId,
                   fromName: cfg.nodeName, results: results, ts: nowSec(),
@@ -1321,11 +1348,11 @@
           },
         );
         // Bau 23.R: nur der GEFRAGTE Knoten, und eine unterschriebene Antwort
-        // schlägt jede unbestätigte (siehe antwortPruefen).
+        // schlägt jede unbestätigte (siehe zettelPruefen).
         var vorlaeufig = null, graceTimer = null;
         function antwortNehmen(a) {
             if (!a || a.kind !== RDV_QUERY_RES_KIND || a.qid !== qid || a.toNodeId !== ownId) return;
-            antwortPruefen(a, toNodeId).then(function (stand) {
+            zettelPruefen(a, toNodeId).then(function (stand) {
               if (done) return;
               if (stand === "falsch") { antwortVerworfen++; return; }
               var res = { ok: true, qid: qid, results: ergebnisseLesen(a), fromNodeId: a.fromNodeId || null,
@@ -1341,10 +1368,12 @@
         finish({ ok: false, reason: "Antwort-Lauscher fehlgeschlagen: " + (e && e.message ? e.message : e) });
         return;
       }
-      netPacke({
+      zettelSignieren({                       // S1: die Frage trägt spore + sig
         kind: RDV_QUERY_KIND, qid: qid, toNodeId: toNodeId, fromNodeId: ownId,
         fromName: cfg.nodeName, text: text.trim().slice(0, RDV_QUERY_TEXT_MAX), k: k, ts: nowSec(),
-      }, fragTagQ).then(function (inhalt) {
+      }).then(function (zettel) {
+        return netPacke(zettel, fragTagQ);
+      }).then(function (inhalt) {
         return relay.publish({
           kind: NOSTR_KIND,
           created_at: nowSec(),
@@ -1417,7 +1446,7 @@
             if (!a || a.kind !== RDV_QUERY_RES_KIND) return;      // nur Antwort-Zettel
             if (a.toNodeId !== ownId) return;                     // nur an mich
             if (typeof a.qid !== "string" || !want[a.qid]) return; // nur meine offenen Fragen
-            var p = antwortPruefen(a, want[a.qid].von).then(function (stand) {
+            var p = zettelPruefen(a, want[a.qid].von).then(function (stand) {
               if (stand === "falsch") { antwortVerworfen++; return; }
               var best = stand === "bestaetigt";
               var ts = (typeof a.ts === "number") ? a.ts : 0;
@@ -1505,6 +1534,10 @@
         queryResKind: RDV_QUERY_RES_KIND,         // Bau 23.B
         queryMaxPerMin: RDV_QUERY_MAX_PER_MIN,    // Bau 23.B
         antwortVerworfen: antwortVerworfen,       // Bau 23.R: Antworten, die die Prüfung nicht bestanden
+        frageVerworfen: frageVerworfen,           // S1: Fragen, die die Prüfung nicht bestanden
+        fragenBestaetigt: fragenBestaetigt,       // S1: beantwortete unterschriebene Fragen
+        fragenUnbestaetigt: fragenUnbestaetigt,   // S1: beantwortete Fragen ohne Unterschrift
+        queryUnsignedMaxPerMin: RDV_QUERY_UNSIGNED_MAX_PER_MIN, // S1
         antwortSigniert: (function () { var s = resolveSpore(); return !!(s && typeof s.signDetached === "function"); })(), // Bau 23.R
         labelMax: RDV_LABEL_MAX,                  // Bau 23.R
         rankByQueryNote: "rankCardsByQuery(cards, queryVec, {raw?}) rankt Raum-Karten nach Frage-Passung (Modul 04 relatedness, zentriert; raw→match). REINE Anzeige/Auswahl, gatet nichts, 0.80-Riegel unberührt; fail-soft ohne Vektor → Eingabe-Reihenfolge.", // A11
