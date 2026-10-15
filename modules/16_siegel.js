@@ -203,6 +203,12 @@
       aspect:      "Fragen sind unterschrieben (S1)",
       description: "Eine Frage an einen anderen Knoten trägt jetzt die Spore des Fragers und seine Unterschrift, wie die Antworten seit dem 2026-10-14. Der gefragte Knoten prüft sie: eine gefälschte oder nachträglich veränderte Frage wird nicht beantwortet. Eine Frage ohne Unterschrift (ältere Fassung) wird weiter beantwortet, aber höchstens zwei solche Fragen je Minute; unterschriebene Fragen haben Vorrang.",
     },
+    {
+      since:       "2026-10-15",
+      module:      "23",
+      aspect:      "Die Bedeutung wird nachgerechnet (S2)",
+      description: "Jeder Knoten sagt mit einem Bedeutungs-Vektor, worum es bei ihm geht. Bisher ließ sich dieser Vektor von einem anderen Knoten abschreiben, ohne dass es auffiel. Jetzt rechnet der Empfänger ihn aus der Beschreibung der Karte nach, sobald sein Sprachmodell ohnehin geladen ist. Passt er nicht, steht an der Karte „Bedeutung passt nicht zur Beschreibung“, und der Knoten bekommt beim Suchen keinen Vorrang; sichtbar bleibt er. Ist der Vektor aus den Inhalten der App gerechnet, lässt er sich nicht nachrechnen und wird so benannt, ohne Abzug. Ohne geladenes Sprachmodell steht dort „nicht geprüft“, nie still ein Haken.",
+    },
   ];
 
   // ---- Aspekt-4-Anker (Karte 16 § Sub (e) dynamische Render-Variante) ----
@@ -394,6 +400,10 @@
         "Questions are signed (S1)",
       "Eine Frage an einen anderen Knoten trägt jetzt die Spore des Fragers und seine Unterschrift, wie die Antworten seit dem 2026-10-14. Der gefragte Knoten prüft sie: eine gefälschte oder nachträglich veränderte Frage wird nicht beantwortet. Eine Frage ohne Unterschrift (ältere Fassung) wird weiter beantwortet, aber höchstens zwei solche Fragen je Minute; unterschriebene Fragen haben Vorrang.":
         "A question to another node now carries the asker's spore and signature, like the answers since 2026-10-14. The node being asked checks it: a forged or afterwards altered question is not answered. A question without a signature (older version) is still answered, but at most two such questions per minute; signed questions take precedence.",
+      "Die Bedeutung wird nachgerechnet (S2)":
+        "The meaning is recomputed (S2)",
+      "Jeder Knoten sagt mit einem Bedeutungs-Vektor, worum es bei ihm geht. Bisher ließ sich dieser Vektor von einem anderen Knoten abschreiben, ohne dass es auffiel. Jetzt rechnet der Empfänger ihn aus der Beschreibung der Karte nach, sobald sein Sprachmodell ohnehin geladen ist. Passt er nicht, steht an der Karte „Bedeutung passt nicht zur Beschreibung“, und der Knoten bekommt beim Suchen keinen Vorrang; sichtbar bleibt er. Ist der Vektor aus den Inhalten der App gerechnet, lässt er sich nicht nachrechnen und wird so benannt, ohne Abzug. Ohne geladenes Sprachmodell steht dort „nicht geprüft“, nie still ein Haken.":
+        "Every node states what it is about with a meaning vector. Until now another node could copy that vector without anyone noticing. Now the receiver recomputes it from the card's description whenever its language model is loaded anyway. If it does not match, the card says “Meaning does not match the description”, and the node gets no priority in searches; it stays visible. If the vector was computed from the app's content, it cannot be recomputed and is labelled as such, without any penalty. Without a loaded language model the card says “not checked”, never a silent tick.",
   } };
 
   /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */

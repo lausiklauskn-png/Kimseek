@@ -136,6 +136,7 @@
     anastomose: null,    // null → global.SbkimAnastomose
     spore: null,         // null → global.SbkimSpore
     match: null,         // null → global.SbkimMatch (optional, nur Anzeige-Score)
+    embedding: null,     // null → global.SbkimEmbedding (S2, optional, nur mit geladenem Modell)
     storage: null,       // null → global.SbkimStorage (Identitäts-Hygiene)
     dbSuffix: null,      // eigene Schublade `sbkim_<dbSuffix>`
     createIdentity: null,// app-eigener async-Callback (Spore-Erzeugung)
@@ -409,7 +410,89 @@
     return (s && typeof s.init === "function") ? s : null;
   }
 
+  // Modul 03 (Embedding) — nur für S2 „Vektor gegen Text nachrechnen".
+  // Gelesen wird NUR ein bereits geladenes Modell (isReady): der Raum lädt
+  // nie selbst ~118 MB nach. Fehlt es → Karte „nicht-geprueft", nie still grün.
+  function resolveEmbedding() {
+    var e = cfg.embedding || global.SbkimEmbedding;
+    return (e && typeof e.embedPassage === "function" && typeof e.isReady === "function") ? e : null;
+  }
+
   function nowSec() { return Math.floor(Date.now() / 1000); }
+
+  // ---- S2: Vektor gegen Text nachrechnen (2026-10-15, INTERFACES §23) ----
+  // Der angesagte domainVector ist signiert, aber nicht an den Text gebunden:
+  // ein Knoten konnte einen fremden Vektor kopieren (Befund 2026-10-14, N2 b/c).
+  // Hier rechnet der EMPFÄNGER aus der Selbstbeschreibung nach. Reine Anzeige:
+  // gatet nichts, nimmt nur den Match-Vorrang (Klaus 2026-10-15: Schwelle 0.99,
+  // embeddingSource "content" → nicht nachprüfbar, kein Abzug).
+  var RDV_MEANING_MIN = 0.99;
+  var RDV_MEANING_MODEL = "Xenova/multilingual-e5-small";
+
+  function cosine(a, b) {
+    if (!a || !b || a.length !== b.length || !a.length) return null;
+    var dot = 0, na = 0, nb = 0;
+    for (var i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+    if (!na || !nb) return null;
+    var c = dot / Math.sqrt(na * nb);
+    return isFinite(c) ? c : null;
+  }
+
+  async function checkMeaning(spore) {
+    function out(status, score, snippets, reason) {
+      return { status: status, score: score, snippets: snippets, reason: reason };
+    }
+    var emb = resolveEmbedding();
+    if (!emb) return out("nicht-geprueft", null, null, "Modul 03 fehlt");
+    var ready = false;
+    try { ready = emb.isReady() === true; } catch (_e) { ready = false; }
+    if (!ready) return out("nicht-geprueft", null, null, "Sprachmodell nicht geladen");
+    if (!spore || typeof spore !== "object") return out("nicht-geprueft", null, null, "keine Spore");
+    var vec = toVec(spore.domainVector);
+    if (!vec || !vec.length) return out("nicht-geprueft", null, null, "kein Bedeutungs-Vektor");
+    if (typeof spore.embeddingModel === "string" && spore.embeddingModel && spore.embeddingModel !== RDV_MEANING_MODEL) {
+      return out("nicht-geprueft", null, null, "anderes Modell: " + String(spore.embeddingModel).slice(0, 80));
+    }
+    try {
+      // Satz-Schnipsel: jeder Vektor gegen seinen EIGENEN Text. Gekürzte Sätze
+      // („…") sind nicht verlässlich nachzurechnen und werden übersprungen.
+      var snippets = null;
+      var sv = Array.isArray(spore.snippetVectors) ? spore.snippetVectors : [];
+      var pruefbar = sv.filter(function (x) {
+        return x && typeof x.text === "string" && x.text.trim() && !/…$/.test(x.text.trim()) && toVec(x.vec);
+      });
+      if (pruefbar.length) {
+        snippets = "passen";
+        for (var i = 0; i < pruefbar.length; i++) {
+          var c = cosine(await emb.embedPassage(pruefbar[i].text), toVec(pruefbar[i].vec));
+          if (c === null || c < RDV_MEANING_MIN) { snippets = "passen-nicht"; break; }
+        }
+      }
+      var src = spore.embeddingSource;
+      var desc = typeof spore.domainDescription === "string" ? spore.domainDescription.trim() : "";
+      var kw = Array.isArray(spore.domainKeywords) ? spore.domainKeywords.join(", ") : "";
+      var best = null;
+      if (desc) {
+        var fassungen = [desc];
+        if (kw) fassungen.push(desc + ". " + kw);   // Andock-Wizard, Erst-Signatur
+        if (kw) fassungen.push(desc + " " + kw);    // tools/embed_helper.html (ältere Sporen)
+        for (var f = 0; f < fassungen.length; f++) {
+          var cf = cosine(await emb.embedPassage(fassungen[f]), vec);
+          if (cf !== null && (best === null || cf > best)) best = cf;
+        }
+      }
+      if (snippets === "passen-nicht") return out("passt-nicht", best, snippets, "Satz-Schnipsel passt nicht zu seinem Text");
+      if (src === "content") return out("nicht-nachpruefbar", best, snippets, "Bedeutung aus Inhalten, nicht nachprüfbar");
+      if (best !== null && best >= RDV_MEANING_MIN) return out("passt", best, snippets, "Bedeutung passt zur Beschreibung");
+      if (src === "description") {
+        return out("passt-nicht", best, snippets, desc ? "Bedeutung passt nicht zur Beschreibung" : "Beschreibung fehlt");
+      }
+      return out("nicht-nachpruefbar", best, snippets, "Herkunft des Vektors nicht angegeben");
+    } catch (e) {
+      return out("nicht-geprueft", null, null, "Rechenfehler: " + String(e && e.message ? e.message : e).slice(0, 120));
+    }
+  }
+  function meaningFails(c) { return !!(c && c.meaning && c.meaning.status === "passt-nicht"); }
 
   // Domänen-Vektor (number[] aus der Spore, oder Float32Array) → Float32Array.
   // null bei fehlender/ungültiger Eingabe (relatedness() validiert den Rest).
@@ -452,7 +535,7 @@
         }
       }
       copy.relatedness = rel;
-      copy.isRelated = isRel;
+      copy.isRelated = meaningFails(c) ? false : isRel;   // S2: kein Vorrang
       return copy;
     });
   }
@@ -500,12 +583,210 @@
       return enriched.map(function (c) { delete c._idx; return c; });
     }
     enriched.sort(function (a, b) {
+      var ma = meaningFails(a), mb = meaningFails(b);   // S2: „passt nicht" ans Ende
+      if (ma !== mb) return ma ? 1 : -1;
       var fa = (typeof a.queryFit === "number") ? a.queryFit : -Infinity;
       var fb = (typeof b.queryFit === "number") ? b.queryFit : -Infinity;
       if (fb !== fa) return fb - fa;      // beste Passung zuerst
       return a._idx - b._idx;             // sonst Eingabe-Reihenfolge (stabil)
     });
     return enriched.map(function (c) { delete c._idx; return c; });
+  }
+
+  // ---- S5 „Bürgen" — Teil 1 (2026-10-15, docs/PLAN_MYCEL_SCHICHTEN.md) ----
+  // Ein bekannter Knoten unterschreibt „diese Kennung kenne ich". Eine
+  // Bürgschaft zählt beim Leser NUR, wenn er dem Bürgen schon traut (Anker
+  // oder eigener Kontakt), höchstens RDV_VOUCH_CHAIN_MAX Schritte weit.
+  // REINE ANZEIGE: gatet nichts, unverbürgte Karten bleiben sichtbar.
+  var RDV_VOUCH_KIND = "sbkim-vouch";
+  var RDV_REVOKE_KIND = "sbkim-vouch-revoke";
+  var RDV_VOUCH_CHAIN_MAX = 2;                 // Klaus 2026-10-15: „2 Schritte"
+  var RDV_VOUCH_TTL_SEC = 365 * 24 * 3600;     // Klaus 2026-10-15: „1 Jahr"
+  var RDV_VOUCH_SKEW_SEC = 600;                // Uhren-Spiel nach vorn
+  var RDV_VOUCH_PER_CARD_MAX = 8;
+  var RDV_REVOKE_PER_CARD_MAX = 32;
+  var RDV_VOUCH_SEEN_MAX = 400;                // Zettel je discover()-Lauf
+  // Anker: Klaus' Kennung (Klaus 2026-10-15: „Klaus + eigene Kontakte").
+  // LEER, bis Klaus nennt, mit welcher Identität er bürgt.
+  var RDV_VOUCH_ANCHORS = [];
+  var BUERGEN_SPEICHER_PRAEFIX = "sbkim_buergen_";
+  var vouchCfg = { anchors: [], flagged: [] };
+
+  function idListe(x) {
+    return (Array.isArray(x) ? x : []).filter(function (s) { return typeof s === "string" && s.length > 0 && s.length <= 128; });
+  }
+  function buergenSchluessel() { return cfg.dbSuffix ? BUERGEN_SPEICHER_PRAEFIX + cfg.dbSuffix : null; }
+  function buergenLesen(store) {
+    var st = netStore(store), k = buergenSchluessel(), leer = { v: 1, contacts: [], carried: [] };
+    if (!st || !k) return leer;
+    var roh; try { roh = st.getItem(k); } catch (_e) { return leer; }
+    if (!roh) return leer;
+    var o; try { o = JSON.parse(roh); } catch (_e) { return leer; }
+    if (!o || typeof o !== "object") return leer;
+    return {
+      v: 1,
+      contacts: (Array.isArray(o.contacts) ? o.contacts : []).filter(function (c) {
+        return c && typeof c.nodeId === "string" && c.nodeId.length > 0 && c.nodeId.length <= 128;
+      }).map(function (c) { return { nodeId: c.nodeId, name: (typeof c.name === "string") ? c.name.slice(0, 60) : "" }; }),
+      carried: (Array.isArray(o.carried) ? o.carried : []).filter(function (z) { return z && typeof z === "object"; }),
+    };
+  }
+  function buergenSchreiben(o, store) {
+    var st = netStore(store), k = buergenSchluessel();
+    if (!k) return { ok: false, reason: "Ohne dbSuffix wird nicht gespeichert (geteilte Adresse)." };
+    if (!st) return { ok: false, reason: "Kein Speicher verfügbar." };
+    try { st.setItem(k, JSON.stringify(o)); } catch (e) { return { ok: false, reason: "Speichern fehlgeschlagen: " + (e && e.message ? e.message : e) }; }
+    return { ok: true };
+  }
+  function loadVouchContacts(store) { return buergenLesen(store).contacts; }
+  function saveVouchContacts(list, store) {
+    var o = buergenLesen(store);
+    o.contacts = (Array.isArray(list) ? list : []).filter(function (c) {
+      return c && typeof c.nodeId === "string" && c.nodeId.length > 0 && c.nodeId.length <= 128;
+    }).map(function (c) { return { nodeId: c.nodeId, name: (typeof c.name === "string") ? c.name.slice(0, 60) : "" }; });
+    var r = buergenSchreiben(o, store);
+    return r.ok ? { ok: true, contacts: o.contacts } : r;
+  }
+
+  // Prüft EINEN Zettel (Bürgschaft oder Widerruf) für sich.
+  // → "gueltig" | "falsch" | "nicht-pruefbar" (Modul 02 fehlt)
+  async function vouchPruefen(z, jetzt) {
+    if (!z || typeof z !== "object") return "falsch";
+    var istV = z.kind === RDV_VOUCH_KIND, istR = z.kind === RDV_REVOKE_KIND;
+    if (!istV && !istR) return "falsch";
+    if (z.v !== 1 || typeof z.voucher !== "string" || typeof z.subject !== "string" || !z.voucher || !z.subject) return "falsch";
+    if (z.voucher === z.subject) return "falsch";
+    if (typeof z.ts !== "number" || !isFinite(z.ts) || z.ts > jetzt + RDV_VOUCH_SKEW_SEC) return "falsch";
+    if (istV) {
+      if (typeof z.exp !== "number" || !isFinite(z.exp)) return "falsch";
+      if (!(z.exp > z.ts) || z.exp - z.ts > RDV_VOUCH_TTL_SEC) return "falsch";   // nie still gekürzt
+      if (z.exp <= jetzt) return "falsch";                                         // abgelaufen
+    }
+    if (typeof z.sig !== "string" || !z.spore || typeof z.spore !== "object") return "falsch";
+    if (z.spore.id !== z.voucher) return "falsch";
+    var v = resolveVerifier();
+    if (!v || typeof v.verifyDetached !== "function") return "nicht-pruefbar";
+    try {
+      var vr = await v.verifyForeignSpore(z.spore);
+      if (!(vr === true || (vr && vr.valid === true))) return "falsch";
+      return (await v.verifyDetached(antwortOhneSig(z), z.sig, z.spore.publicKey)) ? "gueltig" : "falsch";
+    } catch (_e) { return "falsch"; }
+  }
+
+  // Aus gesammelten Zetteln die gültigen Kanten voucher→subject bauen.
+  async function vouchKanten(zettel, jetzt) {
+    var vouches = [], revokes = [], nichtPruefbar = false, gesehen = Object.create(null);
+    var liste = (Array.isArray(zettel) ? zettel : []).slice(0, RDV_VOUCH_SEEN_MAX);
+    for (var i = 0; i < liste.length; i++) {
+      var z = liste[i];
+      if (!z || typeof z !== "object" || typeof z.sig !== "string") continue;
+      if (gesehen[z.sig]) continue;          // derselbe Zettel aus mehreren Karten
+      gesehen[z.sig] = true;
+      var st = await vouchPruefen(z, jetzt);
+      if (st === "nicht-pruefbar") { nichtPruefbar = true; continue; }
+      if (st !== "gueltig") continue;
+      if (z.kind === RDV_VOUCH_KIND) vouches.push(z); else revokes.push(z);
+    }
+    var kanten = vouches.filter(function (b) {
+      return !revokes.some(function (w) { return w.voucher === b.voucher && w.subject === b.subject && w.ts >= b.ts; });
+    });
+    return { kanten: kanten, nichtPruefbar: nichtPruefbar };
+  }
+
+  // vouchTrust(cards, opts) → neue Liste, je Karte `vouch` (Eingabe nicht mutiert).
+  // opts.vouches: weitere Zettel (z. B. aus allen Karten-Ereignissen) ·
+  // opts.anchors / opts.contacts / opts.flagged: Kennungen (ergänzen cfg).
+  async function vouchTrust(cards, opts) {
+    var o = opts || {};
+    var list = Array.isArray(cards) ? cards : [];
+    var jetzt = nowSec();
+    var anker = idListe(RDV_VOUCH_ANCHORS).concat(idListe(vouchCfg.anchors), idListe(o.anchors));
+    var kontakte = loadVouchContacts().map(function (c) { return c.nodeId; }).concat(idListe(o.contacts));
+    var aufgefallen = idListe(vouchCfg.flagged).concat(idListe(o.flagged));
+    var zettel = [];
+    list.forEach(function (c) {
+      var cv = (c && Array.isArray(c.vouches)) ? c.vouches : [];
+      var cr = (c && Array.isArray(c.revocations)) ? c.revocations : [];
+      zettel = zettel.concat(cv.slice(0, RDV_VOUCH_PER_CARD_MAX), cr.slice(0, RDV_REVOKE_PER_CARD_MAX));
+    });
+    zettel = zettel.concat(Array.isArray(o.vouches) ? o.vouches : [], buergenLesen().carried);
+    var k = await vouchKanten(zettel, jetzt);
+    // „Der Bürge haftet": wer für eine aufgefallene Kennung bürgt, zählt nicht mehr.
+    var haftet = Object.create(null);
+    k.kanten.forEach(function (b) { if (aufgefallen.indexOf(b.subject) !== -1) haftet[b.voucher] = true; });
+    var kanten = k.kanten.filter(function (b) { return !haftet[b.voucher]; });
+    // Breitensuche von den Wurzeln, höchstens RDV_VOUCH_CHAIN_MAX Schritte.
+    var weg = Object.create(null);   // nodeId → Kette (Wurzel zuerst)
+    var front = [];
+    anker.concat(kontakte).forEach(function (id) { if (!weg[id]) { weg[id] = []; front.push(id); } });
+    for (var schritt = 1; schritt <= RDV_VOUCH_CHAIN_MAX; schritt++) {
+      var neu = [];
+      front.forEach(function (von) {
+        kanten.forEach(function (b) {
+          if (b.voucher !== von || weg[b.subject]) return;
+          weg[b.subject] = weg[von].concat([von]);
+          neu.push(b.subject);
+        });
+      });
+      front = neu;
+    }
+    var grund = k.nichtPruefbar ? "Modul 02 fehlt — Bürgschaften nicht prüfbar" : null;
+    return list.map(function (c) {
+      var copy = {};
+      for (var key in c) { if (Object.prototype.hasOwnProperty.call(c, key)) copy[key] = c[key]; }
+      var id = c && c.nodeId;
+      var v;
+      if (id && anker.indexOf(id) !== -1) v = { status: "anker", by: [], depth: 0, reason: null };
+      else if (id && kontakte.indexOf(id) !== -1) v = { status: "kontakt", by: [], depth: 0, reason: null };
+      // Ein Aufgefallener steht nie in `weg`: wer für ihn bürgt, haftet, und
+      // dessen Kanten sind oben schon weg (Gegenprobe 2026-10-15: eine eigene
+      // Prüfung hier änderte nichts — toter Anker, darum entfernt).
+      else if (id && weg[id]) v = { status: "verbuergt", by: weg[id].slice(), depth: weg[id].length, reason: null };
+      else v = { status: "unverbuergt", by: [], depth: null, reason: aufgefallen.indexOf(id) !== -1 ? "aufgefallen" : grund };
+      copy.vouch = v;
+      return copy;
+    });
+  }
+
+  // Ausstellen (signiert mit der eigenen Identität, Modul 02 signDetached).
+  async function vouchAusstellen(art, subjectId, opts) {
+    var s = resolveSpore();
+    if (!s || typeof s.signDetached !== "function") return { ok: false, reason: "Modul 02 ohne signDetached — nicht unterschreibbar." };
+    if (typeof subjectId !== "string" || !subjectId || subjectId.length > 128) return { ok: false, reason: "Keine gültige Kennung." };
+    var own; try { own = await s.getOwnSpore(); } catch (_e) { own = null; }
+    if (!own || !own.id) return { ok: false, reason: "Noch keine Identität." };
+    if (own.id === subjectId) return { ok: false, reason: "Für sich selbst bürgt man nicht." };
+    var ts = nowSec();
+    var z = { kind: art, v: 1, voucher: own.id, subject: subjectId, ts: ts, spore: own };
+    if (art === RDV_VOUCH_KIND) {
+      var tage = (opts && typeof opts.days === "number" && isFinite(opts.days) && opts.days > 0) ? opts.days : 365;
+      z.exp = ts + Math.min(RDV_VOUCH_TTL_SEC, Math.floor(tage * 24 * 3600));
+    }
+    try { z.sig = await s.signDetached(antwortOhneSig(z)); }
+    catch (e) { return { ok: false, reason: "Unterschrift fehlgeschlagen: " + (e && e.message ? e.message : e) }; }
+    return { ok: true, zettel: z };
+  }
+  function createVouch(subjectId, opts) { return vouchAusstellen(RDV_VOUCH_KIND, subjectId, opts); }
+  function createRevocation(subjectId) { return vouchAusstellen(RDV_REVOKE_KIND, subjectId, null); }
+
+  // Eine erhaltene Bürgschaft (oder einen eigenen Widerruf) in den eigenen
+  // Vorrat legen; doAnnounce trägt ihn in der Karte. Nur gültige Zettel.
+  async function addCarried(z, store) {
+    var st = await vouchPruefen(z, nowSec());
+    if (st !== "gueltig") return { ok: false, reason: st === "nicht-pruefbar" ? "Modul 02 fehlt — nicht prüfbar." : "Zettel ungültig." };
+    var o = buergenLesen(store);
+    if (o.carried.some(function (x) { return x.sig === z.sig; })) return { ok: true, carried: o.carried.length };
+    o.carried.push(z);
+    var r = buergenSchreiben(o, store);
+    return r.ok ? { ok: true, carried: o.carried.length } : r;
+  }
+  function cardCarried() {
+    var c = buergenLesen().carried, jetzt = nowSec();
+    var v = c.filter(function (z) { return z.kind === RDV_VOUCH_KIND && typeof z.exp === "number" && z.exp > jetzt; })
+      .sort(function (a, b) { return b.ts - a.ts; }).slice(0, RDV_VOUCH_PER_CARD_MAX);
+    var r = c.filter(function (z) { return z.kind === RDV_REVOKE_KIND; })
+      .sort(function (a, b) { return b.ts - a.ts; }).slice(0, RDV_REVOKE_PER_CARD_MAX);
+    return { vouches: v, revocations: r };
   }
 
   // VERKEHR-Lampe (Modul 17 / Status-Widget) ehrlich setzen: aktiv, solange
@@ -745,6 +1026,7 @@
     if (opts.anastomose !== undefined) cfg.anastomose = opts.anastomose;
     if (opts.spore !== undefined) cfg.spore = opts.spore;
     if (opts.match !== undefined) cfg.match = opts.match;
+    if (opts.embedding !== undefined) cfg.embedding = opts.embedding;
     if (opts.storage !== undefined) cfg.storage = opts.storage;
     if (typeof opts.dbSuffix === "string" && opts.dbSuffix.length > 0) cfg.dbSuffix = opts.dbSuffix;
     if (typeof opts.createIdentity === "function") cfg.createIdentity = opts.createIdentity;
@@ -758,6 +1040,8 @@
     if (typeof opts.listenMs === "number" && isFinite(opts.listenMs) && opts.listenMs > 0) {
       cfg.listenMs = Math.floor(opts.listenMs);
     }
+    if (opts.vouchAnchors !== undefined) vouchCfg.anchors = idListe(opts.vouchAnchors);   // S5
+    if (opts.vouchFlagged !== undefined) vouchCfg.flagged = idListe(opts.vouchFlagged);   // S5
     if (opts.netCode !== undefined || opts.roomTag !== undefined) {
       setNetwork({ code: opts.netCode, roomTag: opts.roomTag });
     }
@@ -811,6 +1095,9 @@
       spore: own,
       ts: nowSec(),
     };
+    var mit = cardCarried();                       // S5: Bürgschaften / Widerrufe mittragen
+    if (mit.vouches.length) card.vouches = mit.vouches;
+    if (mit.revocations.length) card.revocations = mit.revocations;
     var pr;
     try {
       pr = await relay.publish({
@@ -910,6 +1197,7 @@
     var perSender = Object.create(null);  // nostr-pubkey -> Anzahl Identitäten
     var cardCount = 0;                    // Karten gesamt in diesem Durchlauf
     var rejected = 0;                     // wegen Echtheit/Bindung verworfen
+    var vouchZettel = [];                 // S5: aus ALLEN Karten-Ereignissen, nicht nur der neuesten
     var unsub = null;
     try {
       unsub = relay.subscribe(
@@ -933,6 +1221,10 @@
           }
           // Die Karte kann keine fremde Spore unter eigenem Namen tragen.
           if (card.spore.id !== card.nodeId) { rejected++; return; }
+          if (vouchZettel.length < RDV_VOUCH_SEEN_MAX) {
+            if (Array.isArray(card.vouches)) vouchZettel = vouchZettel.concat(card.vouches.slice(0, RDV_VOUCH_PER_CARD_MAX));
+            if (Array.isArray(card.revocations)) vouchZettel = vouchZettel.concat(card.revocations.slice(0, RDV_REVOKE_PER_CARD_MAX));
+          }
           var ts = (typeof card.ts === "number" ? card.ts : (typeof ev.created_at === "number" ? ev.created_at : 0));
           if (!byId[card.nodeId] || ts > byId[card.nodeId].ts) byId[card.nodeId] = { card: card, ts: ts };
       }
@@ -985,6 +1277,15 @@
           }
           cards = geprueft;
         }
+        // S2: Bedeutung nachrechnen — nur geprüfte Karten, nur mit geladenem
+        // Modell (sonst „nicht-geprueft"). Vor relatednessForCards, damit
+        // „passt nicht" dort keinen Vorrang bekommt.
+        if (opts.checkMeaning !== false) {
+          for (var mi = 0; mi < cards.length; mi++) {
+            try { cards[mi].meaning = await checkMeaning(cards[mi].spore); }
+            catch (_e) { cards[mi].meaning = { status: "nicht-geprueft", score: null, snippets: null, reason: "Fehler" }; }
+          }
+        }
         // Adress-Wand-Härtung (Klaus 2026-07-10): ein Knoten kann durch
         // wiederholtes „Aufräumen & neu anmelden" mehrere Alt-Identitäten
         // hinterlassen — deren Präsenz-Kärtchen leben ~30 min weiter und
@@ -1004,6 +1305,11 @@
             if (seenName[key]) { seenName[key].gleicherName = (seenName[key].gleicherName || 0) + 1; return false; }
             seenName[key] = c; return true;
           });
+        }
+        // S5: Bürgschaften prüfen — reine Anzeige, Karten bleiben alle sichtbar.
+        if (opts.vouchTrust !== false) {
+          try { cards = await vouchTrust(cards, { vouches: vouchZettel }); }
+          catch (_e) { /* fail-soft: Karten ohne vouch */ }
         }
         // Reine Anzeige-Anreicherung: zentrierter Verwandtschafts-Score je Karte
         // (gatet nichts; Handshake bleibt 0.80-Riegel). Fail-soft ohne Modul 04.
@@ -1483,7 +1789,14 @@
     askNode: askNode,                   // Bau 23.B — nutzer-ausgelöste Cross-Knoten-Frage
     fetchAnswers: fetchAnswers,         // A12 Briefkasten — späte Antworten nachlesen (Lookback)
     relatednessForCards: relatednessForCards, // pure (cards, ownSpore) → angereicherte Liste; reine Anzeige
-    rankCardsByQuery: rankCardsByQuery,       // A11 — pure (cards, queryVec) → nach Frage-Passung sortiert; reine Anzeige/Auswahl
+    rankCardsByQuery: rankCardsByQuery,
+    checkMeaning: checkMeaning,               // S2 — (spore) → {status, score, snippets, reason}; reine Anzeige       // A11 — pure (cards, queryVec) → nach Frage-Passung sortiert; reine Anzeige/Auswahl
+    vouchTrust: vouchTrust,                   // S5 — (cards, opts) → je Karte `vouch`; reine Anzeige
+    createVouch: createVouch,                 // S5 — Bürgschaft ausstellen (eigene Identität)
+    createRevocation: createRevocation,       // S5 — Bürgschaft widerrufen
+    addCarried: addCarried,                   // S5 — erhaltene Bürgschaft / eigenen Widerruf mittragen
+    loadVouchContacts: loadVouchContacts,     // S5 — eigene Kontakte (Wurzeln)
+    saveVouchContacts: saveVouchContacts,     // S5
     ensureIdentity: ensureIdentity,             // Modus A (sanft, automatisch, idempotent)
     cleanupSharedOrigin: cleanupSharedOrigin,   // Modus-B-Reinigung (nur eigene Origin)
     repairAndReconnect: repairAndReconnect,     // Modus B (zerstörend, nutzer-ausgelöst)
@@ -1539,7 +1852,11 @@
         fragenUnbestaetigt: fragenUnbestaetigt,   // S1: beantwortete Fragen ohne Unterschrift
         queryUnsignedMaxPerMin: RDV_QUERY_UNSIGNED_MAX_PER_MIN, // S1
         antwortSigniert: (function () { var s = resolveSpore(); return !!(s && typeof s.signDetached === "function"); })(), // Bau 23.R
-        labelMax: RDV_LABEL_MAX,                  // Bau 23.R
+        labelMax: RDV_LABEL_MAX,
+        meaningMin: RDV_MEANING_MIN,              // S2
+        vouchChainMax: RDV_VOUCH_CHAIN_MAX,       // S5
+        vouchTtlSec: RDV_VOUCH_TTL_SEC,           // S5
+        vouchAnchors: idListe(RDV_VOUCH_ANCHORS).length + idListe(vouchCfg.anchors).length, // S5                  // Bau 23.R
         rankByQueryNote: "rankCardsByQuery(cards, queryVec, {raw?}) rankt Raum-Karten nach Frage-Passung (Modul 04 relatedness, zentriert; raw→match). REINE Anzeige/Auswahl, gatet nichts, 0.80-Riegel unberührt; fail-soft ohne Vektor → Eingabe-Reihenfolge.", // A11
       };
     },
