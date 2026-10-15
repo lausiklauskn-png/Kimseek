@@ -191,6 +191,12 @@
       aspect:      "Relais-Client gehört zur Selbst-Prüfung",
       description: "Das Siegel prüft ab jetzt auch den Relais-Client (Modul 05b). Vorher konnte es golden leuchten, während der Knoten den gemeinsamen Raum gar nicht lesen konnte. Geprüft wird die Fläche subscribe: wer nur senden, aber nichts empfangen kann, nimmt nicht teil.",
     },
+    {
+      since:       "2026-10-14",
+      module:      "23",
+      aspect:      "Echtheit im Raum wirkt wieder, Antworten sind unterschrieben",
+      description: "Ein Befund vom 2026-10-14: die Prüfung der Visitenkarten im gemeinsamen Raum las die Antwort von Modul 02 falsch und ließ jede Karte durch, auch eine mit gefälschter Unterschrift. Das ist behoben, und die Prüfung steht jetzt vor dem Zusammenfassen nach Namen, damit eine gefälschte Karte die echte nicht mehr verdrängt. Ein Name bleibt ungeprüft; trägt eine andere Kennung denselben Namen, steht das an der Karte. Antworten auf eine Frage tragen jetzt die Spore des Antworters und seine Unterschrift; genommen wird nur die des gefragten Knotens. Eine Antwort ohne Unterschrift (ältere Fassung) erscheint als „unbestätigt“ und geht nicht an den KI-Richter.",
+    },
   ];
 
   // ---- Aspekt-4-Anker (Karte 16 § Sub (e) dynamische Render-Variante) ----
@@ -374,6 +380,10 @@
         "The relay client belongs to the self-check",
       "Das Siegel prüft ab jetzt auch den Relais-Client (Modul 05b). Vorher konnte es golden leuchten, während der Knoten den gemeinsamen Raum gar nicht lesen konnte. Geprüft wird die Fläche subscribe: wer nur senden, aber nichts empfangen kann, nimmt nicht teil.":
         "From now on the seal also checks the relay client (module 05b). Before, it could shine gold while the node could not read the shared room at all. The surface checked is subscribe: anyone who can only send but receive nothing is not taking part.",
+      "Echtheit im Raum wirkt wieder, Antworten sind unterschrieben":
+        "Authenticity in the room works again, answers are signed",
+      "Ein Befund vom 2026-10-14: die Prüfung der Visitenkarten im gemeinsamen Raum las die Antwort von Modul 02 falsch und ließ jede Karte durch, auch eine mit gefälschter Unterschrift. Das ist behoben, und die Prüfung steht jetzt vor dem Zusammenfassen nach Namen, damit eine gefälschte Karte die echte nicht mehr verdrängt. Ein Name bleibt ungeprüft; trägt eine andere Kennung denselben Namen, steht das an der Karte. Antworten auf eine Frage tragen jetzt die Spore des Antworters und seine Unterschrift; genommen wird nur die des gefragten Knotens. Eine Antwort ohne Unterschrift (ältere Fassung) erscheint als „unbestätigt“ und geht nicht an den KI-Richter.":
+        "A finding from 2026-10-14: the check of the calling cards in the shared room misread the reply of module 02 and let every card through, including one with a forged signature. That is fixed, and the check now runs before cards are merged by name, so a forged card can no longer push out the real one. A name stays unverified; if another identifier carries the same name, the card says so. Answers to a question now carry the answering node's spore and its signature; only the answer of the node that was asked is taken. An answer without a signature (older version) appears as “unconfirmed” and does not go to the AI judge.",
   } };
 
   /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */
