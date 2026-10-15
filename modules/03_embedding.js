@@ -16,6 +16,7 @@
  *   embedContentVector(samples, opts?) -> Promise<{vector,count,source}>  // inhalts-treuer Domänen-Vektor
  *   embedSnippets(text|string[], opts?) -> Promise<[{vec:Float32Array(384), text}]>  // A10 Satz-Schnipsel
  *   getModelSource() / getModelRoot()   // "local"|"remote" · Wurzel des eigenen Servers (window.SBKIM_MODEL_ROOT)
+ *   getModelFallback()                  // null | {from, reason, droppedCacheEntries} — Rückfall auf HuggingFace (2026-10-15)
  *
  * Self-check: console.info after init() succeeds — not on script load,
  * because the model download is asynchronous. See INTERFACES.md and
@@ -67,6 +68,25 @@
   // HuggingFace. Ohne Einstellung: Verhalten unverändert.
   var MODEL_ROOT_SETTING = "SBKIM_MODEL_ROOT";
   var modelRoot = LOCAL_MODEL_ROOT; // Wurzel, aus der "local" kam
+  // --- Rückfall auf HuggingFace (Klaus 2026-10-15) --------------------------
+  // Die Quelle wurde bisher nur an der kleinen config.json entschieden.
+  // Antwortete der eigene Server darauf, war HuggingFace abgeschaltet — und
+  // scheiterte danach das MODELL (gemessen an Klaus' Tablet: „Can't create a
+  // session", während ein Inkognito-Tab mit leerem Zwischenspeicher lud und
+  // die Datei auf dem Server dieselbe sha256 trug wie bei HuggingFace), gab
+  // es keinen zweiten Weg. Jetzt: scheitert das Laden aus "local", wird
+  // genau EINMAL von HuggingFace geladen.
+  //
+  // ⚠ Der Quellenwechsel allein reicht NICHT. transformers.js 2.17.2
+  // (src/utils/hub.js, tryCache) sieht im Browser-Zwischenspeicher ZUERST
+  // unter dem lokalen Pfad nach — auch mit allowLocalModels=false. Eine
+  // verdorbene Kopie unter der Server-Adresse würde also wieder gegriffen.
+  // Deshalb werden die Einträge DIESER Wurzel aus "transformers-cache"
+  // entfernt, bevor HuggingFace gefragt wird — nur sie, nie der ganze
+  // Speicher (er ist auf einer geteilten Adresse für alle Apps derselbe).
+  var MODEL_CACHE_NAME = "transformers-cache"; // = transformers.js 2.17.2 hub.js
+  var modelFallback = null; // null | {from, reason, droppedCacheEntries}
+
   function configuredModelRoot() {
     var v = global ? global[MODEL_ROOT_SETTING] : null;
     if (typeof v !== "string") return null;
@@ -121,6 +141,10 @@
     return modelSource; // "local" | "remote" | null (vor dem ersten init)
   }
 
+  function getModelFallback() {
+    return modelFallback; // null, solange kein Rückfall nötig war
+  }
+
   function getModelRoot() {
     return modelSource === "local" ? modelRoot : null; // Wurzel des eigenen Servers
   }
@@ -145,7 +169,8 @@
         "MODUL 03 EMBEDDING bereit, Funktionen: " +
         "init/isReady/embedQuery/embedPassage/embedQueryBatch/embedPassageBatch/embedContentVector/embedSnippets, " +
         "Modell: " + EMBEDDING_MODEL + ", Dim: " + EMBEDDING_DIM +
-        ", Quelle: " + (modelSource === "local" ? "lokal (" + modelRoot + ")" : "HuggingFace"),
+        ", Quelle: " + (modelSource === "local" ? "lokal (" + modelRoot + ")" : "HuggingFace") +
+        (modelFallback ? " — Rückfall, " + modelFallback.from + " scheiterte" : ""),
       );
     }
   }
@@ -224,6 +249,32 @@
       // HuggingFace laden.
       env.allowLocalModels = false;
       env.allowRemoteModels = true;
+      // Nach einem Rückfall zeigte der lokale Pfad sonst weiter auf den
+      // eigenen Server — und transformers.js fragt den Zwischenspeicher
+      // zuerst unter diesem Pfad (siehe MODEL_CACHE_NAME).
+      env.localModelPath = LOCAL_MODEL_ROOT;
+    }
+  }
+
+  // Entfernt die Zwischenspeicher-Einträge einer Modell-Wurzel. Fail-soft:
+  // ohne Cache-API (Node, Iframe-Sperre) → 0. Gibt die Zahl zurück.
+  async function dropCachedModel(root) {
+    try {
+      if (!global.caches || typeof global.caches.open !== "function") return 0;
+      var base = String(root) + EMBEDDING_MODEL + "/";
+      try {
+        base = new global.URL(base, global.location && global.location.href).href;
+      } catch (_u) { /* absolute Wurzel bleibt wie sie ist */ }
+      var cache = await global.caches.open(MODEL_CACHE_NAME);
+      var keys = await cache.keys();
+      var n = 0;
+      for (var i = 0; i < keys.length; i++) {
+        var u = (keys[i] && keys[i].url) || String(keys[i] || "");
+        if (u.indexOf(base) === 0 && (await cache.delete(keys[i]))) n++;
+      }
+      return n;
+    } catch (_e) {
+      return 0;
     }
   }
 
@@ -236,6 +287,7 @@
       model: EMBEDDING_MODEL,
       source: modelSource, // "local" | "remote"
       localRoot: modelRoot,
+      defaultRoot: LOCAL_MODEL_ROOT,
     };
   }
 
@@ -251,7 +303,7 @@
       '  T=await import(cfg.cdn);',
       '  const env=T.env;',
       '  if(cfg.source==="local"){env.allowLocalModels=true;env.localModelPath=cfg.localRoot;env.allowRemoteModels=false;}',
-      '  else {env.allowLocalModels=false;env.allowRemoteModels=true;}',
+      '  else {env.allowLocalModels=false;env.allowRemoteModels=true;env.localModelPath=cfg.defaultRoot;}',
       '  pipe=await T.pipeline("feature-extraction",cfg.model,{progress_callback:function(d){self.postMessage({type:"progress",data:d});}});',
       '}',
       'self.onmessage=async function(e){',
@@ -369,22 +421,63 @@
     return mainPipePromise;
   }
 
+  // Worker zuerst (verschiebt die Rechnung aus dem Anzeige-Faden), sonst der
+  // Haupt-Faden. Wirft, wenn beide mit der aktuellen Quelle scheitern.
+  async function loadModel() {
+    if (ensureWorker()) {
+      try {
+        await postToWorker({ type: "init" });
+        return;
+      } catch (e) {
+        failWorker(e); // Rückfall auf den Haupt-Faden
+      }
+    }
+    await loadMainPipe();
+  }
+
+  // Vor dem zweiten Weg: Worker und Haupt-Faden vergessen, was sie mit der
+  // alten Quelle angefangen haben. Ein Worker, der nur am Modell scheiterte,
+  // darf es mit HuggingFace noch einmal versuchen.
+  function resetLoaders() {
+    try { if (worker && worker.terminate) worker.terminate(); } catch (_t) { /* nb */ }
+    worker = null;
+    workerReady = false;
+    workerFailed = false;
+    workerTried = false;
+    pipe = null;
+    mainPipePromise = null;
+  }
+
   function init(opts) {
     if (opts && opts.worker === false) USE_WORKER = false;
     if (pipePromise) return pipePromise.then(noop);
     pipePromise = (async function () {
       modelSource = await detectModelSource();
-      // Worker-Pfad zuerst (verschiebt die Rechnung aus dem Anzeige-Faden).
-      if (ensureWorker()) {
-        try {
-          await postToWorker({ type: "init" });
-          emitSelfCheckOnce();
-          return;
-        } catch (e) {
-          failWorker(e); // Rückfall auf den Haupt-Faden
+      try {
+        await loadModel();
+      } catch (err) {
+        // Nur aus "local" gibt es einen zweiten Weg; HuggingFace selbst
+        // scheitert weiter wie bisher (ModelLoadError unten).
+        if (modelSource !== "local") throw err;
+        var from = modelRoot;
+        var dropped = await dropCachedModel(from);
+        modelFallback = {
+          from: from,
+          reason: String((err && err.message) || err),
+          droppedCacheEntries: dropped,
+        };
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn(
+            "MODUL 03 EMBEDDING: Modell aus " + from + " nicht startbar (" +
+            modelFallback.reason + ") — " + dropped +
+            " Zwischenspeicher-Eintrag/Einträge entfernt, Rückfall auf HuggingFace.",
+          );
         }
+        modelSource = "remote";
+        modelRoot = LOCAL_MODEL_ROOT;
+        resetLoaders();
+        await loadModel();
       }
-      await loadMainPipe();
       emitSelfCheckOnce();
     })().catch(function (err) {
       // Reset so a retry can attempt again.
@@ -709,6 +802,7 @@
     isReady: isReady,
     getModelSource: getModelSource,
     getModelRoot: getModelRoot,
+    getModelFallback: getModelFallback,
     embedQuery: embedQuery,
     embedPassage: embedPassage,
     embedQueryBatch: embedQueryBatch,
@@ -759,6 +853,7 @@
       localModelRoot: LOCAL_MODEL_ROOT,
       localModelProbe: LOCAL_MODEL_PROBE,
       modelRootSetting: MODEL_ROOT_SETTING,
+      modelCacheName: MODEL_CACHE_NAME,
       contentSampleMax: CONTENT_SAMPLE_MAX,
       contentContextSep: CONTENT_CONTEXT_SEP,
       sporeSnippetMax: SPORE_SNIPPET_MAX,
