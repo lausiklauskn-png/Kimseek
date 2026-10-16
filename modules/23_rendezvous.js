@@ -624,7 +624,11 @@
   var RDV_VOUCH_KIND = "sbkim-vouch";
   var RDV_REVOKE_KIND = "sbkim-vouch-revoke";
   var RDV_VOUCH_CHAIN_MAX = 2;                 // Klaus 2026-10-15: „2 Schritte"
-  var RDV_VOUCH_TTL_SEC = 365 * 24 * 3600;     // Klaus 2026-10-15: „1 Jahr"
+  var RDV_VOUCH_TTL_SEC = 180 * 24 * 3600;     // S5b, Klaus 2026-10-16: „höchstens 180 Tage" (vorher 1 Jahr)
+  var RDV_VOUCH_WARN_SEC = 30 * 24 * 3600;     // S5b: Hinweis 30 Tage vor dem Ablauf
+  var RDV_REVOKE_REASON_MAX = 200;             // S5b: Widerruf trägt immer einen Grund
+  var RDV_REVOKE_STORE_MAX = 256;              // S5b: gespeicherte Widerrufe je Leser
+  var RDV_QUERY_VOUCH_MAX = 4;                 // S5b: Bürgschaften, die eine Frage mitträgt
   var RDV_VOUCH_SKEW_SEC = 600;                // Uhren-Spiel nach vorn
   var RDV_VOUCH_PER_CARD_MAX = 8;
   var RDV_REVOKE_PER_CARD_MAX = 32;
@@ -739,6 +743,7 @@
   var kartenVerdraengt = 0, fragenOhneAufwand = 0;   // _meta (S3)
 
   var BUERGEN_SPEICHER_PRAEFIX = "sbkim_buergen_";
+  var WIDERRUF_SPEICHER_PRAEFIX = "sbkim_widerrufe_";   // S5b: gesehene Widerrufe
   var vouchCfg = { anchors: [], flagged: [] };
 
   function idListe(x) {
@@ -758,6 +763,7 @@
         return c && typeof c.nodeId === "string" && c.nodeId.length > 0 && c.nodeId.length <= 128;
       }).map(function (c) { return { nodeId: c.nodeId, name: (typeof c.name === "string") ? c.name.slice(0, 60) : "" }; }),
       carried: (Array.isArray(o.carried) ? o.carried : []).filter(function (z) { return z && typeof z === "object"; }),
+      onlyVouched: o.onlyVouched === true,   // S5b: „antworte nur Verbürgten"
     };
   }
   function buergenSchreiben(o, store) {
@@ -791,21 +797,73 @@
       if (!(z.exp > z.ts) || z.exp - z.ts > RDV_VOUCH_TTL_SEC) return "falsch";   // nie still gekürzt
       if (z.exp <= jetzt) return "falsch";                                         // abgelaufen
     }
+    if (istR && !widerrufGrundOk(z.reason)) return "falsch";                       // S5b: ohne Grund ungültig
     if (typeof z.sig !== "string" || !z.spore || typeof z.spore !== "object") return "falsch";
     if (z.spore.id !== z.voucher) return "falsch";
     var v = resolveVerifier();
     if (!v || typeof v.verifyDetached !== "function") return "nicht-pruefbar";
+    var merk; try { merk = JSON.stringify(z); } catch (_e) { merk = null; }
+    if (merk && vouchEcht[merk]) return "gueltig";     // Unterschrift schon geprüft (Zeit oben immer neu)
     try {
       var vr = await v.verifyForeignSpore(z.spore);
       if (!(vr === true || (vr && vr.valid === true))) return "falsch";
-      return (await v.verifyDetached(antwortOhneSig(z), z.sig, z.spore.publicKey)) ? "gueltig" : "falsch";
+      var ok = await v.verifyDetached(antwortOhneSig(z), z.sig, z.spore.publicKey);
+      if (ok && merk) vouchEchtMerken(merk);
+      return ok ? "gueltig" : "falsch";
     } catch (_e) { return "falsch"; }
   }
+  // Nur die geprüfte Unterschrift wird gemerkt (Schlüssel = der ganze Zettel);
+  // Form, Ablauf und Zeit prüft vouchPruefen bei jedem Lauf neu.
+  var vouchEcht = Object.create(null), vouchEchtZahl = 0;
+  function vouchEchtMerken(k) {
+    if (vouchEchtZahl >= 1000) { vouchEcht = Object.create(null); vouchEchtZahl = 0; }
+    vouchEcht[k] = true; vouchEchtZahl++;
+  }
+  function widerrufGrundOk(g) {
+    return typeof g === "string" && g.trim().length > 0 && g.length <= RDV_REVOKE_REASON_MAX;
+  }
+
+  // ---- S5b: gesehene Widerrufe speichern (Klaus 2026-10-16, Punkt 5) ----
+  // Bisher wirkte ein Widerruf nur, solange der Bürge im Raum war; die
+  // verbürgte App trägt ihre alte Bürgschaft dagegen immer mit. Der Leser legt
+  // jeden gültigen Widerruf ab ("sbkim_widerrufe_" + dbSuffix, ohne dbSuffix
+  // nicht gespeichert) und prüft ihn beim Lesen NEU (geteilte Adresse).
+  // Ein Widerruf schlägt nur Bürgschaften mit ts ≤ Widerruf.ts; die laufen
+  // spätestens RDV_VOUCH_TTL_SEC danach ab. Ältere Widerrufe fallen heraus.
+  function widerrufSchluessel() { return cfg.dbSuffix ? WIDERRUF_SPEICHER_PRAEFIX + cfg.dbSuffix : null; }
+  function widerrufeLesen(store) {
+    var st = netStore(store), k = widerrufSchluessel();
+    if (!st || !k) return [];
+    var roh; try { roh = st.getItem(k); } catch (_e) { return []; }
+    if (!roh) return [];
+    var o; try { o = JSON.parse(roh); } catch (_e) { return []; }
+    return (o && Array.isArray(o.revocations) ? o.revocations : [])
+      .filter(function (z) { return z && typeof z === "object" && z.kind === RDV_REVOKE_KIND; })
+      .slice(0, RDV_REVOKE_STORE_MAX);
+  }
+  function widerrufeMerken(neu, store) {
+    var st = netStore(store), k = widerrufSchluessel();
+    if (!st || !k || !Array.isArray(neu) || !neu.length) return;
+    var jetzt = nowSec(), alt = widerrufeLesen(store), gesehen = Object.create(null), alle = [];
+    alt.concat(neu).forEach(function (z) {
+      if (!z || typeof z.sig !== "string" || gesehen[z.sig]) return;
+      if (typeof z.ts !== "number" || z.ts + RDV_VOUCH_TTL_SEC < jetzt) return;   // wirkt auf nichts mehr
+      gesehen[z.sig] = true; alle.push(z);
+    });
+    alle.sort(function (a, b) { return b.ts - a.ts; });
+    alle = alle.slice(0, RDV_REVOKE_STORE_MAX);
+    if (alle.length === alt.length && alle.every(function (z, i) { return alt[i] && alt[i].sig === z.sig; })) return;
+    try { st.setItem(k, JSON.stringify({ v: 1, revocations: alle })); } catch (_e) { /* fail-soft */ }
+  }
+  function loadSeenRevocations(store) { return widerrufeLesen(store); }
 
   // Aus gesammelten Zetteln die gültigen Kanten voucher→subject bauen.
-  async function vouchKanten(zettel, jetzt) {
+  async function vouchKanten(zettel, jetzt, gespeichert) {
     var vouches = [], revokes = [], nichtPruefbar = false, gesehen = Object.create(null);
-    var liste = (Array.isArray(zettel) ? zettel : []).slice(0, RDV_VOUCH_SEEN_MAX);
+    // S5b: gespeicherte Widerrufe haben ein eigenes Budget (fremde Zettel
+    // im Raum dürfen sie nicht aus dem Fenster drängen).
+    var liste = (Array.isArray(gespeichert) ? gespeichert : []).slice(0, RDV_REVOKE_STORE_MAX)
+      .concat((Array.isArray(zettel) ? zettel : []).slice(0, RDV_VOUCH_SEEN_MAX));
     for (var i = 0; i < liste.length; i++) {
       var z = liste[i];
       if (!z || typeof z !== "object" || typeof z.sig !== "string") continue;
@@ -819,7 +877,7 @@
     var kanten = vouches.filter(function (b) {
       return !revokes.some(function (w) { return w.voucher === b.voucher && w.subject === b.subject && w.ts >= b.ts; });
     });
-    return { kanten: kanten, nichtPruefbar: nichtPruefbar };
+    return { kanten: kanten, revokes: revokes, nichtPruefbar: nichtPruefbar };
   }
 
   // vouchTrust(cards, opts) → neue Liste, je Karte `vouch` (Eingabe nicht mutiert).
@@ -839,11 +897,13 @@
       zettel = zettel.concat(cv.slice(0, RDV_VOUCH_PER_CARD_MAX), cr.slice(0, RDV_REVOKE_PER_CARD_MAX));
     });
     zettel = zettel.concat(Array.isArray(o.vouches) ? o.vouches : [], buergenLesen().carried);
-    var k = await vouchKanten(zettel, jetzt);
-    // „Der Bürge haftet": wer für eine aufgefallene Kennung bürgt, zählt nicht mehr.
-    var haftet = Object.create(null);
-    k.kanten.forEach(function (b) { if (aufgefallen.indexOf(b.subject) !== -1) haftet[b.voucher] = true; });
-    var kanten = k.kanten.filter(function (b) { return !haftet[b.voucher]; });
+    var k = await vouchKanten(zettel, jetzt, widerrufeLesen());
+    widerrufeMerken(k.revokes);                       // S5b: gesehene Widerrufe bleiben
+    // „Der Bürge haftet" — S5b (Klaus 2026-10-16: „alle haften doch nicht für
+    // einen"): nur für die eine App. Fällt eine verbürgte Kennung auf oder wird
+    // gesperrt, verfällt nur diese Bürgschaft; die übrigen des Bürgen gelten.
+    // (Bis S5b verlor der Bürge ALLE seine Bürgschaften — Tafel-Evolution.)
+    var kanten = k.kanten.filter(function (b) { return aufgefallen.indexOf(b.subject) === -1; });
     // Breitensuche von den Wurzeln, höchstens RDV_VOUCH_CHAIN_MAX Schritte.
     var weg = Object.create(null);   // nodeId → Kette (Wurzel zuerst)
     var front = [];
@@ -888,8 +948,12 @@
     var ts = nowSec();
     var z = { kind: art, v: 1, voucher: own.id, subject: subjectId, ts: ts, spore: own };
     if (art === RDV_VOUCH_KIND) {
-      var tage = (opts && typeof opts.days === "number" && isFinite(opts.days) && opts.days > 0) ? opts.days : 365;
+      var tage = (opts && typeof opts.days === "number" && isFinite(opts.days) && opts.days > 0) ? opts.days : 180;
       z.exp = ts + Math.min(RDV_VOUCH_TTL_SEC, Math.floor(tage * 24 * 3600));
+    } else {
+      var grund = (opts && typeof opts.reason === "string") ? opts.reason.trim() : "";
+      if (!widerrufGrundOk(grund)) return { ok: false, reason: "Ein Widerruf braucht einen Grund (höchstens " + RDV_REVOKE_REASON_MAX + " Zeichen)." };
+      z.reason = grund;                                  // S5b: unter der Unterschrift
     }
     try { z.sig = await s.signDetached(antwortOhneSig(z)); }
     catch (e) { return { ok: false, reason: "Unterschrift fehlgeschlagen: " + (e && e.message ? e.message : e) }; }
@@ -921,7 +985,54 @@
     return { ok: true, number: ziffern.replace(/(\d{5})(?=\d)/g, "$1 ") };
   }
   function createVouch(subjectId, opts) { return vouchAusstellen(RDV_VOUCH_KIND, subjectId, opts); }
-  function createRevocation(subjectId) { return vouchAusstellen(RDV_REVOKE_KIND, subjectId, null); }
+  function createRevocation(subjectId, reason) { return vouchAusstellen(RDV_REVOKE_KIND, subjectId, { reason: reason }); }
+
+  // ---- S5b: Hinweis vor dem Ablauf (Klaus 2026-10-16, Punkt 3) ----
+  // Eigene mitgetragene Bürgschaften (subject = eigene Kennung), deren neueste
+  // je Bürge in den nächsten RDV_VOUCH_WARN_SEC abläuft. Verlängern kann nur
+  // der Bürge (neu unterschreiben). → Promise<[{voucher, exp, ts}]>
+  async function vouchExpiring(opts) {
+    var s = resolveSpore(), own = null;
+    try { own = s && typeof s.getOwnSpore === "function" ? await s.getOwnSpore() : null; } catch (_e) { own = null; }
+    if (!own || !own.id) return [];
+    var fenster = (opts && typeof opts.withinSec === "number" && isFinite(opts.withinSec) && opts.withinSec >= 0) ? opts.withinSec : RDV_VOUCH_WARN_SEC;
+    var jetzt = nowSec(), je = Object.create(null);
+    buergenLesen().carried.forEach(function (z) {
+      if (!z || z.kind !== RDV_VOUCH_KIND || z.subject !== own.id || typeof z.voucher !== "string") return;
+      if (typeof z.exp !== "number" || z.exp <= jetzt) return;
+      if (!je[z.voucher] || z.exp > je[z.voucher].exp) je[z.voucher] = { voucher: z.voucher, exp: z.exp, ts: z.ts };
+    });
+    return Object.keys(je).map(function (k) { return je[k]; })
+      .filter(function (x) { return x.exp - jetzt <= fenster; })
+      .sort(function (a, b) { return a.exp - b.exp; });
+  }
+
+  // ---- S5b: „antworte nur Verbürgten" (Klaus 2026-10-16, Firmennetz) ----
+  // Aus (Vorgabe): wie bisher. An: eine Frage wird nur beantwortet, wenn ihr
+  // Absender beim Antwortenden Netzadmin, eigener Kontakt oder verbürgt ist.
+  // Die Bürgschaften kommen aus der Frage selbst (≤ RDV_QUERY_VOUCH_MAX), aus
+  // dem letzten discover()-Lauf und dem eigenen Vorrat. Eine unsignierte Frage
+  // (S1) hat keinen geprüften Absender und wird dann nicht beantwortet.
+  var nurVerbuergtInit = null;              // init({answerOnlyVouched}) schlägt den Speicher
+  var letzteVouchZettel = [];               // aus dem letzten discover()-Lauf
+  var fragenNichtVerbuergt = 0;             // _meta
+  function answerOnlyVouched() {
+    if (nurVerbuergtInit !== null) return nurVerbuergtInit;
+    return buergenLesen().onlyVouched === true;
+  }
+  function setAnswerOnlyVouched(an, store) {
+    var o = buergenLesen(store);
+    o.onlyVouched = an === true;
+    var r = buergenSchreiben(o, store);
+    if (r.ok) nurVerbuergtInit = null;
+    return r.ok ? { ok: true, on: o.onlyVouched } : r;
+  }
+  async function absenderVerbuergt(q) {
+    if (!q || !q.spore || typeof q.spore.id !== "string") return false;
+    var mit = (Array.isArray(q.vouches) ? q.vouches : []).slice(0, RDV_QUERY_VOUCH_MAX);
+    var r = await vouchTrust([{ nodeId: q.spore.id }], { vouches: mit.concat(letzteVouchZettel) });
+    return vouchVorn(r[0]);
+  }
 
   // Eine erhaltene Bürgschaft (oder einen eigenen Widerruf) in den eigenen
   // Vorrat legen; doAnnounce trägt ihn in der Karte. Nur gültige Zettel.
@@ -1337,6 +1448,7 @@
     }
     if (opts.vouchAnchors !== undefined) vouchCfg.anchors = idListe(opts.vouchAnchors);   // S5
     if (opts.vouchFlagged !== undefined) vouchCfg.flagged = idListe(opts.vouchFlagged);   // S5
+    if (opts.answerOnlyVouched !== undefined) nurVerbuergtInit = opts.answerOnlyVouched === true;   // S5b
     if (opts.netCode !== undefined || opts.roomTag !== undefined) {
       setNetwork({ code: opts.netCode, roomTag: opts.roomTag });
     }
@@ -1647,6 +1759,7 @@
           });
         }
         // S5: Bürgschaften prüfen — reine Anzeige, Karten bleiben alle sichtbar.
+        letzteVouchZettel = vouchZettel.slice(0, RDV_VOUCH_SEEN_MAX);   // S5b: für „antworte nur Verbürgten"
         if (opts.vouchTrust !== false) {
           try { cards = await vouchTrust(cards, { vouches: vouchZettel }); }
           catch (_e) { /* fail-soft: Karten ohne vouch */ }
@@ -1898,6 +2011,11 @@
             }
             try { await sperreLaden(); } catch (_e) {}
             if (isBlocked(q.fromNodeId) || (q.spore && isBlocked(q.spore.id))) { fragenGesperrt++; return; }   // S4
+            if (answerOnlyVouched()) {             // S5b: „antworte nur Verbürgten"
+              var darf = false;
+              if (stand === "bestaetigt") { try { darf = await absenderVerbuergt(q); } catch (_e) { darf = false; } }
+              if (!darf) { fragenNichtVerbuergt++; return; }
+            }
             var unsigniert = stand !== "bestaetigt";
             var ohneAufwand = !powPruefen(q);     // S3
             if (!underRateLimit(unsigniert, ohneAufwand)) return;   // Überschuss still verwerfen
@@ -2024,10 +2142,16 @@
         finish({ ok: false, reason: "Antwort-Lauscher fehlgeschlagen: " + (e && e.message ? e.message : e) });
         return;
       }
-      powRechnen({                            // S3: erst Aufwand, dann unterschreiben
+      var frage = {
         kind: RDV_QUERY_KIND, qid: qid, toNodeId: toNodeId, fromNodeId: ownId,
         fromName: cfg.nodeName, text: text.trim().slice(0, RDV_QUERY_TEXT_MAX), k: k, ts: nowSec(),
-      }).then(zettelSignieren                 // S1: die Frage trägt spore + sig
+      };
+      // S5b: eigene Bürgschaften mitgeben, damit ein Knoten mit „antworte nur
+      // Verbürgten" die Kette lesen kann. Jeder Zettel ist für sich signiert.
+      var mitV = cardCarried().vouches.slice(0, RDV_QUERY_VOUCH_MAX);
+      if (mitV.length) frage.vouches = mitV;
+      powRechnen(frage                        // S3: erst Aufwand, dann unterschreiben
+      ).then(zettelSignieren                 // S1: die Frage trägt spore + sig
       ).then(function (zettel) {
         return netPacke(zettel, fragTagQ);
       }).then(function (inhalt) {
@@ -2146,7 +2270,11 @@
     checkMeaning: checkMeaning,               // S2 — (spore) → {status, score, snippets, reason}; reine Anzeige       // A11 — pure (cards, queryVec) → nach Frage-Passung sortiert; reine Anzeige/Auswahl
     vouchTrust: vouchTrust,                   // S5 — (cards, opts) → je Karte `vouch`; reine Anzeige
     createVouch: createVouch,                 // S5 — Bürgschaft ausstellen (eigene Identität)
-    createRevocation: createRevocation,       // S5 — Bürgschaft widerrufen
+    createRevocation: createRevocation,       // S5 — Bürgschaft widerrufen; S5b: (subjectId, reason), Grund Pflicht
+    vouchExpiring: vouchExpiring,             // S5b — eigene Bürgschaften, die bald ablaufen
+    answerOnlyVouched: answerOnlyVouched,     // S5b — „antworte nur Verbürgten" an?
+    setAnswerOnlyVouched: setAnswerOnlyVouched, // S5b — Einstellung je Knoten (gespeichert)
+    loadSeenRevocations: loadSeenRevocations, // S5b — gespeicherte, gesehene Widerrufe
     addCarried: addCarried,                   // S5 — erhaltene Bürgschaft / eigenen Widerruf mittragen
     loadVouchContacts: loadVouchContacts,     // S5 — eigene Kontakte (Wurzeln)
     saveVouchContacts: saveVouchContacts,     // S5
@@ -2220,7 +2348,12 @@
         labelMax: RDV_LABEL_MAX,
         meaningMin: RDV_MEANING_MIN,              // S2
         vouchChainMax: RDV_VOUCH_CHAIN_MAX,       // S5
-        vouchTtlSec: RDV_VOUCH_TTL_SEC,           // S5
+        vouchTtlSec: RDV_VOUCH_TTL_SEC,           // S5 (S5b: 180 Tage)
+        vouchWarnSec: RDV_VOUCH_WARN_SEC,         // S5b
+        revokeReasonMax: RDV_REVOKE_REASON_MAX,   // S5b
+        queryVouchMax: RDV_QUERY_VOUCH_MAX,       // S5b
+        answerOnlyVouched: answerOnlyVouched(),   // S5b
+        fragenNichtVerbuergt: fragenNichtVerbuergt, // S5b: nicht beantwortet, Absender nicht verbürgt
         vouchAnchors: idListe(vouchCfg.anchors).length, // S5 (init-Anker, ohne Netzadmin)
         netAdmin: currentNetAdmin(),              // S5 Teil 2
         blockMax: RDV_BLOCK_MAX,                  // S4
