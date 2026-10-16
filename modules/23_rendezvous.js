@@ -104,6 +104,8 @@
  *              queryTag, queryKind, queryResKind, queryMaxPerMin,
  *              frageVerworfen, fragenBestaetigt, fragenUnbestaetigt,
  *              queryUnsignedMaxPerMin }  (S1, 2026-10-15)
+ *              + { powBits, queryNoPowMaxPerMin, kartenVerdraengt,
+ *                  fragenOhneAufwand }  (S3, 2026-10-16)
  *
  * Self-check: emits a console.info line on script load. Siehe
  * docs/components/23_rendezvous.md + INTERFACES.md §1 Modul 23.
@@ -634,6 +636,106 @@
     if (net.lage === "eigen" || net.lage === "raum") return netzAdmin;
     return null;   // wird abgeleitet / ungültig → kein Netzadmin
   }
+
+  // ---- S3 „Rechenaufwand je Zettel" (2026-10-16, docs/PLAN_MYCEL_SCHICHTEN.md) ----
+  // Der Sender rechnet vor dem Senden eine kleine Prüfsummen-Aufgabe (Nonce-
+  // Suche wie Nostr NIP-13, aber im Zettel selbst, nicht am Nostr-Ereignis).
+  // Klaus 2026-10-16: 12 Stufen, Karten + Fragen, „Vorrang bei Enge".
+  //   Karte ohne Aufwand → weiter angenommen; ist der Raum voll (RDV_CARDS_MAX),
+  //                        verdrängt eine Karte MIT Aufwand eine ohne.
+  //   Frage ohne Aufwand → weiter beantwortet, aber höchstens
+  //                        RDV_QUERY_NOPOW_MAX_PER_MIN der Antworten je Minute;
+  //                        der Rest bleibt Fragen mit Aufwand vorbehalten.
+  // ⚠ Benannte Grenze: 12 Stufen kosten eine ehrliche App wenige Hundertstel
+  //   Sekunden, einen Angreifer mit Rechner-Code ~0,01 s je Zettel (gemessen
+  //   2026-10-16 im Sitzungs-Behälter, nicht am Tablet). Die Schicht verdrängt
+  //   Fluter, die gar nicht rechnen; gegen einen entschlossenen Angreifer tragen
+  //   S1 (Unterschrift), S5 (Bürgen) und S4 (Sperrliste).
+  // Rechnung: h = sha256("sbkim-pow-v1|" + sha256(JSON ohne pow/sig/spore) + "|" + pow),
+  //   gültig, wenn h mindestens RDV_POW_BITS führende Null-Bits hat.
+  var RDV_POW_BITS = 12;                 // Klaus 2026-10-16: „12 Stufen"
+  var RDV_POW_PREFIX = "sbkim-pow-v1|";
+  var RDV_POW_NONCE_MAX = 32;            // Länge des Nonce-Felds (untrusted input)
+  var RDV_POW_TRIES_MAX = 1 << 22;       // Sender gibt danach auf (fail-soft: ohne Aufwand)
+  var RDV_QUERY_NOPOW_MAX_PER_MIN = 4;   // von RDV_QUERY_MAX_PER_MIN (6); 2 bleiben Fragen mit Aufwand
+  var POW_K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  // SHA-256 synchron (der Empfangs-Callback kann nicht warten; crypto.subtle ist async).
+  function powSha256(str) {
+    var b = new TextEncoder().encode(str);
+    var l = b.length, n = ((l + 9 + 63) >> 6) << 6;
+    var m = new Uint8Array(n); m.set(b); m[l] = 0x80;
+    var hi = Math.floor(l / 0x20000000), lo = (l * 8) >>> 0;
+    m[n - 8] = hi >>> 24; m[n - 7] = hi >>> 16; m[n - 6] = hi >>> 8; m[n - 5] = hi;
+    m[n - 4] = lo >>> 24; m[n - 3] = lo >>> 16; m[n - 2] = lo >>> 8; m[n - 1] = lo;
+    var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    var w = new Uint32Array(64), i;
+    for (var o = 0; o < n; o += 64) {
+      for (i = 0; i < 16; i++) w[i] = (m[o + i * 4] << 24) | (m[o + i * 4 + 1] << 16) | (m[o + i * 4 + 2] << 8) | m[o + i * 4 + 3];
+      for (i = 16; i < 64; i++) {
+        var x = w[i - 15], y = w[i - 2];
+        w[i] = (((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3)) + w[i - 7] +
+               (((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10)) + w[i - 16];
+      }
+      var a = H[0], bb = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (i = 0; i < 64; i++) {
+        var t1 = (h + (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) + ((e & f) ^ (~e & g)) + POW_K[i] + w[i]) | 0;
+        var t2 = ((((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) + ((a & bb) ^ (a & c) ^ (bb & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = bb; bb = a; a = (t1 + t2) | 0;
+      }
+      H[0] = (H[0] + a) | 0; H[1] = (H[1] + bb) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+      H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+    }
+    var s = "";
+    for (i = 0; i < 8; i++) s += ("00000000" + (H[i] >>> 0).toString(16)).slice(-8);
+    return s;
+  }
+  function powNullBits(hex) {
+    var bits = 0;
+    for (var i = 0; i < hex.length; i++) {
+      var v = parseInt(hex[i], 16);
+      if (v === 0) { bits += 4; continue; }
+      return bits + (v < 2 ? 3 : v < 4 ? 2 : v < 8 ? 1 : 0);
+    }
+    return bits;
+  }
+  function powBasis(z) {
+    var o = {};
+    for (var key in z) {
+      if (Object.prototype.hasOwnProperty.call(z, key) && key !== "pow" && key !== "sig" && key !== "spore") o[key] = z[key];
+    }
+    return RDV_POW_PREFIX + powSha256(JSON.stringify(o)) + "|";
+  }
+  // Gilt der Aufwand dieses Zettels? (synchron, wirft nie)
+  function powPruefen(z) {
+    try {
+      if (!z || typeof z.pow !== "string" || !z.pow || z.pow.length > RDV_POW_NONCE_MAX) return false;
+      return powNullBits(powSha256(powBasis(z) + z.pow)) >= RDV_POW_BITS;
+    } catch (_e) { return false; }
+  }
+  // Aufwand rechnen und als z.pow eintragen. Gibt alle 4096 Versuche die
+  // Hand ab (Tablet bleibt bedienbar). Fail-soft: ohne Erfolg kein pow-Feld.
+  async function powRechnen(z) {
+    try {
+      var basis = powBasis(z);
+      // Ohne Zufall: der Inhalt (ts, qid) macht jede Suche eigen, und
+      // Math.random bleibt für qid & Co. unberührt (smoke_netz_eigen friert ihn ein).
+      for (var i = 0; i < RDV_POW_TRIES_MAX; i++) {
+        var nonce = i.toString(36);
+        if (powNullBits(powSha256(basis + nonce)) >= RDV_POW_BITS) { z.pow = nonce; return z; }
+        if ((i & 4095) === 4095) await new Promise(function (r) { setTimeout(r, 0); });
+      }
+    } catch (_e) { /* fail-soft */ }
+    return z;
+  }
+  var kartenVerdraengt = 0, fragenOhneAufwand = 0;   // _meta (S3)
+
   var BUERGEN_SPEICHER_PRAEFIX = "sbkim_buergen_";
   var vouchCfg = { anchors: [], flagged: [] };
 
@@ -1156,6 +1258,7 @@
     var mit = cardCarried();                       // S5: Bürgschaften / Widerrufe mittragen
     if (mit.vouches.length) card.vouches = mit.vouches;
     if (mit.revocations.length) card.revocations = mit.revocations;
+    await powRechnen(card);                        // S3: Aufwand rechnen (nach allen Feldern)
     var pr;
     try {
       pr = await relay.publish({
@@ -1255,6 +1358,8 @@
     var perSender = Object.create(null);  // nostr-pubkey -> Anzahl Identitäten
     var cardCount = 0;                    // Karten gesamt in diesem Durchlauf
     var rejected = 0;                     // wegen Echtheit/Bindung verworfen
+    var reihe = [];                       // S3: Reihenfolge der aufgenommenen Kennungen
+    var verdraengtHier = 0;               // S3: ohne Aufwand verdrängt (dieser Lauf)
     var vouchZettel = [];                 // S5: aus ALLEN Karten-Ereignissen, nicht nur der neuesten
     var unsub = null;
     try {
@@ -1270,10 +1375,24 @@
           // und ein einzelner Nostr-Absender nicht beliebig viele Identitäten
           // gleichzeitig auslegen. Still verwerfen — der Fluter erfährt nichts.
           var sender = (typeof ev.pubkey === "string" && ev.pubkey) ? ev.pubkey : "?";
+          var mitAufwand = powPruefen(card);      // S3
           if (!byId[card.nodeId]) {
-            if (cardCount >= RDV_CARDS_MAX) return;
             var vonDiesem = perSender[sender] || 0;
             if (vonDiesem >= RDV_CARDS_PER_SENDER_MAX) return;
+            if (cardCount >= RDV_CARDS_MAX) {
+              // S3 „Vorrang bei Enge": nur eine Karte MIT Aufwand darf hinein,
+              // und nur, indem sie die zuletzt gekommene Karte OHNE Aufwand verdrängt.
+              if (!mitAufwand) return;
+              var wegId = null;
+              for (var ri = reihe.length - 1; ri >= 0; ri--) {
+                if (byId[reihe[ri].id] && !byId[reihe[ri].id].pow) { wegId = reihe[ri]; reihe.splice(ri, 1); break; }
+              }
+              if (!wegId) return;
+              delete byId[wegId.id];
+              perSender[wegId.sender] = Math.max(0, (perSender[wegId.sender] || 1) - 1);
+              cardCount--;
+              verdraengtHier++;
+            }
             perSender[sender] = vonDiesem + 1;
             cardCount++;
           }
@@ -1284,7 +1403,8 @@
             if (Array.isArray(card.revocations)) vouchZettel = vouchZettel.concat(card.revocations.slice(0, RDV_REVOKE_PER_CARD_MAX));
           }
           var ts = (typeof card.ts === "number" ? card.ts : (typeof ev.created_at === "number" ? ev.created_at : 0));
-          if (!byId[card.nodeId] || ts > byId[card.nodeId].ts) byId[card.nodeId] = { card: card, ts: ts };
+          if (!byId[card.nodeId]) reihe.push({ id: card.nodeId, sender: sender });
+          if (!byId[card.nodeId] || ts > byId[card.nodeId].ts) byId[card.nodeId] = { card: card, ts: ts, pow: mitAufwand };
       }
     } catch (e) {
       return { ok: false, cards: [], reason: "Raum-Lesen fehlgeschlagen: " + (e && e.message ? e.message : e) };
@@ -1376,6 +1496,7 @@
           cards: relatednessForCards(cards, own),
           cardsVerified: cardsVerified,   // false = Modul 02 fehlt, Karten UNGEPRÜFT
           rejected: rejected,             // ehrlich: wie viele fielen raus
+          verdraengt: (kartenVerdraengt += verdraengtHier, verdraengtHier),     // S3: Karten ohne Aufwand, die bei vollem Raum weichen mussten
         });
       }, listenMs);
     });
@@ -1550,11 +1671,13 @@
     var i = seenQids.indexOf(qid);
     if (i !== -1) seenQids.splice(i, 1);
   }
-  // answerTimestamps: [{ t: ms, u: unsigniert? }]
-  function underRateLimit(unsigniert) {
+  // answerTimestamps: [{ t: ms, u: unsigniert?, p: ohne Aufwand (S3)? }]
+  function underRateLimit(unsigniert, ohneAufwand) {
     var cut = Date.now() - 60000;
     answerTimestamps = answerTimestamps.filter(function (e) { return e.t > cut; });
     if (answerTimestamps.length >= RDV_QUERY_MAX_PER_MIN) return false;
+    // S3: Fragen ohne Aufwand teilen sich nur RDV_QUERY_NOPOW_MAX_PER_MIN Plätze.
+    if (ohneAufwand && answerTimestamps.filter(function (e) { return e.p; }).length >= RDV_QUERY_NOPOW_MAX_PER_MIN) return false;
     if (!unsigniert) return true;
     return answerTimestamps.filter(function (e) { return e.u; }).length < RDV_QUERY_UNSIGNED_MAX_PER_MIN;
   }
@@ -1611,8 +1734,10 @@
               return;
             }
             var unsigniert = stand !== "bestaetigt";
-            if (!underRateLimit(unsigniert)) return;   // Überschuss still verwerfen
-            answerTimestamps.push({ t: Date.now(), u: unsigniert });
+            var ohneAufwand = !powPruefen(q);     // S3
+            if (!underRateLimit(unsigniert, ohneAufwand)) return;   // Überschuss still verwerfen
+            answerTimestamps.push({ t: Date.now(), u: unsigniert, p: ohneAufwand });
+            if (ohneAufwand) fragenOhneAufwand++;
             if (unsigniert) fragenUnbestaetigt++; else fragenBestaetigt++;
             var results = [];
             var match = resolveQueryMatch();
@@ -1732,10 +1857,11 @@
         finish({ ok: false, reason: "Antwort-Lauscher fehlgeschlagen: " + (e && e.message ? e.message : e) });
         return;
       }
-      zettelSignieren({                       // S1: die Frage trägt spore + sig
+      powRechnen({                            // S3: erst Aufwand, dann unterschreiben
         kind: RDV_QUERY_KIND, qid: qid, toNodeId: toNodeId, fromNodeId: ownId,
         fromName: cfg.nodeName, text: text.trim().slice(0, RDV_QUERY_TEXT_MAX), k: k, ts: nowSec(),
-      }).then(function (zettel) {
+      }).then(zettelSignieren                 // S1: die Frage trägt spore + sig
+      ).then(function (zettel) {
         return netPacke(zettel, fragTagQ);
       }).then(function (inhalt) {
         return relay.publish({
@@ -1912,6 +2038,10 @@
         fragenBestaetigt: fragenBestaetigt,       // S1: beantwortete unterschriebene Fragen
         fragenUnbestaetigt: fragenUnbestaetigt,   // S1: beantwortete Fragen ohne Unterschrift
         queryUnsignedMaxPerMin: RDV_QUERY_UNSIGNED_MAX_PER_MIN, // S1
+        powBits: RDV_POW_BITS,                    // S3
+        queryNoPowMaxPerMin: RDV_QUERY_NOPOW_MAX_PER_MIN, // S3
+        kartenVerdraengt: kartenVerdraengt,       // S3: Karten ohne Aufwand, die bei vollem Raum weichen mussten
+        fragenOhneAufwand: fragenOhneAufwand,     // S3: beantwortete Fragen ohne Aufwand
         antwortSigniert: (function () { var s = resolveSpore(); return !!(s && typeof s.signDetached === "function"); })(), // Bau 23.R
         labelMax: RDV_LABEL_MAX,
         meaningMin: RDV_MEANING_MIN,              // S2
