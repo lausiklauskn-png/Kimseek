@@ -270,6 +270,40 @@
         "✗ The text is not a vouch.",
       "Eigene Kontakte":
         "Own contacts",
+      "⛔ Sperrliste":
+        "⛔ Block list",
+      "⛔ Sperren":
+        "⛔ Block",
+      "Diese Kennung im ganzen Netz sperren (nur der Netzadmin)":
+        "Block this identifier in the whole network (network admin only)",
+      "Diese Kennung wirklich sperren? Sie verschwindet bei allen Apps dieses Netzes von der Karte, und ihre Fragen werden nicht mehr beantwortet. Lösen geht nur mit einer neuen Liste.":
+        "Really block this identifier? It disappears from the map in every app of this network, and its questions are no longer answered. Lifting it is only possible with a new list.",
+      "✓ Gesperrt. Die Liste reist mit deiner nächsten Anmeldung im Raum.":
+        "✓ Blocked. The list travels with your next sign-in to the room.",
+      "Keine gültige Sperrliste — niemand ist gesperrt.":
+        "No valid block list — nobody is blocked.",
+      "Sperrliste nicht prüfbar (Modul 02 fehlt) — niemand ist gesperrt.":
+        "Block list cannot be checked (module 02 missing) — nobody is blocked.",
+      "Gesperrt: ":
+        "Blocked: ",
+      " Kennung(en) · Stand ":
+        " identifier(s) · as of ",
+      "Erhaltene Sperrliste einfügen":
+        "Paste a received block list",
+      "✓ Sperrliste übernehmen":
+        "✓ Accept the block list",
+      "✓ Übernommen.":
+        "✓ Accepted.",
+      "Schon bekannt (nicht neuer).":
+        "Already known (not newer).",
+      "📋 Liste kopieren":
+        "📋 Copy the list",
+      "✓ Kopiert. Für die Ablage in Sage: sbkim/sperrliste.json.":
+        "✓ Copied. To file in Sage: sbkim/sperrliste.json.",
+      "Die Sperrliste unterschreibt nur der Netzadmin dieses Netzes. Gesperrte Kennungen erscheinen nicht auf der Karte, ihre Fragen werden nicht beantwortet und ihre Antworten verworfen. Die Liste ist öffentlich und reist auf den Karten im Raum mit; jede App prüft die Unterschrift selbst.":
+        "Only the network admin of this network signs the block list. Blocked identifiers do not appear on the map, their questions are not answered and their answers are discarded. The list is public and travels on the cards in the room; every app checks the signature itself.",
+      "Du bist der Netzadmin dieses Netzes: an jeder Karte steht „⛔ Sperren“.":
+        "You are the network admin of this network: every card shows “⛔ Block”.",
       "Noch keine eigenen Kontakte.":
         "No own contacts yet.",
       "entfernen":
@@ -2348,6 +2382,113 @@
       return { ok: gut, bad: schlecht };
     });
   }
+  // ---- S4: Sperrliste (INTERFACES § Modul 23 S4) ----
+  // Regeln in Modul 23; hier nur Anzeige, Einfügen, Kopieren und — nur für den
+  // Netzadmin — der Knopf je Karte. Fremde Texte nur über textContent.
+  var sperrBoxEl = null, sperrStandEl = null, sperrMsgEl = null, sperrAdminEl = null;
+  var istNetzadminP = null;
+  function istNetzadmin() {
+    if (istNetzadminP) return istNetzadminP;
+    var r = rdv(), sp = sporeMod();
+    istNetzadminP = (r && sp && typeof r.currentNetAdmin === "function")
+      ? Promise.resolve(sp.getOwnSpore()).then(function (own) {
+          var a = r.currentNetAdmin();
+          return !!(own && own.id && a && own.id === a);
+        }, function () { return false; })
+      : Promise.resolve(false);
+    setTimeout(function () { istNetzadminP = null; }, 5000);
+    return istNetzadminP;
+  }
+  function sperreZeigen() {
+    var r = ensureRdv();
+    if (!sperrStandEl || !r || typeof r.currentBlocklist !== "function") return Promise.resolve();
+    return r.currentBlocklist().then(function (b) {
+      if (b.stand === "gueltig") {
+        sperrStandEl.textContent = T("Gesperrt: ") + b.ids.length + T(" Kennung(en) · Stand ") +
+          new Date(b.ts * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+      } else if (b.stand === "nicht-pruefbar") {
+        sperrStandEl.textContent = T("Sperrliste nicht prüfbar (Modul 02 fehlt) — niemand ist gesperrt.");
+      } else sperrStandEl.textContent = T("Keine gültige Sperrliste — niemand ist gesperrt.");
+      sperrStandEl.setAttribute("data-sbkim-sperre-stand", b.stand);
+      sperrStandEl.setAttribute("data-sbkim-sperre-zahl", String(b.ids.length));
+      return istNetzadmin().then(function (ja) {
+        if (sperrAdminEl) sperrAdminEl.style.display = ja ? "" : "none";
+      });
+    }, function (e) { sperrStandEl.textContent = "✗ " + errText(e); });
+  }
+  function sperreEinfuegen(roh) {
+    var r = ensureRdv();
+    var o; try { o = JSON.parse(String(roh || "")); } catch (_e) { o = null; }
+    if (!o || typeof o !== "object" || Array.isArray(o) || !r || typeof r.addBlocklist !== "function") {
+      if (sperrMsgEl) sperrMsgEl.textContent = "✗ " + T("Keine gültige Sperrliste — niemand ist gesperrt.");
+      return Promise.resolve({ ok: false });
+    }
+    return r.addBlocklist(o).then(function (x) {
+      if (sperrMsgEl) sperrMsgEl.textContent = x && x.ok ? (x.newer ? T("✓ Übernommen.") : T("Schon bekannt (nicht neuer).")) : "✗ " + ((x && x.reason) || "");
+      return sperreZeigen().then(function () { return x || { ok: false }; });
+    }, function (e) { if (sperrMsgEl) sperrMsgEl.textContent = "✗ " + errText(e); return { ok: false }; });
+  }
+  function bauSperrBox() {
+    sperrBoxEl = el("details", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
+    sperrBoxEl.setAttribute("data-sbkim-sperre-box", "");
+    sperrBoxEl.appendChild(el("summary", "cursor:pointer;color:#c7d2de", T("⛔ Sperrliste")));
+    sperrStandEl = el("div", "margin:6px 0;color:#eef2f8;word-break:break-word");
+    sperrBoxEl.appendChild(sperrStandEl);
+    sperrAdminEl = el("div", "display:none;margin:4px 0;color:#9ff7df", T("Du bist der Netzadmin dieses Netzes: an jeder Karte steht „⛔ Sperren“."));
+    sperrAdminEl.setAttribute("data-sbkim-sperre-admin", "");
+    sperrBoxEl.appendChild(sperrAdminEl);
+    sperrBoxEl.appendChild(el("div", "color:#9aa7b6", T("Erhaltene Sperrliste einfügen")));
+    var ein = el("textarea", "width:100%;box-sizing:border-box;margin:3px 0 6px;min-height:52px;padding:5px 8px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:.68rem/1.35 var(--mono,monospace)");
+    ein.setAttribute("data-sbkim-sperre-einfuegen", "");
+    sperrBoxEl.appendChild(ein);
+    var zeile = el("div", "display:flex;gap:6px;flex-wrap:wrap");
+    var ok = el("button", idBtnCss(true), T("✓ Sperrliste übernehmen")); ok.type = "button";
+    ok.setAttribute("data-sbkim-sperre-uebernehmen", "");
+    ok.addEventListener("click", function () { sperreEinfuegen(ein.value).then(function (x) { if (x && x.ok) ein.value = ""; }); });
+    var kop = el("button", idBtnCss(false), T("📋 Liste kopieren")); kop.type = "button";
+    kop.setAttribute("data-sbkim-sperre-kopieren", "");
+    kop.addEventListener("click", function () {
+      var r = ensureRdv();
+      if (!r || typeof r.currentBlocklist !== "function") return;
+      r.currentBlocklist().then(function (b) {
+        if (!b.zettel) { if (sperrMsgEl) sperrMsgEl.textContent = T("Keine gültige Sperrliste — niemand ist gesperrt."); return; }
+        kopieren(JSON.stringify(b.zettel));
+        if (sperrMsgEl) sperrMsgEl.textContent = T("✓ Kopiert. Für die Ablage in Sage: sbkim/sperrliste.json.");
+      });
+    });
+    zeile.appendChild(ok); zeile.appendChild(kop);
+    sperrBoxEl.appendChild(zeile);
+    sperrMsgEl = el("div", "margin-top:4px;color:#9aa7b6;white-space:pre-wrap");
+    sperrMsgEl.setAttribute("data-sbkim-sperre-meldung", "");
+    sperrBoxEl.appendChild(sperrMsgEl);
+    sperrBoxEl.appendChild(el("div", "margin-top:6px;color:#7e8b9a;font-size:.7rem;line-height:1.45",
+      T("Die Sperrliste unterschreibt nur der Netzadmin dieses Netzes. Gesperrte Kennungen erscheinen nicht auf der Karte, ihre Fragen werden nicht beantwortet und ihre Antworten verworfen. Die Liste ist öffentlich und reist auf den Karten im Raum mit; jede App prüft die Unterschrift selbst.")));
+    sperrBoxEl.addEventListener("toggle", function () { if (sperrBoxEl.open) { configModule(); sperreZeigen(); } });
+    return sperrBoxEl;
+  }
+  function bauSperrKnopf(c, rowEl, bs) {
+    var sb = el("button", bs + ";margin-left:6px;opacity:.72;font-size:.72rem;display:none", T("⛔ Sperren")); sb.type = "button";
+    sb.title = T("Diese Kennung im ganzen Netz sperren (nur der Netzadmin)");
+    sb.setAttribute("data-sbkim-sperren-knopf", "");
+    istNetzadmin().then(function (ja) { if (ja) sb.style.display = ""; });
+    sb.addEventListener("click", function () {
+      var r = rdv();
+      if (!r || typeof r.blockId !== "function") return;
+      var frag = true;
+      try { if (typeof global.confirm === "function") frag = global.confirm(T("Diese Kennung wirklich sperren? Sie verschwindet bei allen Apps dieses Netzes von der Karte, und ihre Fragen werden nicht mehr beantwortet. Lösen geht nur mit einer neuen Liste.")); } catch (_e) { frag = false; }
+      if (!frag) return;
+      r.blockId(c && c.nodeId).then(function (x) {
+        var m = el("div", "flex-basis:100%;margin-top:4px;font-size:.72rem;color:#9aa7b6",
+          x && x.ok ? T("✓ Gesperrt. Die Liste reist mit deiner nächsten Anmeldung im Raum.") : "✗ " + ((x && x.reason) || ""));
+        m.setAttribute("data-sbkim-sperren-meldung", x && x.ok ? "ok" : "fehler");
+        rowEl.appendChild(m);
+        sperreZeigen();
+      }, function (e) { rowEl.appendChild(el("div", "flex-basis:100%;font-size:.72rem;color:#f5c26b", "✗ " + errText(e))); });
+    });
+    return sb;
+  }
   function bauBuergenBox() {
     buergBoxEl = el("details", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
       "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
@@ -2663,6 +2804,7 @@
     panelEl.appendChild(bauNetzBox());
     netzZeigen();
     panelEl.appendChild(bauBuergenBox());
+    panelEl.appendChild(bauSperrBox());
 
     // A15 — Zwei-Stufen-Hinweis (ehrliche Kosten-Benennung, reine Anzeige):
     // „nur stöbern" ist anonym (kein Modell/keine Identität, man wird nicht
@@ -3220,6 +3362,7 @@
         rowEl.appendChild(bauBuergenFeld(c));
       });
       rowEl.appendChild(vb);
+      rowEl.appendChild(bauSperrKnopf(c, rowEl, bs));   // S4 — nur für den Netzadmin sichtbar
       // Partner-Link (Klaus 2026-07-12): direkt die App/PWA des Knotens öffnen,
       // um selbst dort zu suchen — ohne auf die Cross-Knoten-Antwort zu warten
       // (die server-los nur kommt, wenn der andere Tab offen+wach ist). Adresse

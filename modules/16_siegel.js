@@ -221,6 +221,12 @@
       aspect:      "Fluten wird teurer (S3)",
       description: "Wer eine Visitenkarte in den gemeinsamen Raum hängt oder einem anderen Knoten eine Frage stellt, rechnet vorher eine kleine Prüfsummen-Aufgabe. Für eine einzelne Karte dauert das am Gerät nur einen Augenblick; wer den Raum mit Hunderten Karten fluten will, muss für jede rechnen. Abgewiesen wird nichts: Ist der Raum voll, verdrängt eine Karte mit Rechenaufwand eine ohne, und Fragen ohne Aufwand bekommen höchstens vier der sechs Antworten je Minute. Gegen einen Angreifer mit schnellem Rechner ist das nur eine kleine Hürde; dafür gibt es die Unterschriften und das Bürgen.",
     },
+    {
+      since:       "2026-10-16",
+      module:      "23",
+      aspect:      "Gesperrte Knoten verschwinden aus dem Netz (S4)",
+      description: "Der Netzadmin eines Netzes kann eine Kennung sperren; im offenen Mycel ist das Sage-Protokol. Die Sperrliste ist öffentlich und unterschrieben und reist auf den Visitenkarten im Raum mit, jede App prüft die Unterschrift selbst. Eine gesperrte Kennung erscheint nicht mehr auf der Karte, ihre Fragen werden nicht beantwortet und ihre Antworten verworfen. Eine Liste ohne gültige Unterschrift des Netzadmins zählt nicht. Ein Gesperrter sieht, dass er gesperrt ist, und kann sich eine neue Kennung machen; dagegen helfen der Rechenaufwand und das Bürgen.",
+    },
   ];
 
   // ---- Aspekt-4-Anker (Karte 16 § Sub (e) dynamische Render-Variante) ----
@@ -424,6 +430,10 @@
         "Flooding costs more (S3)",
       "Wer eine Visitenkarte in den gemeinsamen Raum hängt oder einem anderen Knoten eine Frage stellt, rechnet vorher eine kleine Prüfsummen-Aufgabe. Für eine einzelne Karte dauert das am Gerät nur einen Augenblick; wer den Raum mit Hunderten Karten fluten will, muss für jede rechnen. Abgewiesen wird nichts: Ist der Raum voll, verdrängt eine Karte mit Rechenaufwand eine ohne, und Fragen ohne Aufwand bekommen höchstens vier der sechs Antworten je Minute. Gegen einen Angreifer mit schnellem Rechner ist das nur eine kleine Hürde; dafür gibt es die Unterschriften und das Bürgen.":
         "Whoever posts a calling card to the shared room or asks another node a question first solves a small checksum puzzle. For a single card this takes only a moment on the device; whoever wants to flood the room with hundreds of cards has to compute each one. Nothing is rejected: when the room is full, a card with computing effort pushes out one without, and questions without effort get at most four of the six answers per minute. Against an attacker with a fast computer this is only a small hurdle; signatures and vouching are there for that.",
+      "Gesperrte Knoten verschwinden aus dem Netz (S4)":
+        "Blocked nodes disappear from the network (S4)",
+      "Der Netzadmin eines Netzes kann eine Kennung sperren; im offenen Mycel ist das Sage-Protokol. Die Sperrliste ist öffentlich und unterschrieben und reist auf den Visitenkarten im Raum mit, jede App prüft die Unterschrift selbst. Eine gesperrte Kennung erscheint nicht mehr auf der Karte, ihre Fragen werden nicht beantwortet und ihre Antworten verworfen. Eine Liste ohne gültige Unterschrift des Netzadmins zählt nicht. Ein Gesperrter sieht, dass er gesperrt ist, und kann sich eine neue Kennung machen; dagegen helfen der Rechenaufwand und das Bürgen.":
+        "The network admin of a network can block an identifier; in the open mycelium that is Sage-Protokol. The block list is public and signed and travels on the calling cards in the room; every app checks the signature itself. A blocked identifier no longer appears on the map, its questions are not answered and its answers are discarded. A list without a valid signature of the network admin does not count. A blocked node can see that it is blocked and can make itself a new identifier; computing effort and vouching help against that.",
   } };
 
   /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */
