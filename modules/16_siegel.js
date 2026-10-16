@@ -233,6 +233,12 @@
       aspect:      "Bürgen für fremde Apps: befristet, mit Grund, je App (S5b)",
       description: "Eine Bürgschaft gilt jetzt höchstens 180 Tage; 30 Tage vor dem Ablauf zeigt die verbürgte App einen Hinweis, und verlängern kann nur der Bürge. Wer eine Bürgschaft zurückzieht, muss einen Grund angeben, der mit unterschrieben wird; ein Widerruf ohne Grund zählt nicht. Fällt eine verbürgte App auf oder wird gesperrt, verfällt nur ihre eigene Bürgschaft, die übrigen des Bürgen gelten weiter. Jede App merkt sich gesehene Widerrufe, auch wenn der Bürge nicht mehr im Raum ist. Neu ist die Einstellung „Nur Verbürgten antworten“: Fragen von Knoten, die bei dir weder Netzadmin noch Kontakt noch verbürgt sind, bleiben dann ohne Antwort.",
     },
+    {
+      since:       "2026-10-16",
+      module:      "23",
+      aspect:      "Empfehlungen kommen von selbst an (S5b Teil 2)",
+      description: "„Bürgen“ heißt in der Oberfläche jetzt „Empfehlen“. Eine Empfehlung muss nicht mehr als Text weitergegeben werden: die Karte dessen, der empfiehlt, trägt sie im Raum mit, und die empfohlene App holt sie beim nächsten „Wer ist im Raum?“ selbst ab. Abgeholt wird nur, was gültig unterschrieben ist und von jemandem kommt, der bei der App schon zählt (Netzadmin, eigener Kontakt oder selbst empfohlen); ein Unbekannter kann so niemandes Vorrat füllen. Die Netz-Verwaltung ist eine eigene Seite im Studio: Apps im Mycel, eigene Empfehlungen, Widerrufe mit Grund und die Sperrliste, mit Knöpfen zum Empfehlen, Verlängern, Widerrufen und Zurücknehmen.",
+    },
   ];
 
   // ---- Aspekt-4-Anker (Karte 16 § Sub (e) dynamische Render-Variante) ----
@@ -444,6 +450,10 @@
         "Vouching for other apps: limited, with a reason, per app (S5b)",
       "Eine Bürgschaft gilt jetzt höchstens 180 Tage; 30 Tage vor dem Ablauf zeigt die verbürgte App einen Hinweis, und verlängern kann nur der Bürge. Wer eine Bürgschaft zurückzieht, muss einen Grund angeben, der mit unterschrieben wird; ein Widerruf ohne Grund zählt nicht. Fällt eine verbürgte App auf oder wird gesperrt, verfällt nur ihre eigene Bürgschaft, die übrigen des Bürgen gelten weiter. Jede App merkt sich gesehene Widerrufe, auch wenn der Bürge nicht mehr im Raum ist. Neu ist die Einstellung „Nur Verbürgten antworten“: Fragen von Knoten, die bei dir weder Netzadmin noch Kontakt noch verbürgt sind, bleiben dann ohne Antwort.":
         "A vouch now lasts at most 180 days; 30 days before it expires the vouched app shows a notice, and only the voucher can renew it. Whoever withdraws a vouch has to give a reason, which is signed along; a revocation without a reason does not count. If a vouched app is flagged or blocked, only its own vouch lapses; the voucher's other vouches stay valid. Every app remembers revocations it has seen, even when the voucher is no longer in the room. New is the setting “Answer only vouched nodes”: questions from nodes that are neither the network admin, nor a contact, nor vouched for you then get no answer.",
+      "Empfehlungen kommen von selbst an (S5b Teil 2)":
+        "Recommendations arrive by themselves (S5b part 2)",
+      "„Bürgen“ heißt in der Oberfläche jetzt „Empfehlen“. Eine Empfehlung muss nicht mehr als Text weitergegeben werden: die Karte dessen, der empfiehlt, trägt sie im Raum mit, und die empfohlene App holt sie beim nächsten „Wer ist im Raum?“ selbst ab. Abgeholt wird nur, was gültig unterschrieben ist und von jemandem kommt, der bei der App schon zählt (Netzadmin, eigener Kontakt oder selbst empfohlen); ein Unbekannter kann so niemandes Vorrat füllen. Die Netz-Verwaltung ist eine eigene Seite im Studio: Apps im Mycel, eigene Empfehlungen, Widerrufe mit Grund und die Sperrliste, mit Knöpfen zum Empfehlen, Verlängern, Widerrufen und Zurücknehmen.":
+        "“Vouching” is now called “recommending” in the interface. A recommendation no longer has to be passed on as text: the card of the one who recommends carries it in the room, and the recommended app picks it up itself at the next “Who is in the room?”. Only what is validly signed and comes from someone who already counts for the app (network admin, own contact or recommended itself) is picked up; a stranger cannot fill anyone's store this way. The network admin is a separate page in the studio: apps in the mycel, own recommendations, revocations with a reason and the block list, with buttons to recommend, extend, revoke and take back.",
   } };
 
   /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */
