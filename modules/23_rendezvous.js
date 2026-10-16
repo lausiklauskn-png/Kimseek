@@ -106,6 +106,8 @@
  *              queryUnsignedMaxPerMin }  (S1, 2026-10-15)
  *              + { powBits, queryNoPowMaxPerMin, kartenVerdraengt,
  *                  fragenOhneAufwand }  (S3, 2026-10-16)
+ *              + { blockMax, blocklist, fragenGesperrt, antwortGesperrt,
+ *                  kartenGesperrt }  (S4, 2026-10-16)
  *
  * Self-check: emits a console.info line on script load. Siehe
  * docs/components/23_rendezvous.md + INTERFACES.md §1 Modul 23.
@@ -829,7 +831,7 @@
     var jetzt = nowSec();
     var anker = idListe([currentNetAdmin()]).concat(idListe(vouchCfg.anchors), idListe(o.anchors));
     var kontakte = loadVouchContacts().map(function (c) { return c.nodeId; }).concat(idListe(o.contacts));
-    var aufgefallen = idListe(vouchCfg.flagged).concat(idListe(o.flagged));
+    var aufgefallen = idListe(vouchCfg.flagged).concat(idListe(o.flagged), sperrIds());   // S4: gesperrt = aufgefallen
     var zettel = [];
     list.forEach(function (c) {
       var cv = (c && Array.isArray(c.vouches)) ? c.vouches : [];
@@ -947,6 +949,139 @@
     var liste = (z && typeof z === "object") ? [z] : [];
     cardCarried().vouches.forEach(function (x) { if (!z || x.sig !== z.sig) liste.push(x); });
     return liste;
+  }
+
+  // ---- S4 „Signierte Sperrliste im Mycel" (2026-10-16, INTERFACES § Modul 23 S4) ----
+  // Klaus 2026-10-16: öffentlich, signiert, Sage-Protokol unterschreibt (im
+  // eigenen Netz dessen Netzadmin). Die Liste reist auf den Karten im Raum mit
+  // (wie die Bürgschaften); kein Abruf aus dem Netz, beim Laden kein Netz.
+  // ANDERS ALS S5 GATET S4: gesperrte Kennungen fallen aus der Karte, ihre
+  // Fragen werden nicht beantwortet, ihre Antworten verworfen.
+  // Nur nach oben in der Oberfläche (blockId); gelöst wird nur mit einer neuen,
+  // kürzeren Liste (createBlocklist), wie in Kimboard.
+  var RDV_BLOCK_KIND = "sbkim-blocklist";
+  var RDV_BLOCK_MAX = 256;                     // Kennungen je Liste
+  var RDV_BLOCK_SEEN_MAX = 8;                  // geprüfte Listen je discover()-Lauf
+  var RDV_BLOCK_ID_MUSTER = /^[A-Za-z0-9_-]{16,128}$/;
+  var SPERRE_SPEICHER_PRAEFIX = "sbkim_sperre_";
+  var SPERRE_ADMINS_MAX = 4;                   // Speicher: je Netzadmin eine Liste
+  var sperre = { stand: "keine", admin: null, ts: 0, ids: [], zettel: null };
+  var fragenGesperrt = 0, antwortGesperrt = 0, kartenGesperrt = 0;   // _meta (S4)
+
+  function sperreSchluessel() { return cfg.dbSuffix ? SPERRE_SPEICHER_PRAEFIX + cfg.dbSuffix : null; }
+  // Form ohne Kryptografie (synchron). → true | false
+  function sperreForm(z, admin, jetzt) {
+    if (!z || typeof z !== "object" || z.kind !== RDV_BLOCK_KIND || z.v !== 1) return false;
+    if (!admin || z.admin !== admin) return false;
+    if (typeof z.ts !== "number" || !isFinite(z.ts) || z.ts > jetzt + RDV_VOUCH_SKEW_SEC) return false;
+    if (!Array.isArray(z.ids) || z.ids.length > RDV_BLOCK_MAX) return false;
+    var gesehen = Object.create(null);
+    for (var i = 0; i < z.ids.length; i++) {
+      var id = z.ids[i];
+      if (typeof id !== "string" || !RDV_BLOCK_ID_MUSTER.test(id)) return false;
+      if (gesehen[id] || id === admin) return false;     // keine Doppelten, nie der Netzadmin selbst
+      gesehen[id] = true;
+    }
+    if (typeof z.sig !== "string" || !z.spore || typeof z.spore !== "object") return false;
+    return z.spore.id === admin;
+  }
+  // Prüft EINE Sperrliste gegen den Netzadmin des LESERS.
+  // → "gueltig" | "falsch" | "nicht-pruefbar" (Modul 02 fehlt)
+  async function sperrePruefen(z, jetzt) {
+    if (!sperreForm(z, currentNetAdmin(), jetzt)) return "falsch";
+    var pr = resolveVerifier();
+    if (!pr || typeof pr.verifyDetached !== "function") return "nicht-pruefbar";   // S4: ohne Prüfer gilt keine Liste
+    try {
+      var sp = await pr.verifyForeignSpore(z.spore);
+      if (!(sp === true || (sp && sp.valid === true))) return "falsch";
+      var echt = await pr.verifyDetached(antwortOhneSig(z), z.sig, z.spore.publicKey);
+      return echt ? "gueltig" : "falsch";
+    } catch (_e) { return "falsch"; }
+  }
+  function sperreSpeicherLesen() {
+    var st = netStore(), k = sperreSchluessel();
+    if (!st || !k) return {};
+    var roh; try { roh = st.getItem(k); } catch (_e) { return {}; }
+    var o; try { o = roh ? JSON.parse(roh) : null; } catch (_e) { o = null; }
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+  }
+  function sperreSpeicherSchreiben(z) {
+    var st = netStore(), k = sperreSchluessel();
+    if (!st || !k) return false;
+    var o = sperreSpeicherLesen();
+    o[z.admin] = z;
+    var keys = Object.keys(o);
+    while (keys.length > SPERRE_ADMINS_MAX) { delete o[keys.shift()]; }
+    try { st.setItem(k, JSON.stringify(o)); return true; } catch (_e) { return false; }
+  }
+  function sperreSetzen(z) {
+    sperre = { stand: "gueltig", admin: z.admin, ts: z.ts, ids: z.ids.slice(), zettel: z };
+  }
+  // Eine Liste übernehmen, wenn sie gültig und NEUER ist. → Prüfstand
+  async function sperreUebernehmen(z, speichern) {
+    var st = await sperrePruefen(z, nowSec());
+    if (st === "nicht-pruefbar") { if (sperre.stand !== "gueltig") sperre.stand = "nicht-pruefbar"; return st; }
+    if (st !== "gueltig") return st;
+    var neuer = !(sperre.stand === "gueltig" && sperre.admin === z.admin && sperre.ts >= z.ts);
+    if (neuer) { sperreSetzen(z); if (speichern !== false) sperreSpeicherSchreiben(z); }
+    return st;
+  }
+  // Den Stand für den aktuellen Netzadmin herstellen (Speicher NEU geprüft:
+  // auf der geteilten Adresse kann eine Geschwister-App ihn beschrieben haben).
+  async function sperreLaden() {
+    var admin = currentNetAdmin();
+    if (sperre.admin !== admin) sperre = { stand: "keine", admin: admin, ts: 0, ids: [], zettel: null };
+    if (!admin) return sperre;
+    var z = sperreSpeicherLesen()[admin];
+    if (z && typeof z === "object" && !(sperre.stand === "gueltig" && sperre.ts >= z.ts)) {
+      await sperreUebernehmen(z, false);
+    }
+    return sperre;
+  }
+  function isBlocked(id) {
+    if (typeof id !== "string" || !id) return false;
+    if (sperre.stand !== "gueltig" || !sperre.admin || sperre.admin !== currentNetAdmin()) return false;
+    return sperre.ids.indexOf(id) !== -1;
+  }
+  function sperrIds() { return (sperre.stand === "gueltig" && sperre.admin === currentNetAdmin()) ? sperre.ids.slice() : []; }
+
+  async function createBlocklist(ids) {
+    var s = resolveSpore();
+    if (!s || typeof s.signDetached !== "function") return { ok: false, reason: "Modul 02 ohne signDetached — nicht unterschreibbar." };
+    var own; try { own = await s.getOwnSpore(); } catch (_e) { own = null; }
+    if (!own || !own.id) return { ok: false, reason: "Noch keine Identität." };
+    var admin = currentNetAdmin();
+    if (!admin || own.id !== admin) return { ok: false, reason: "Sperren kann nur der Netzadmin dieses Netzes." };
+    await sperreLaden();
+    var jetzt = nowSec();
+    var ts = (sperre.stand === "gueltig" && sperre.ts >= jetzt) ? sperre.ts + 1 : jetzt;
+    var z = { kind: RDV_BLOCK_KIND, v: 1, admin: admin, ts: ts, ids: Array.isArray(ids) ? ids.slice() : null, spore: own, sig: "" };
+    if (!sperreForm(z, admin, jetzt + RDV_VOUCH_SKEW_SEC)) return { ok: false, reason: "Ungültige Liste (Kennungen, Doppelte, Netzadmin selbst oder mehr als " + RDV_BLOCK_MAX + ")." };
+    delete z.sig;
+    try { z.sig = await s.signDetached(antwortOhneSig(z)); }
+    catch (e) { return { ok: false, reason: "Unterschrift fehlgeschlagen: " + (e && e.message ? e.message : e) }; }
+    var st = await sperreUebernehmen(z, true);
+    if (st !== "gueltig") return { ok: false, reason: "Die eigene Liste besteht die Prüfung nicht (" + st + ")." };
+    return { ok: true, zettel: z };
+  }
+  async function blockId(nodeId) {
+    if (typeof nodeId !== "string" || !RDV_BLOCK_ID_MUSTER.test(nodeId)) return { ok: false, reason: "Keine gültige Kennung." };
+    await sperreLaden();
+    var ids = sperrIds();
+    if (ids.indexOf(nodeId) !== -1) return { ok: true, zettel: sperre.zettel, schon: true };
+    ids.push(nodeId);
+    return await createBlocklist(ids);
+  }
+  async function addBlocklist(z) {
+    var vorher = sperre.ts;
+    var st = await sperreUebernehmen(z, true);
+    if (st === "nicht-pruefbar") return { ok: false, reason: "Modul 02 fehlt — nicht prüfbar." };
+    if (st !== "gueltig") return { ok: false, reason: "Keine gültige Sperrliste des Netzadmins dieses Netzes." };
+    return { ok: true, newer: sperre.ts > vorher || (sperre.zettel === z) };
+  }
+  async function currentBlocklist() {
+    await sperreLaden();
+    return { stand: sperre.stand, admin: sperre.admin, ts: sperre.ts, ids: sperre.ids.slice(), zettel: sperre.zettel };
   }
 
   // VERKEHR-Lampe (Modul 17 / Status-Widget) ehrlich setzen: aktiv, solange
@@ -1258,6 +1393,8 @@
     var mit = cardCarried();                       // S5: Bürgschaften / Widerrufe mittragen
     if (mit.vouches.length) card.vouches = mit.vouches;
     if (mit.revocations.length) card.revocations = mit.revocations;
+    try { await sperreLaden(); } catch (_e) {}
+    if (sperre.stand === "gueltig" && sperre.zettel) card.blocklist = sperre.zettel;   // S4: Liste mittragen
     await powRechnen(card);                        // S3: Aufwand rechnen (nach allen Feldern)
     var pr;
     try {
@@ -1361,6 +1498,9 @@
     var reihe = [];                       // S3: Reihenfolge der aufgenommenen Kennungen
     var verdraengtHier = 0;               // S3: ohne Aufwand verdrängt (dieser Lauf)
     var vouchZettel = [];                 // S5: aus ALLEN Karten-Ereignissen, nicht nur der neuesten
+    var blockZettel = [], blockSigs = Object.create(null);   // S4: Sperrlisten aus allen Karten-Ereignissen
+    var gesperrtHier = 0;                 // S4: herausgefallene Karten dieses Laufs
+    var adminD = currentNetAdmin();
     var unsub = null;
     try {
       unsub = relay.subscribe(
@@ -1402,6 +1542,12 @@
             if (Array.isArray(card.vouches)) vouchZettel = vouchZettel.concat(card.vouches.slice(0, RDV_VOUCH_PER_CARD_MAX));
             if (Array.isArray(card.revocations)) vouchZettel = vouchZettel.concat(card.revocations.slice(0, RDV_REVOKE_PER_CARD_MAX));
           }
+          // S4: nur Listen des eigenen Netzadmins sammeln (Vorfilter ohne Krypto).
+          var bl = card.blocklist;
+          if (bl && typeof bl === "object" && bl.admin === adminD && typeof bl.sig === "string" &&
+              !blockSigs[bl.sig] && blockZettel.length < RDV_BLOCK_SEEN_MAX * 4) {
+            blockSigs[bl.sig] = true; blockZettel.push(bl);
+          }
           var ts = (typeof card.ts === "number" ? card.ts : (typeof ev.created_at === "number" ? ev.created_at : 0));
           if (!byId[card.nodeId]) reihe.push({ id: card.nodeId, sender: sender });
           if (!byId[card.nodeId] || ts > byId[card.nodeId].ts) byId[card.nodeId] = { card: card, ts: ts, pow: mitAufwand };
@@ -1441,6 +1587,22 @@
         // ⚠ Die Prüfung steht VOR dem Zusammenfassen nach Namen: sonst verdrängt
         //   eine unechte Karte mit neuerer Zeit die echte gleichen Namens und fällt
         //   danach selbst heraus — beide wären weg.
+        // S4: Sperrliste herstellen (Speicher + Raum, neueste zuerst), dann
+        // gesperrte Karten herausnehmen — VOR Echtheit, Namen und Bürgen.
+        try {
+          await sperreLaden();
+          var blKand = blockZettel.filter(function (z) { return typeof z.ts === "number"; })
+            .sort(function (a, b) { return b.ts - a.ts; }).slice(0, RDV_BLOCK_SEEN_MAX);
+          for (var bi = 0; bi < blKand.length; bi++) {
+            if (sperre.stand === "gueltig" && sperre.ts >= blKand[bi].ts) break;
+            await sperreUebernehmen(blKand[bi], true);
+          }
+        } catch (_e) { /* fail-soft: ohne Liste nichts gesperrt */ }
+        cards = cards.filter(function (c) {
+          if (isBlocked(c.nodeId)) { gesperrtHier++; return false; }
+          return true;
+        });
+        kartenGesperrt += gesperrtHier;
         var verifier = resolveVerifier();
         var cardsVerified = !!verifier;
         if (verifier) {
@@ -1497,6 +1659,7 @@
           cardsVerified: cardsVerified,   // false = Modul 02 fehlt, Karten UNGEPRÜFT
           rejected: rejected,             // ehrlich: wie viele fielen raus
           verdraengt: (kartenVerdraengt += verdraengtHier, verdraengtHier),     // S3: Karten ohne Aufwand, die bei vollem Raum weichen mussten
+          gesperrt: gesperrtHier,         // S4: Karten gesperrter Kennungen, die herausfielen
         });
       }, listenMs);
     });
@@ -1733,6 +1896,8 @@
               forgetQid(q.qid);                   // eine Fälschung sperrt die echte qid nicht
               return;
             }
+            try { await sperreLaden(); } catch (_e) {}
+            if (isBlocked(q.fromNodeId) || (q.spore && isBlocked(q.spore.id))) { fragenGesperrt++; return; }   // S4
             var unsigniert = stand !== "bestaetigt";
             var ohneAufwand = !powPruefen(q);     // S3
             if (!underRateLimit(unsigniert, ohneAufwand)) return;   // Überschuss still verwerfen
@@ -1818,6 +1983,7 @@
       ? Math.floor(opts.timeoutMs) : RDV_ASK_TIMEOUT_MS;
     var qid = "q" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     var started = Date.now();
+    try { await sperreLaden(); } catch (_e) {}    // S4
 
     return await new Promise(function (resolve) {
       var done = false, unsub = null, timer = null;
@@ -1841,6 +2007,7 @@
         var vorlaeufig = null, graceTimer = null;
         function antwortNehmen(a) {
             if (!a || a.kind !== RDV_QUERY_RES_KIND || a.qid !== qid || a.toNodeId !== ownId) return;
+            if (isBlocked(a.fromNodeId) || (a.spore && isBlocked(a.spore.id))) { antwortGesperrt++; return; }   // S4
             zettelPruefen(a, toNodeId).then(function (stand) {
               if (done) return;
               if (stand === "falsch") { antwortVerworfen++; return; }
@@ -1909,6 +2076,7 @@
     var own = await getOwnLiveSpore();
     if (!own || !own.id) return { ok: false, reason: "Noch keine Identität — zuerst anmelden.", answers: [] };
     var ownId = own.id;
+    try { await sperreLaden(); } catch (_e) {}    // S4
     var lookbackSec = (typeof opts.lookbackSec === "number" && isFinite(opts.lookbackSec) && opts.lookbackSec > 0)
       ? Math.floor(opts.lookbackSec) : RDV_ANSWER_LOOKBACK_SEC;
     var waitMs = (typeof opts.waitMs === "number" && isFinite(opts.waitMs) && opts.waitMs > 0)
@@ -1936,6 +2104,7 @@
             if (!a || a.kind !== RDV_QUERY_RES_KIND) return;      // nur Antwort-Zettel
             if (a.toNodeId !== ownId) return;                     // nur an mich
             if (typeof a.qid !== "string" || !want[a.qid]) return; // nur meine offenen Fragen
+            if (isBlocked(a.fromNodeId) || (a.spore && isBlocked(a.spore.id))) { antwortGesperrt++; return; }   // S4
             var p = zettelPruefen(a, want[a.qid].von).then(function (stand) {
               if (stand === "falsch") { antwortVerworfen++; return; }
               var best = stand === "bestaetigt";
@@ -1984,6 +2153,11 @@
     vouchPassOn: vouchPassOn,                 // S5 Teil 2 — Text zum Weitergeben (Liste)
     vouchSafetyNumber: vouchSafetyNumber,     // S5 Teil 2 — Sicherheitsnummer zum Vergleich
     currentNetAdmin: currentNetAdmin,         // S5 Teil 2 — Netzadmin des aktuellen Netzes
+    blockId: blockId,                         // S4 — Netzadmin sperrt eine Kennung (nur nach oben)
+    createBlocklist: createBlocklist,         // S4 — Netzadmin unterschreibt eine ganze Liste
+    addBlocklist: addBlocklist,               // S4 — eingefügte Liste prüfen und übernehmen
+    currentBlocklist: currentBlocklist,       // S4 — Stand der Liste des aktuellen Netzadmins
+    isBlocked: isBlocked,                     // S4 — (nodeId) → Boolean, Stand der zuletzt geladenen Liste
     ensureIdentity: ensureIdentity,             // Modus A (sanft, automatisch, idempotent)
     cleanupSharedOrigin: cleanupSharedOrigin,   // Modus-B-Reinigung (nur eigene Origin)
     repairAndReconnect: repairAndReconnect,     // Modus B (zerstörend, nutzer-ausgelöst)
@@ -2049,6 +2223,13 @@
         vouchTtlSec: RDV_VOUCH_TTL_SEC,           // S5
         vouchAnchors: idListe(vouchCfg.anchors).length, // S5 (init-Anker, ohne Netzadmin)
         netAdmin: currentNetAdmin(),              // S5 Teil 2
+        blockMax: RDV_BLOCK_MAX,                  // S4
+        blocklist: { stand: (sperre.admin === currentNetAdmin()) ? sperre.stand : "keine",
+                     admin: currentNetAdmin(), ts: (sperre.admin === currentNetAdmin()) ? sperre.ts : 0,
+                     count: sperrIds().length },  // S4
+        fragenGesperrt: fragenGesperrt,           // S4: nicht beantwortete Fragen gesperrter Kennungen
+        antwortGesperrt: antwortGesperrt,         // S4: verworfene Antworten gesperrter Kennungen
+        kartenGesperrt: kartenGesperrt,           // S4: herausgefallene Karten (alle Läufe)
         rankByQueryNote: "rankCardsByQuery(cards, queryVec, {raw?}) rankt Raum-Karten nach Frage-Passung (Modul 04 relatedness, zentriert; raw→match). REINE Anzeige/Auswahl, gatet nichts, 0.80-Riegel unberührt; fail-soft ohne Vektor → Eingabe-Reihenfolge.", // A11
       };
     },
