@@ -215,6 +215,12 @@
       aspect:      "Knoten können füreinander bürgen (S5)",
       description: "Ein Knoten kann für einen anderen unterschreiben: „Diese Kennung kenne ich.“ Vorher vergleichen beide eine Sicherheitsnummer auf einem zweiten Weg, etwa am Telefon. Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust: dem Netzadmin deines Netzes oder einem eigenen Kontakt, höchstens zwei Schritte weit und ein Jahr lang. Ein Bürge kann zurückziehen, und wer für einen auffälligen Knoten bürgt, verliert das Gewicht seiner Bürgschaften. Im offenen Mycel ist Sage-Protokol der Netzadmin, in einem eigenen Netz dessen Betreiber. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.",
     },
+    {
+      since:       "2026-10-16",
+      module:      "23",
+      aspect:      "Fluten wird teurer (S3)",
+      description: "Wer eine Visitenkarte in den gemeinsamen Raum hängt oder einem anderen Knoten eine Frage stellt, rechnet vorher eine kleine Prüfsummen-Aufgabe. Für eine einzelne Karte dauert das am Gerät nur einen Augenblick; wer den Raum mit Hunderten Karten fluten will, muss für jede rechnen. Abgewiesen wird nichts: Ist der Raum voll, verdrängt eine Karte mit Rechenaufwand eine ohne, und Fragen ohne Aufwand bekommen höchstens vier der sechs Antworten je Minute. Gegen einen Angreifer mit schnellem Rechner ist das nur eine kleine Hürde; dafür gibt es die Unterschriften und das Bürgen.",
+    },
   ];
 
   // ---- Aspekt-4-Anker (Karte 16 § Sub (e) dynamische Render-Variante) ----
@@ -414,6 +420,10 @@
         "Nodes can vouch for each other (S5)",
       "Ein Knoten kann für einen anderen unterschreiben: „Diese Kennung kenne ich.“ Vorher vergleichen beide eine Sicherheitsnummer auf einem zweiten Weg, etwa am Telefon. Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust: dem Netzadmin deines Netzes oder einem eigenen Kontakt, höchstens zwei Schritte weit und ein Jahr lang. Ein Bürge kann zurückziehen, und wer für einen auffälligen Knoten bürgt, verliert das Gewicht seiner Bürgschaften. Im offenen Mycel ist Sage-Protokol der Netzadmin, in einem eigenen Netz dessen Betreiber. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.":
         "A node can sign for another one: “I know this identifier.” Before that, both compare a safety number over a second channel, for example by phone. A vouch only counts for you if you already trust the voucher: the network admin of your network or an own contact, at most two steps away and for one year. A voucher can withdraw, and whoever vouches for a node that has been flagged loses the weight of their vouches. In the open mycelium Sage-Protokol is the network admin; in an own network it is whoever runs it. When you ask, vouched cards come first; cards without a vouch stay visible and are still asked.",
+      "Fluten wird teurer (S3)":
+        "Flooding costs more (S3)",
+      "Wer eine Visitenkarte in den gemeinsamen Raum hängt oder einem anderen Knoten eine Frage stellt, rechnet vorher eine kleine Prüfsummen-Aufgabe. Für eine einzelne Karte dauert das am Gerät nur einen Augenblick; wer den Raum mit Hunderten Karten fluten will, muss für jede rechnen. Abgewiesen wird nichts: Ist der Raum voll, verdrängt eine Karte mit Rechenaufwand eine ohne, und Fragen ohne Aufwand bekommen höchstens vier der sechs Antworten je Minute. Gegen einen Angreifer mit schnellem Rechner ist das nur eine kleine Hürde; dafür gibt es die Unterschriften und das Bürgen.":
+        "Whoever posts a calling card to the shared room or asks another node a question first solves a small checksum puzzle. For a single card this takes only a moment on the device; whoever wants to flood the room with hundreds of cards has to compute each one. Nothing is rejected: when the room is full, a card with computing effort pushes out one without, and questions without effort get at most four of the six answers per minute. Against an attacker with a fast computer this is only a small hurdle; signatures and vouching are there for that.",
   } };
 
   /* Die gewaehlte Sprache. null = „nicht gesetzt" → <html lang> entscheidet. */
