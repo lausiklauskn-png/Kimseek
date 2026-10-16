@@ -1,12 +1,21 @@
 <!doctype html>
 <!--
   ============================================================
-   Kimseek  v0.2  © 2026 · Kimseek (Semantische Bedeutungs-Suche)
-   Erklär-Seite: So funktioniert das Mycel & wie du geschützt bist.
-   Inhalt aus dem SBKIM-Hub (Sage·Protokol, docs/sicherheit)
-   uebernommen, re-geskinnt in eigener Teal-Identitaet.
-   Laeuft auch im In-Page-Overlay (iframe) des Siegel-Modals;
-   der „zurueck"-Link blendet sich dort aus.
+   SBKIM-Knoten · © 2026 · Klaus Nitzsche
+   Erklär-Seite: So funktioniert das Mycel, das Siegel und der Schutz.
+   Überblick in Stichworten, Deutsch und Englisch (Klaus 2026-10-17).
+   Quelle: Sage-Protokol/sicherheit.html — neutral, ohne App-Namen.
+   Wer sie kopiert, darf Rückweg, Farben und Sprach-Schlüssel anpassen
+   (kein Kanon). Läuft auch im Overlay (iframe) des Siegels; der
+   „zurück"-Link blendet sich dort aus.
+
+   Sprache: ?lang=en|de · sonst data-sprache-schluessel (localStorage)
+   · sonst die Sprache der einbettenden Seite · sonst der Browser. Der Knopf schaltet um, ohne zu
+   speichern.
+
+   Springen: jeder Link auf eine Stelle dieser Seite merkt sich, woher
+   er kam. „↩ zurück" (schwebend und an der Erklärung) führt dorthin.
+   Ohne Skript gehen die Links trotzdem, zurück über den Browser.
   ============================================================
 -->
 <html lang="de">
@@ -14,344 +23,1000 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0c0f12">
+<meta name="robots" content="noindex">
 <title>So funktioniert das Mycel — Kimseek</title>
 <style>
+  :root { --akzent: #36d6c3; --text: #d7dee5; --hell: #eef3f6; --grau: #8a97a3; --gold: rgba(201,169,97,.6); }
+  html { scroll-behavior: smooth; scroll-padding-top: 12px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body {
     font-family: system-ui, Arial, sans-serif;
-    max-width: 820px; margin: 40px auto; padding: 20px;
-    line-height: 1.6; color: #d7dee5; background: #0c0f12;
+    max-width: 820px; margin: 24px auto; padding: 16px;
+    line-height: 1.6; color: var(--text); background: #0c0f12;
   }
-  a { color: #36d6c3; }
-  h1 { color: #eef3f6; font-size: 1.5rem; }
-  h2 { color: #eef3f6; font-size: 1.15rem; margin-top: 1.8em; }
-  h3 { color: #b6c2cc; margin-top: 1.2em; }
-  strong { color: #eef3f6; }
-  code { font-family: ui-monospace, "Geist Mono", monospace; color: #36d6c3; }
-  .lede { color: #b6c2cc; font-size: 1.02rem; }
-  .section { margin-bottom: 36px; }
-  ol, ul { padding-left: 1.4em; }
-  li { margin-bottom: 0.4em; }
-  .wand { border-left: 3px solid #283139; padding-left: 12px; margin: 0.6em 0; }
-  .achtung {
-    border: 1px solid #5a4a1f; background: rgba(201,169,97,0.08);
-    border-radius: 8px; padding: 0.9rem 1.1rem;
-  }
-  .achtung strong { color: #f5e6b8; }
-  dl.woerter dt { color: #36d6c3; font-weight: 700; margin-top: 0.7em;
-    font-family: ui-monospace, "Geist Mono", monospace; font-size: 0.92rem; }
-  dl.woerter dd { margin: 0.1em 0 0 0; }
-  .back { display: inline-block; margin-bottom: 1.4rem; color: #8a97a3; text-decoration: none; }
-  .back:hover { color: #36d6c3; }
+  a { color: var(--akzent); }
+  h1 { color: var(--hell); font-size: 1.5rem; margin: .4em 0 .6em; }
+  h2 { color: var(--hell); font-size: 1.18rem; margin-top: 2em; border-top: 1px solid #222b33; padding-top: 1em; }
+  h3 { color: #b6c2cc; font-size: 1.02rem; margin-top: 1.3em; }
+  strong { color: var(--hell); }
+  code { font-family: ui-monospace, monospace; color: var(--akzent); }
+  ol, ul { padding-left: 1.3em; }
+  li { margin-bottom: .35em; }
+  table { width: 100%; border-collapse: collapse; margin: .7em 0; font-size: .95rem; }
+  th, td { text-align: left; vertical-align: top; padding: .45em .55em; border-bottom: 1px solid #222b33; }
+  th { color: var(--hell); font-weight: 700; background: rgba(127,140,150,.08); }
+  .tabelle { overflow-x: auto; }
+  .kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .back { color: var(--grau); text-decoration: none; }
+  .back:hover { color: var(--akzent); }
+  .sprachknopf { font: .8rem ui-monospace, monospace; color: var(--grau); background: rgba(127,127,127,.1);
+    border: 1px solid rgba(120,140,160,.25); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .sprachknopf:hover { color: var(--akzent); border-color: var(--akzent); }
+  .kasten { border: 2px solid var(--gold); background: rgba(201,169,97,.1); border-radius: 12px; padding: .9rem 1.1rem; margin: 1em 0; }
+  .kasten h2 { border: 0; margin: 0 0 .4em; padding: 0; font-size: 1.12rem; }
+  .achtung { border: 1px solid #5a4a1f; background: rgba(201,169,97,.08); border-radius: 8px; padding: .8rem 1rem; margin: 1em 0; }
+  .grenze { border-left: 3px solid #c85050; padding-left: 12px; margin: .7em 0; }
+  .inhalt { columns: 2 16em; column-gap: 2em; padding-left: 1.3em; }
+  .inhalt li { break-inside: avoid; }
+  .stand { font-weight: 700; white-space: nowrap; }
+  .klein { font-size: .9rem; color: #aab5bf; }
+  .knopf { font-family: ui-monospace, monospace; font-size: .9em; color: var(--hell); background: rgba(127,140,150,.16);
+    border: 1px solid rgba(127,140,150,.35); border-radius: 6px; padding: 0 .35em; white-space: nowrap; }
+  a.w { color: var(--akzent); text-decoration: underline dotted; text-underline-offset: 3px; }
+  dl.woerter dt { color: var(--akzent); font-weight: 700; margin-top: .8em; font-family: ui-monospace, monospace; font-size: .93rem; }
+  dl.woerter dd { margin: .1em 0 0 0; }
+  figure { margin: 1.2em 0; }
+  figure svg { width: 100%; max-width: 440px; height: auto; display: block; margin: 0 auto; }
+  figcaption { font-size: .92rem; color: #aab5bf; margin-top: .4em; }
+  .ziel { outline: 2px solid var(--akzent); outline-offset: 4px; border-radius: 4px; transition: outline-color 1.6s; }
+  .ziel-aus { outline-color: transparent; }
+  .rueck-hier { margin-left: .5em; font: .8rem system-ui, sans-serif; color: #0c0f12; background: var(--akzent);
+    border: 0; border-radius: 999px; padding: 2px 10px; cursor: pointer; vertical-align: middle; }
+  #rueckSchwebe { position: fixed; right: 14px; bottom: 14px; z-index: 5; font: .95rem system-ui, sans-serif;
+    color: #0c0f12; background: var(--akzent); border: 0; border-radius: 999px; padding: 10px 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.45); cursor: pointer; }
+  #rueckSchwebe[hidden], .rueck-hier[hidden] { display: none; }
+  @media (max-width: 480px) { body { padding: 12px; } th, td { padding: .35em .4em; font-size: .9rem; } }
 </style>
 </head>
 <body>
-  <a class="back" id="backLink" href="./index.html">← zurück zur Startseite</a>
 
-  <h1>So funktioniert das Mycel — und so bist du geschützt.</h1>
+<!-- ═══════════════════════════════ DEUTSCH ═══════════════════════════════ -->
+<div id="de" lang="de" data-sprache="de">
+  <div class="kopf">
+    <a class="back" data-zurueck href="./index.html">← zurück zur Startseite</a>
+    <button class="sprachknopf" type="button" data-sprachknopf hidden translate="no">English</button>
+  </div>
 
+  <h1>So funktioniert das Mycel. Und so bist du geschützt.</h1>
 
-  <!-- NUTZEN-OBEN-ANFANG · Klaus 2026-09-29: „gleich oben als erstes: was ist es und was nützt es mir" — in allen Knoten gleich, Quelle: Sage-Protokol/sicherheit.html -->
-  <style>
-    .nz-oben { border: 2px solid rgba(201,169,97,.6); background: rgba(201,169,97,.1); border-radius: 12px; padding: 1rem 1.2rem; margin: 1em 0 1.6em; }
-    .nz-oben h2 { margin: 0 0 .5em; font-size: 1.15rem; }
-    .nz-oben p { margin: .45em 0; }
-    .nz-oben ul { margin: .5em 0; padding-left: 1.2em; }
-    .nz-oben li { margin: .3em 0; }
-  </style>
-  <div class="nz-oben" id="kurz">
-    <h2>Was ist das — und was nützt es dir?</h2>
-    <p><strong>Was:</strong> Deine Apps und Geräte verbinden sich zu einem kleinen Netz und
-    beantworten Fragen gemeinsam — ohne Konzern-Server dazwischen.</p>
-    <p><strong>Was es dir bringt:</strong></p>
+  <div class="kasten" id="kurz">
+    <h2>In einer Minute</h2>
     <ul>
-      <li><strong>Weniger Suchen:</strong> du fragst einmal, und es antwortet, wer es weiß.
-        Du musst nicht wissen, welches Programm oder welcher Kollege es hat.</li>
-      <li><strong>Weniger Abtippen und Hin-und-her-Schicken:</strong> keine fünf Fassungen
-        derselben Datei in fünf Postfächern.</li>
-      <li><strong>Deine Daten bleiben bei dir:</strong> es wandern Frage und Antwort, nicht deine Dateien.</li>
-      <li><strong>Ein Netz nur für dich:</strong> für Firma, Verein oder Familie lässt es sich so
-        abschirmen, dass niemand von außen hineinkommt.</li>
+      <li><strong>Was:</strong> Deine Apps und Geräte bilden ein kleines Netz, das <a class="w" href="#mycel">Mycel</a>.
+        Sie beantworten Fragen gemeinsam, ohne Konzern-Server dazwischen.</li>
+      <li><strong>Wie:</strong> Jede App ist ein <a class="w" href="#w-knoten">Knoten</a> mit einer
+        unterschriebenen Visitenkarte, der <a class="w" href="#w-spore">Spore</a>. Die Zettel laufen über
+        eine Poststelle, das <a class="w" href="#w-relais">Relais</a>.</li>
+      <li><strong>Was es dir bringt:</strong> einmal fragen, und es antwortet, wer es weiß. Deine Dateien
+        bleiben bei dir, es wandern nur Frage und Antwort.</li>
+      <li><strong>Wie du geschützt bist:</strong> Jede Karte, Frage und Antwort ist unterschrieben. Deine App
+        prüft alles selbst, bevor sie es glaubt. Mehr dazu unter <a class="w" href="#schutz">Wie geschützt wird</a>.</li>
+      <li><strong>Was das Siegel sagt:</strong> Diese App hat beim Start geprüft, dass ihre Schutz-Bausteine da
+        sind. Siehe <a class="w" href="#siegel">Das Siegel</a>.</li>
     </ul>
-    <p><a href="#nutzen">Ausführlich: Beispiele, Belege und wie man ein eigenes Netz baut ↓</a></p>
-  </div>
-  <!-- NUTZEN-OBEN-ENDE -->
-
-  <div class="section">
-    <p class="lede"><strong>Was ist das überhaupt?</strong> SBKIM ist ein Weg, wie Anwendungen
-    im Browser einander finden — nicht über eine zentrale Liste, sondern über Bedeutung. Eine
-    Seite, die Rezepte kennt, und eine, die Weine kennt, erkennen sich, weil ihre Themen nah
-    beieinanderliegen. Kein Server in der Mitte, keine Anmeldung, kein Konzern dazwischen.</p>
-
-    <p><strong>Was ist ein Knoten?</strong> Ein Knoten ist eine Browser-Anwendung — eine
-    Internetseite, ein Web-Werkzeug oder eine installierbare App — die die SBKIM-Bausteine trägt.
-    Er hat eine eigene, unterschriebene Identität (eine öffentliche Visitenkarte) und einen
-    geheimen Schlüssel, der den Browser nie verlässt. Den Schlüssel kannst du als verschlüsselte
-    Sicherung (mit Passwort) wegspeichern und auf einem anderen Gerät zurückspielen.</p>
+    <p class="klein">Jedes unterstrichene Wort führt zu seiner Erklärung. Mit <strong>↩ zurück</strong> kommst
+    du wieder an die Stelle, von der du kamst.</p>
   </div>
 
-  <!-- NUTZEN-ANFANG · Klaus 2026-09-29: „Was nützt mir das?" — in allen Knoten gleich, Quelle: Sage-Protokol/sicherheit.html -->
-  <style>
-    .nz-netz { margin: 1.6em 0 2.2em; }
-    .nz-netz .nz-kurz { font-size: 1.05rem; }
-    .nz-netz .nz-karte { border: 1px solid rgba(127,140,150,.35); border-radius: 10px; padding: .8rem 1rem; margin: .7em 0; background: rgba(127,140,150,.06); }
-    .nz-netz .nz-karte h4 { margin: 0 0 .3em; font-size: 1rem; }
-    .nz-netz .nz-karte p { margin: .3em 0; }
-    .nz-netz .nz-heute { font-size: .92rem; opacity: .85; }
-    .nz-netz figure { margin: 1.2em 0; }
-    .nz-netz svg { width: 100%; max-width: 460px; height: auto; display: block; margin: 0 auto; color: inherit; }
-    .nz-netz figcaption { font-size: .92rem; opacity: .85; margin-top: .4em; }
-    .nz-netz .nz-stand { font-weight: 700; white-space: nowrap; }
-    .nz-netz .nz-quelle { font-size: .9rem; opacity: .85; }
-    .nz-netz .nz-achtung { border: 1px solid rgba(201,169,97,.55); background: rgba(201,169,97,.1); border-radius: 8px; padding: .9rem 1.1rem; margin-top: 1em; }
-    .nz-netz .nz-achtung p { margin: .4em 0; }
-  </style>
-  <div class="section nz-netz" id="nutzen">
-    <h2>Was nützt mir das?</h2>
+  <h2 id="inhalt">Inhalt</h2>
+  <ol class="inhalt">
+    <li><a href="#mycel">Was ist das Mycel?</a></li>
+    <li><a href="#nutzen">Wofür ist es gut?</a></li>
+    <li><a href="#fenster">Das Fenster „Mit dem Knotennetz verbinden“</a></li>
+    <li><a href="#karten">Was die Karten im Raum zeigen</a></li>
+    <li><a href="#siegel">Das Siegel</a></li>
+    <li><a href="#lampen">Die Lampen-Leiste</a></li>
+    <li><a href="#warum">Warum es Schutz braucht</a></li>
+    <li><a href="#schutz">Wie geschützt wird</a></li>
+    <li><a href="#eigenes-netz">Ein eigenes Netz einrichten</a></li>
+    <li><a href="#empfehlen">Empfehlen und Sperren</a></li>
+    <li><a href="#regel">Die eine Regel für dich</a></li>
+    <li><a href="#offen">Was noch nicht geht</a></li>
+    <li><a href="#mehr">Mehr lesen</a></li>
+    <li><a href="#woerter">Wörterbuch</a></li>
+  </ol>
 
-    <h3>„Ich kann doch auch meinem Kollegen eine Mail schicken."</h3>
-    <p>Kannst du, und für vieles ist das richtig. Der Unterschied liegt an vier Stellen:</p>
+  <!-- 1 -->
+  <h2 id="mycel">1 · Was ist das Mycel?</h2>
+  <ul>
+    <li><strong>Ein Netz aus Apps im Browser.</strong> Jede App, die die SBKIM-Bausteine trägt, ist ein
+      <a class="w" href="#w-knoten">Knoten</a>. Sie läuft ganz in deinem Browser.</li>
+    <li><strong>Sie finden einander über Bedeutung.</strong> Eine App, die Rezepte kennt, und eine, die
+      Getränke kennt, merken, dass ihre Themen nah beieinanderliegen. Dafür wird jede Beschreibung in
+      einen <a class="w" href="#w-vektor">Bedeutungs-Vektor</a> umgerechnet.</li>
+    <li><strong>Das Relais ist eine Poststelle.</strong> Es nimmt unterschriebene Zettel an und reicht sie
+      weiter. Es kennt keine Konten und führt kein Verzeichnis. Zurückhalten kann es Zettel, unbemerkt
+      verändern nicht, denn dann passt die <a class="w" href="#w-signatur">Unterschrift</a> nicht mehr.</li>
+    <li><strong>Was „ohne Server“ heißt.</strong> Ganz ohne Server geht es nicht, das Relais läuft auf einem.
+      Es fehlt aber die große Mitte, die alle Daten hält, die Nutzer verwaltet und entscheidet, wer was
+      findet. Relais gibt es viele, eine App kann mehrere zugleich nutzen. Fällt eines aus, tragen die
+      anderen.</li>
+    <li><strong>Deine Identität bleibt bei dir.</strong> Der geheime <a class="w" href="#w-schluessel">Schlüssel</a>
+      verlässt den Browser nie. Sichern kannst du ihn als verschlüsselte Datei mit Passwort.</li>
+    <li><strong>Der Raum.</strong> Alle Apps melden sich in einem gemeinsamen <a class="w" href="#w-raum">Raum</a>
+      an. Wer will, legt ein <a class="w" href="#eigenes-netz">eigenes Netz</a> an, in das nur eigene Apps kommen.</li>
+  </ul>
+
+  <!-- 2 -->
+  <h2 id="nutzen">2 · Wofür ist es gut?</h2>
+  <ul>
+    <li><strong>Du musst nicht wissen, wer es hat.</strong> Eine Mail geht an einen Menschen, den du schon
+      kennst. Eine Frage im Mycel geht an alle passenden Knoten, und es antwortet, wer zum Thema passt.</li>
+    <li><strong>Die Daten bleiben, wo sie sind.</strong> Es wandern Frage und Antwort, keine Kopie der ganzen
+      Datei. Es entstehen keine fünf Fassungen desselben Dokuments in fünf Postfächern.</li>
+    <li><strong>Es wird nichts abgetippt.</strong> Was eine App schon weiß, muss niemand in die nächste übertragen.</li>
+    <li><strong>Kein Anbieter dazwischen.</strong> Kein Konto, kein Dienst, der abgeschaltet oder teurer werden kann.</li>
+  </ul>
+  <div class="tabelle"><table>
+    <tr><th>Wo</th><th>Beispiel</th></tr>
+    <tr><td><strong>Firma</strong></td><td>Werkstatt-Tablet mit Aufträgen, Büro-Rechner mit Buchhaltung, Lager-Rechner mit Material.
+      Frage: „Haben wir schon einmal einen Transporter beschriftet, und mit welcher Folie?“ Jede App
+      antwortet mit dem, was sie weiß.</td></tr>
+    <tr><td><strong>Eigene Geräte</strong></td><td>Rezepte auf dem Tablet, Getränke auf dem Handy. Frage: „Was passt zu Lachs?“
+      Beide antworten, jede mit ihrem Teil.</td></tr>
+    <tr><td><strong>Verein</strong></td><td>Jedes Mitglied hat seine eigene Sammlung. Wer etwas weiß, antwortet. Nichts liegt bei
+      einem fremden Anbieter.</td></tr>
+  </table></div>
+  <p class="klein"><strong>Zum Stand:</strong> Heute tauschen die Knoten Fragen und Antworten als Text aus. Dass Programme
+  ganze Aufträge oder Rechnungen selbst abgleichen, ist nicht gebaut. Wie viel Zeit das Netz spart, ist für
+  SBKIM selbst noch nicht gemessen. Belegt ist, dass zwei Knoten einander ohne Mitte finden und Fragen
+  beantworten. Was das Hin- und Herspringen zwischen Programmen kostet, haben andere gemessen: rund 1.200
+  Wechsel am Tag bei 137 Beschäftigten (Harvard Business Review, 2022,
+  <a href="https://hbr.org/2022/08/how-much-time-and-energy-do-we-waste-toggling-between-applications" target="_blank" rel="noopener noreferrer">Artikel</a>).</p>
+
+  <!-- 3 -->
+  <h2 id="fenster">3 · Das Fenster „🌐 Mit dem Knotennetz verbinden“</h2>
+  <p>Das Fenster schwebt über der App. Du kannst es ziehen, verkleinern und schließen. Die App muss nur offen
+  bleiben, damit du erreichbar bist.</p>
+  <h3>Zwei Stufen</h3>
+  <ul>
+    <li><strong>🔎 Nur stöbern:</strong> <span class="knopf">👥 Wer ist im Raum?</span> zeigt, wer da ist. Ohne eigene
+      Identität, du wirst selbst nicht gefunden.</li>
+    <li><strong>🌐 Voll mitmachen:</strong> <span class="knopf">🌐 Mit dem Knotennetz verbinden</span> legt einmal eine
+      eigene <a class="w" href="#w-identitaet">Identität</a> an. Erst dann bist du auffindbar und kannst fragen.</li>
+  </ul>
+  <h3>Die Knöpfe</h3>
+  <div class="tabelle"><table>
+    <tr><th>Knopf</th><th>Was er tut</th></tr>
+    <tr><td><span class="knopf">🌐 Mit dem Knotennetz verbinden</span></td><td>Identität anlegen (falls nötig), die eigene Karte in den Raum legen, zuhören.</td></tr>
+    <tr><td><span class="knopf">👥 Wer ist im Raum?</span></td><td>Liest den Raum und zeigt die <a class="w" href="#karten">Karten</a>. Holt dabei Empfehlungen für dich ab.</td></tr>
+    <tr><td><span class="knopf">🙋 Nur neu anmelden</span></td><td>Legt die eigene Karte noch einmal in den Raum.</td></tr>
+    <tr><td><span class="knopf">🔎 Antwort holen</span></td><td>Stellt deine Frage an den Knoten, der am besten passt. Mit 🎤 kannst du sie einsprechen.</td></tr>
+    <tr><td><span class="knopf">📬 Antworten abholen</span></td><td>Holt Antworten aus dem Briefkasten, die gekommen sind, während du weg warst.</td></tr>
+    <tr><td><span class="knopf">💬 Antworten: an/aus</span></td><td>Ob deine App anderen antwortet.</td></tr>
+    <tr><td><span class="knopf">🧬 nur verwandte</span></td><td>Zeigt nur Knoten mit verwandtem Thema.</td></tr>
+    <tr><td><span class="knopf">🧠 KI-Richter</span></td><td>Eine KI bewertet die Antworten. Dafür trägst du deinen eigenen KI-Schlüssel ein; er bleibt im Browser, auf Wunsch im Tresor. Siehe <a class="w" href="#w-richter">KI-Richter</a>.</td></tr>
+    <tr><td><span class="knopf">🪪 Kennung sichern</span></td><td>💾 Sicherung anlegen, 📥 Sicherung einspielen. Ohne Sicherung kann ein Browser, der aufräumt, die Identität löschen.</td></tr>
+    <tr><td><span class="knopf">🔒 Netz</span></td><td>Ein <a class="w" href="#eigenes-netz">eigenes Netz</a> einstellen oder zurück ins öffentliche.</td></tr>
+    <tr><td><span class="knopf">🤝 Empfehlungen</span></td><td>Netzadmin, eigene Kontakte, erhaltene Empfehlungen, Ablauf. Siehe <a class="w" href="#empfehlen">Empfehlen</a>.</td></tr>
+    <tr><td><span class="knopf">⛔ Sperrliste</span></td><td>Zeigt, wer gesperrt ist. Siehe <a class="w" href="#w-sperrliste">Sperrliste</a>.</td></tr>
+    <tr><td><span class="knopf">🍄 Mycel-Karte ansehen ↗</span></td><td>Die lebende Karte des Netzes in einem neuen Tab.</td></tr>
+  </table></div>
+  <p class="klein"><strong>Gerätename:</strong> In vielen Apps steht im Fenster ein Feld für einen Gerätenamen,
+  etwa „Handy“ oder „Büro“. Er hilft, zwei Geräte derselben App auseinanderzuhalten. Er ist ein Hinweis, kein
+  Beweis, denn jeder kann jeden Namen wählen.</p>
+
+  <!-- 4 -->
+  <h2 id="karten">4 · Was die Karten im Raum zeigen</h2>
+  <p>Jede Karte steht für einen Knoten. Fett steht ihr Name, darunter, was deine App über sie geprüft hat.</p>
+  <div class="tabelle"><table>
+    <tr><th>Anzeige</th><th>Bedeutung</th></tr>
+    <tr><td>(Karte ist da)</td><td>Ihre Unterschrift passt zu ihrem Schlüssel. Eine <strong>gefälschte</strong> Karte wird verworfen und erscheint gar nicht.</td></tr>
+    <tr><td>⚠ Derselbe Name noch N× im Raum</td><td>Ein anderer Knoten trägt denselben Namen, mit anderer <a class="w" href="#w-kennung">Kennung</a>. Der Name ist nicht geprüft, nur die Kennung zählt.</td></tr>
+    <tr><td>✓ Bedeutung passt zur Beschreibung</td><td>Deine App hat den <a class="w" href="#w-vektor">Vektor</a> aus dem Text nachgerechnet, und er stimmt (<a class="w" href="#s2">S2</a>).</td></tr>
+    <tr><td>⚠ Bedeutung passt nicht zur Beschreibung, kein Vorrang</td><td>Der Vektor stammt nicht aus dem Text, der dasteht. Die Karte bleibt sichtbar, wird aber nicht vorgezogen.</td></tr>
+    <tr><td>· Bedeutung aus Inhalten, nicht nachprüfbar</td><td>Der Vektor ist aus den Inhalten der App gerechnet (etwa aus Rezepten). Die kennt deine App nicht. Kein Abzug.</td></tr>
+    <tr><td>· Herkunft der Bedeutung nicht angegeben</td><td>Die Karte sagt nicht, woraus der Vektor stammt. Nicht nachprüfbar.</td></tr>
+    <tr><td>· Bedeutung nicht geprüft</td><td>Das Sprachmodell ist bei dir nicht geladen. Es steht ehrlich da, nie still ein Haken.</td></tr>
+    <tr><td>🤝 Netzadmin</td><td>Diese Karte gehört dem <a class="w" href="#w-netzadmin">Netzadmin</a> dieses Netzes.</td></tr>
+    <tr><td>🤝 eigener Kontakt</td><td>Du hast diese Kennung selbst als Kontakt gemerkt.</td></tr>
+    <tr><td>🤝 empfohlen von …</td><td>Jemand, dem du traust, hat diese Kennung <a class="w" href="#empfehlen">empfohlen</a>. Empfohlene Karten stehen bei einer Frage vorn. Alle anderen bleiben sichtbar.</td></tr>
+    <tr><td>🧬 verwandt 0,xx</td><td>Wie nah das Thema an deinem liegt.</td></tr>
+    <tr><td>🔎 Frage-Passung 0,xx</td><td>Wie gut der Knoten zu deiner Frage passt.</td></tr>
+    <tr><td>⚠ unbestätigt (nicht unterschrieben)</td><td>Steht an einer <strong>Antwort</strong> ohne gültige Unterschrift. Sie geht nicht an den KI-Richter.</td></tr>
+    <tr><td>(gesperrte Karte)</td><td>Erscheint nicht. Siehe <a class="w" href="#w-sperrliste">Sperrliste</a>.</td></tr>
+  </table></div>
+  <p>An jeder Karte stehen Knöpfe: <span class="knopf">🤝 Andocken</span> (Visitenkarten tauschen),
+  <span class="knopf">❓ gezielt fragen</span>, <span class="knopf">🤝 Empfehlen</span>,
+  <span class="knopf">↗ App öffnen</span>. Nur der Netzadmin sieht zusätzlich <span class="knopf">⛔ Sperren</span>.</p>
+
+  <!-- 5 -->
+  <h2 id="siegel">5 · Das Siegel</h2>
+  <ul>
+    <li><strong>Selbst ausgestellt.</strong> Die App prüft beim Start, ob ihre Pflicht-Bausteine geladen sind, und
+      zeigt das offen. Kein Amt vergibt es.</li>
+    <li><strong>Was geprüft wird:</strong> acht Bausteine, nämlich Speicher, Spore, Bedeutung (Embedding), Abgleich,
+      Handschlag, Relais-Anschluss, geordnetes Löschen (<a class="w" href="#w-apoptose">Apoptose</a>) und die
+      <a class="w" href="#w-membran">Membran</a>.</li>
+    <li><strong>Bronze</strong> heißt „im Mycel, ruhend“. <strong>Gold</strong> heißt „aktiv“: in dieser Sitzung kam
+      ein Handschlag mit einem anderen Knoten zustande. Nach dem Neuladen steht wieder Bronze da.</li>
+    <li><strong>Was es nicht sagt:</strong> „Vertrau mir blind.“ Es sagt: „Prüf mich nach, der Quelltext ist offen.“</li>
+    <li><strong>Neue Schutz-Stufen werden sichtbar.</strong> Im Siegel steht die Liste der Aspekte mit Datum, zuletzt
+      die Schichten <a class="w" href="#schutz">S1 bis S5b</a>.</li>
+  </ul>
+  <h3>Was im Siegel steckt</h3>
+  <div class="tabelle"><table>
+    <tr><th>Teil</th><th>Wofür</th></tr>
+    <tr><td><span class="knopf">🔑 Eigene Identität &amp; Spore erzeugen / verwalten</span></td><td>Der Andock-Assistent, fünf Schritte:
+      <ol>
+        <li><strong>Identität erzeugen:</strong> ein Schlüsselpaar, die Kennung kommt aus dem öffentlichen Schlüssel.</li>
+        <li><strong>Spore signieren und herunterladen.</strong></li>
+        <li><strong>Verschlüsseltes Backup</strong> mit Passwort.</li>
+        <li><strong>Identität wiederherstellen</strong> aus der Backup-Datei.</li>
+        <li><strong>Identitäts-Wechsler:</strong> welche Identität gerade aktiv ist.</li>
+      </ol>
+      Backup-Datei und Passwort gehören zusammen sicher verwahrt. Ohne beides gibt es keine Wiederherstellung.</td></tr>
+    <tr><td><span class="knopf">✍ Semantische Beschreibung</span></td><td>Beschreibe in eigenen Worten, worum es in der App geht. Mit
+      „Beschreibung übernehmen → Vektor &amp; Spore neu signieren“ gilt sie. Eine gute Beschreibung macht die App leichter auffindbar.</td></tr>
+    <tr><td><span class="knopf">🛡 Was bedeutet dieses Siegel?</span></td><td>Kurz der Schutz, und der Knopf „Ausführlich erklärt“, der diese Seite öffnet.</td></tr>
+    <tr><td><span class="knopf">🔌 Fremden Knoten andocken →</span></td><td>Adresse einer fremden App eingeben, Spore prüfen, Abgleich, Handschlag. Ohne KI, direkt im Browser.</td></tr>
+  </table></div>
+
+  <!-- 6 -->
+  <h2 id="lampen">6 · Die Lampen-Leiste</h2>
+  <div class="tabelle"><table>
+    <tr><th>Lampe</th><th>Was sie zeigt</th></tr>
+    <tr><td><strong>LEBT</strong></td><td>Grün und atmend: die App läuft, ihre Spore ist da. Ein Tipp öffnet den Status.</td></tr>
+    <tr><td><strong>VERKEHR</strong></td><td>Leuchtet: am Relais verbunden, die App hört zu. Blinkt kurz bei einem Handschlag oder einer Nachricht. Ein Tipp zeigt die letzten Ereignisse.</td></tr>
+    <tr><td><strong>FREMD</strong></td><td>Rot: eine fremde KI oder ein Browser-Agent hat die App über Nachrichten angesprochen. Die <a class="w" href="#w-membran">Membran</a> hat es notiert. Ein Tipp zeigt, wer.</td></tr>
+    <tr><td><strong>SIEGEL</strong></td><td>Die Medaille mit ★, sobald die Selbst-Prüfung bestanden ist. Ein Tipp öffnet das <a class="w" href="#siegel">Siegel</a>.</td></tr>
+  </table></div>
+
+  <!-- 7 -->
+  <h2 id="warum">7 · Warum es Schutz braucht</h2>
+  <p>Ein offenes Netz hat keinen Türsteher. Jeder kann einen Knoten anlegen, jeder kann im Raum schreiben.
+  Das ist gewollt, denn sonst bräuchte es eine Mitte, die entscheidet. Daraus folgt:</p>
+  <ul>
+    <li><strong>Nur der Empfänger kann abweisen.</strong> Das Relais reicht jeden Zettel weiter. Ob eine Karte,
+      Frage oder Antwort gilt, entscheidet erst die App, bei der sie ankommt.</li>
+    <li><strong>Jedes öffentliche Signal lässt sich nachahmen.</strong> Name, Beschreibung, Vektor kann jeder
+      abschreiben. Nicht nachmachen kann man nur die Unterschrift mit einem fremden geheimen Schlüssel.</li>
+    <li><strong>Die Unterschrift prüft die Herkunft, nicht den Inhalt.</strong> Eine Spore voller Unsinn kann
+      gültig unterschrieben sein. Sie kommt dann eben von diesem Schlüssel, mehr nicht.</li>
+  </ul>
+  <h3>Wer angreifen könnte</h3>
+  <div class="tabelle"><table>
+    <tr><th>Wer</th><th>Was er braucht</th><th>Was er will</th></tr>
+    <tr><td><strong>Mithörer</strong></td><td>nur Zugang zum öffentlichen Raum</td><td>Fragen lesen, im Namen anderer antworten</td></tr>
+    <tr><td><strong>Fälscher</strong></td><td>einen eigenen Schlüssel, der nichts kostet</td><td>sich als anderer Knoten ausgeben</td></tr>
+    <tr><td><strong>Flutender</strong></td><td>viele Schlüssel und Zettel</td><td>den Raum unbrauchbar machen</td></tr>
+    <tr><td><strong>Text, der eine KI anweisen will</strong></td><td>ein Feld, das später eine KI liest</td><td>den KI-Richter zu etwas bringen</td></tr>
+    <tr><td><strong>Browser-KI</strong></td><td>nichts, sie ist schon da</td><td>nichts Böses, aber sie liest die Seite und kann für dich handeln</td></tr>
+  </table></div>
+  <h3>Was wir am 14. Oktober 2026 nachgestellt haben</h3>
+  <p>Mit den echten Bausteinen, im laufenden Netz. <strong>Alle drei Angriffe gingen damals durch:</strong></p>
+  <ol>
+    <li>Eine <strong>gefälschte Visitenkarte</strong> galt als echt.</li>
+    <li>Ein <strong>Mithörer</strong> konnte im Namen eines anderen Knotens antworten, und die Antwort stand als
+      „✓ Antwort von …“ da.</li>
+    <li>Der <strong>Bedeutungs-Vektor</strong> eines Knotens ließ sich kopieren. Der Kopierer bekam dieselbe
+      Verwandtschaft wie das Original.</li>
+  </ol>
+  <p>Dazu kam ein älterer Fund: In zwei Apps lief in der alten Fassung ein Skript aus einem fremden <strong>Namen</strong>,
+  weil der Name als HTML eingesetzt wurde. Alle diese Lücken sind geschlossen und verteilt. Wie, steht im nächsten
+  Abschnitt.</p>
+  <h3>Wohin fremder Text geht, entscheidet über den Schaden</h3>
+  <ul>
+    <li><strong>Zu einem Menschen:</strong> harmlos, solange er als Text dasteht.</li>
+    <li><strong>Zu einer KI:</strong> gefährlich, wenn er wie eine Anweisung klingt („ignoriere alles bisher …“).</li>
+    <li><strong>In die Rangfolge:</strong> ein kopierter Vektor schiebt einen Fremden nach vorn.</li>
+  </ul>
+
+  <!-- 8 -->
+  <h2 id="schutz">8 · Wie geschützt wird</h2>
+  <p>Keine Prüfung reicht allein. Wirksam ist eine <strong>Folge von Hürden</strong>: die billigen zuerst, die teuren
+  im Ernstfall. Die Natur hält Arten so auseinander: Balz, dann Erkennung an der Zelle, dann Prüfung der
+  Erbanlagen. Jede Hürde filtert nur, was an der vorigen vorbeikam.</p>
+  <p>Und eine Regel gilt für jede Schicht: <strong>im Zweifel markieren, nicht abweisen.</strong> Eine App mit
+  älterer Fassung fällt nicht still heraus, sie verliert nur ihren Vorrang.</p>
+  <h3>Die Wände, die immer stehen</h3>
+  <ul>
+    <li><strong>Browser-Sandkasten:</strong> Ein Knoten ist eine Webseite. Er kommt nicht an deine Dateien oder dein System.</li>
+    <li><strong>Daten, kein Code:</strong> Es wandern nur Zettel. Es gibt keine Nachricht „führ dieses Programm aus“.
+      Ein Wurm braucht genau diesen Kanal, und den gibt es nicht.</li>
+    <li><strong>Fremder Text nur als Text:</strong> Namen und Antworten werden als Text angezeigt, nie als HTML.</li>
+    <li><strong>Die <a class="w" href="#w-membran">Membran</a>:</strong> der Türsteher. Sie lässt nur erlaubte Absender
+      herein und meldet Fremdzugriffe an der Lampe <a class="w" href="#lampen">FREMD</a>.</li>
+  </ul>
+  <h3>Die Schichten im Netz</h3>
+  <div class="tabelle"><table>
+    <tr><th>Schicht</th><th>Was sie tut</th><th>Was du davon siehst</th></tr>
+    <tr id="echtheit"><td><strong>Echtheit der Karten</strong></td><td>Jede Karte wird gegen ihre Unterschrift geprüft, bevor gleiche Namen zusammengefasst werden.</td><td>Gefälschte fehlen; „⚠ Derselbe Name noch …“</td></tr>
+    <tr id="antworten"><td><strong>Antworten unterschrieben</strong></td><td>Nur der gefragte Knoten zählt als Absender.</td><td>„⚠ unbestätigt“; solche Antworten gehen nicht an den KI-Richter</td></tr>
+    <tr id="s1"><td><strong>S1 · Fragen unterschrieben</strong></td><td>Gefälschte Fragen werden nicht beantwortet, unsignierte gedrosselt (höchstens 2 von 6 je Minute).</td><td>nichts, es wirkt im Hintergrund</td></tr>
+    <tr id="s2"><td><strong>S2 · Vektor nachrechnen</strong></td><td>Deine App rechnet den Vektor aus der Beschreibung neu aus (Schwelle 0,99). Ein abgeschriebener fällt auf.</td><td>„✓ Bedeutung passt“ oder „⚠ passt nicht, kein Vorrang“</td></tr>
+    <tr id="s3"><td><strong>S3 · Rechenaufwand</strong></td><td>Vor dem Senden rechnet die App eine kleine Aufgabe. Ist der Raum voll, haben Zettel mit Aufwand Vorrang. Fluten wird teuer.</td><td>nichts, es wirkt im Hintergrund</td></tr>
+    <tr id="s4"><td><strong>S4 · Sperrliste</strong></td><td>Nur der <a class="w" href="#w-netzadmin">Netzadmin</a> unterschreibt sie. Gesperrte Kennungen erscheinen nicht, ihre Fragen bleiben unbeantwortet.</td><td>Kasten „⛔ Sperrliste“</td></tr>
+    <tr id="s5"><td><strong>S5 · Empfehlen</strong></td><td>Ein bekannter Knoten sagt: „Diese Kennung kenne ich.“ Zählt nur, wenn du dem Empfehlenden schon traust.</td><td>„🤝 empfohlen von …“, vorn bei Fragen</td></tr>
+    <tr id="s5b"><td><strong>S5b · Empfehlen in den Märkten</strong></td><td>Märkte empfehlen die fremden Apps, die sie zeigen. Höchstens 180 Tage, Widerruf nur mit Grund, Haftung nur für die eine App. Die Empfehlung kommt von selbst an.</td><td>„⏳ läuft am … ab“</td></tr>
+    <tr id="pruefliste"><td><strong>Prüfliste vor dem KI-Richter</strong></td><td>Frage und fremde Antworten werden auf Anweisungen an eine KI geprüft. Fehlt die Liste, läuft der Richter nicht.</td><td>eine solche Antwort geht nicht an die KI</td></tr>
+    <tr id="verschluesselt"><td><strong>Eigenes Netz mit Code</strong></td><td>Karten, Fragen und Antworten sind verschlüsselt. Wer den Code nicht hat, sieht nichts Lesbares.</td><td>„🔒 Eigenes Netz“</td></tr>
+  </table></div>
+  <p class="klein">Jede Schicht hat eine Probe, die zeigt, dass sie greift, und eine Gegenprobe, die den Fehler
+  absichtlich einbaut und zeigt, dass die Probe dann anschlägt. Gebaut und verteilt sind S1 bis S5b in
+  29 Apps (Stand 2026-10-16). S6 und S7 sind nicht freigegeben.</p>
+
+  <!-- 9 -->
+  <h2 id="eigenes-netz">9 · Ein eigenes Netz einrichten</h2>
+  <p>Für Firma, Verein oder Familie. Nur Apps mit demselben <a class="w" href="#w-netzcode">Netz-Code</a> sehen einander.</p>
+  <figure>
+    <svg viewBox="0 0 400 420" role="img" aria-labelledby="de-bild-t de-bild-d">
+      <title id="de-bild-t">Ein eigenes Netz</title>
+      <desc id="de-bild-d">Vier eigene Knoten sprechen über ein Relais. Alle tragen denselben Netz-Code, ihre Zettel
+      sind verschlüsselt. Ein fremder Knoten ohne Code kann nichts davon lesen.</desc>
+      <rect x="6" y="6" width="388" height="320" rx="18" fill="rgba(54,190,170,.07)" stroke="#2fb3a2" stroke-width="2" stroke-dasharray="8 6"/>
+      <text x="22" y="32" font-size="15" font-weight="700" fill="#d7dee5">Eigenes Netz · ein Code</text>
+      <g stroke="#2fb3a2" stroke-width="3"><line x1="140" y1="118" x2="165" y2="150"/><line x1="260" y1="118" x2="235" y2="150"/><line x1="140" y1="252" x2="165" y2="222"/><line x1="260" y1="252" x2="235" y2="222"/></g>
+      <circle cx="200" cy="186" r="56" fill="rgba(54,190,170,.2)" stroke="#2fb3a2" stroke-width="3"/>
+      <text x="200" y="182" font-size="15" font-weight="700" text-anchor="middle" fill="#d7dee5">Relais</text>
+      <text x="200" y="202" font-size="12" text-anchor="middle" fill="#d7dee5">🔒 verschlüsselt</text>
+      <g font-size="14" text-anchor="middle" fill="#d7dee5">
+        <rect x="20" y="66" width="120" height="52" rx="10" fill="rgba(127,140,150,.18)"/><text x="80" y="97">Werkstatt</text>
+        <rect x="260" y="66" width="120" height="52" rx="10" fill="rgba(127,140,150,.18)"/><text x="320" y="97">Büro</text>
+        <rect x="20" y="252" width="120" height="52" rx="10" fill="rgba(127,140,150,.18)"/><text x="80" y="283">Außendienst</text>
+        <rect x="260" y="252" width="120" height="52" rx="10" fill="rgba(127,140,150,.18)"/><text x="320" y="283">Lager</text>
+      </g>
+      <line x1="200" y1="360" x2="200" y2="246" stroke="#c85050" stroke-width="3" stroke-dasharray="6 5"/>
+      <rect x="120" y="356" width="160" height="54" rx="10" fill="rgba(200,80,80,.14)" stroke="#c85050" stroke-width="2"/>
+      <text x="200" y="380" font-size="14" font-weight="700" text-anchor="middle" fill="#d7dee5">Fremder Knoten</text>
+      <text x="200" y="399" font-size="12" text-anchor="middle" fill="#d7dee5">ohne Code: liest nichts</text>
+    </svg>
+    <figcaption>Wer den Code hat, ist im Netz. Wer ihn nicht hat, sieht nur verschlüsselte Zettel.</figcaption>
+  </figure>
+  <h3>Schritt für Schritt</h3>
+  <ol>
+    <li>Im Fenster den Kasten <span class="knopf">🔒 Netz</span> aufklappen.</li>
+    <li><strong>Name</strong> eintragen, zum Beispiel den Namen der Firma.</li>
+    <li><strong>Relais</strong> eintragen (eine Adresse mit <code>wss://</code>). Ein eigenes Relais auf einem eigenen
+      Server ist am besten, siehe unten.</li>
+    <li><span class="knopf">🎲 Code erzeugen</span>, dann <span class="knopf">✓ Übernehmen</span>.</li>
+    <li>Optional: <strong>Netzadmin</strong> eintragen, also die Kennung der App, die in diesem Netz empfehlen und sperren darf.</li>
+    <li><span class="knopf">🔗 Link kopieren</span> und den Link <strong>nur an eigene Geräte</strong> geben. Wer ihn öffnet,
+      wird gefragt: „Diesem Netz beitreten?“</li>
+    <li>Zurück geht es mit <span class="knopf">🌐 Zurück ins öffentliche Netz</span>.</li>
+  </ol>
+  <h3>Was du selbst tun musst</h3>
+  <ul>
+    <li><strong>Den Code hüten.</strong> Er bleibt auf dem Gerät und geht nie an einen Server. Wer den Link hat, ist drin.</li>
+    <li><strong>Ein Relais wählen.</strong> Ein eigenes Relais einzurichten ist heute Handarbeit auf einem Server, kein Knopf in der App.</li>
+    <li><strong>Einen Netzadmin bestimmen.</strong> In einem eigenen Netz bist das du oder wer es betreibt, nicht der Netzadmin des offenen Mycels.</li>
+    <li><strong>Die eigenen Apps empfehlen</strong>, damit sie vorn stehen (<a class="w" href="#empfehlen">Empfehlen</a>).</li>
+  </ul>
+  <div class="achtung">
+    <p><strong>Im öffentlichen Raum</strong> sind die Zettel nicht verschlüsselt. Wer das Relais betreibt, kann
+    Fragen und Antworten lesen. Vertrauliches gehört in ein eigenes Netz mit Code.</p>
+  </div>
+
+  <!-- 10 -->
+  <h2 id="empfehlen">10 · Empfehlen und Sperren</h2>
+  <h3>Eine App empfehlen, in vier Schritten</h3>
+  <ol>
+    <li>Im Fenster <span class="knopf">👥 Wer ist im Raum?</span> drücken.</li>
+    <li>An der Karte <span class="knopf">🤝 Empfehlen</span> drücken.</li>
+    <li>Die <a class="w" href="#w-sicherheitsnummer">Sicherheitsnummer</a> auf einem zweiten Weg vergleichen (Telefon, persönlich).
+      Stimmt sie, den Haken „Die Nummer stimmt überein“ setzen.</li>
+    <li><span class="knopf">✍ Empfehlung unterschreiben</span>. Fertig. Die Empfehlung kommt von selbst an.</li>
+  </ol>
+  <h3>Die Regeln dazu</h3>
+  <ul>
+    <li><strong>Sie zählt nur über eigenes Vertrauen:</strong> beim Netzadmin, bei eigenen Kontakten, höchstens zwei
+      Schritte weit. Hundert erfundene Knoten, die einander empfehlen, zählen bei niemandem.</li>
+    <li><strong>Sie hängt an der Kennung</strong>, nie am Namen.</li>
+    <li><strong>Höchstens 180 Tage.</strong> 30 Tage vorher steht „⏳ läuft am … ab“. Verlängern kann nur, wer empfohlen hat.</li>
+    <li><strong>Widerruf nur mit Grund.</strong> Der Grund wird mit unterschrieben und ist für alle lesbar.</li>
+    <li><strong>Sie sperrt niemanden aus.</strong> Nicht empfohlene Karten bleiben sichtbar und werden weiter gefragt.
+      Wer es strenger will, schaltet „Nur Empfohlenen antworten“ ein (ab Werk aus).</li>
+  </ul>
+  <h3>Sperren</h3>
+  <ul>
+    <li>Nur der <a class="w" href="#w-netzadmin">Netzadmin</a> sieht an jeder Karte <span class="knopf">⛔ Sperren</span>.</li>
+    <li>Die gesperrte Kennung verschwindet bei allen Apps dieses Netzes von der Karte. Ihre Fragen werden nicht mehr beantwortet.</li>
+    <li>Die Liste ist öffentlich und reist auf den Karten mit. Jede App prüft die Unterschrift selbst.</li>
+  </ul>
+  <h3>Die Netz-Verwaltung</h3>
+  <p>Wer viele Apps empfiehlt, etwa ein Markt, hat dafür eine eigene Seite mit vier Listen: Apps in meinem Mycel,
+  Meine Empfehlungen, Widerrufe, Sperrliste. Dort lässt sich empfehlen, verlängern, widerrufen, und für den
+  Netzadmin sperren und lösen.</p>
+
+  <!-- APP-EIGEN-DE: hier darf ein Träger eigene Abschnitte einsetzen (tools/sicherheit-verteilen.mjs) -->
+
+  <!-- 11 -->
+  <h2 id="regel">11 · Die eine Regel für dich</h2>
+  <div class="achtung">
+    <p>Echter Schaden entsteht am ehesten, wenn du <strong>ungeprüften fremden Code</strong> in deine eigene App
+    kopierst. Bausteine nur aus vertrauter Quelle holen. Im Zweifel den Code vorher von einer, besser mehreren
+    KIs prüfen lassen (ein starker Filter, keine Garantie). Fremde Texte immer als Daten behandeln, nie als
+    Anweisung.</p>
+  </div>
+  <p><strong>Du bleibst Herr über deinen Knoten.</strong> Du kannst ihn jederzeit vollständig löschen und das Netz
+  geordnet verlassen. Die Nachbarn bekommen ein kurzes „dieser Knoten geht“.</p>
+
+  <!-- 12 -->
+  <h2 id="offen">12 · Was noch nicht geht</h2>
+  <p class="grenze"><strong>Die Browser-KI liest die Seite.</strong> Ein Browser mit eingebauter KI sieht alles, was die
+  App anzeigt, auch fremden Text, und kann für dich klicken. Davor schützt keine Prüfung in der App. Sichtbar wird
+  nur, wer die App über Nachrichten anspricht (Lampe FREMD).</p>
+  <p class="grenze"><strong>Eine gesperrte Kennung lässt sich ersetzen.</strong> Eine neue Kennung kostet nichts. Die
+  Sperre trifft nur, wen man schon kennt.</p>
+  <p class="grenze"><strong>Sperren und Empfehlen regeln Antworten, nicht das Lesen.</strong> Im öffentlichen Raum sieht
+  ein Gesperrter Karten und Fragen weiter.</p>
+  <p class="grenze"><strong>Ein gültig unterschriebener Namensvetter wird angezeigt.</strong> Unterscheiden kann ihn nur,
+  wer die Kennung kennt.</p>
+  <p class="grenze"><strong>Die Prüfliste vor dem KI-Richter</strong> erkennt feste Wendungen. Umformuliert oder in
+  einer anderen Sprache kommt eine Anweisung durch.</p>
+  <p class="grenze"><strong>Am Tablet ist fast nichts gemessen.</strong> Gemessen ist dort nur die Genauigkeit von S2.
+  Rechenaufwand, Sperrliste und Empfehlungen zwischen zwei echten Geräten sind nur in Proben geprüft. Eine echte,
+  unterschriebene Sperrliste gibt es noch nicht.</p>
+  <p class="grenze"><strong>Die Gästeliste am Relais</strong> (nur eigene Schlüssel dürfen schreiben) ist vorbereitet,
+  aber nirgends eingeschaltet. Abgeschirmt wird über den Netz-Code.</p>
+
+  <!-- 13 -->
+  <h2 id="mehr">13 · Mehr lesen</h2>
+  <ul>
+    <li><strong>Sicherer Umgang im Knotennetz</strong> (Paper S): welche Angriffe es gibt, was gemessen dagegen wirkt,
+      wo die Grenze liegt. Entwurf, im Gegenlesen.
+      <a href="https://github.com/lausiklauskn-png/Sage-Protokol/blob/main/docs/papers/sicherer-umgang-im-knotennetz.md" target="_blank" rel="noopener noreferrer">lesen ↗</a></li>
+    <li><strong>Das SBKIM-Paper:</strong> wie Knoten einander über Bedeutung finden.
+      <a href="https://doi.org/10.5281/zenodo.22277738" target="_blank" rel="noopener noreferrer">DOI 10.5281/zenodo.22277738 ↗</a></li>
+    <li><strong>So empfiehlst du eine App:</strong>
+      <a href="https://github.com/lausiklauskn-png/Sage-Protokol/blob/main/docs/ANLEITUNG_EMPFEHLEN.md" target="_blank" rel="noopener noreferrer">Anleitung ↗</a></li>
+  </ul>
+
+  <!-- Wörterbuch -->
+  <h2 id="woerter">Wörterbuch</h2>
+  <dl class="woerter">
+    <dt id="w-mycel">Mycel</dt><dd>das unsichtbare Pilzgeflecht im Boden; hier das Netz der Knoten.</dd>
+    <dt id="w-knoten">Knoten</dt><dd>eine einzelne App im Netz, ganz im Browser.</dd>
+    <dt id="w-raum">Raum</dt><dd>der gemeinsame Treffpunkt auf dem Relais, in dem die Karten liegen.</dd>
+    <dt id="w-relais">Relais</dt><dd>die Poststelle: nimmt unterschriebene Zettel an und reicht sie weiter. Kann sie zurückhalten, aber nicht unbemerkt verändern.</dd>
+    <dt id="w-spore">Spore</dt><dd>die Visitenkarte eines Knotens: Name, Beschreibung, Bedeutungs-Vektor, öffentlicher Schlüssel, Unterschrift.</dd>
+    <dt id="w-kennung">Kennung</dt><dd>die Prüfsumme des öffentlichen Schlüssels. Sie ist eindeutig, der Name ist es nicht.</dd>
+    <dt id="w-identitaet">Identität</dt><dd>das Schlüsselpaar eines Knotens samt Kennung. Entsteht im Browser und bleibt dort.</dd>
+    <dt id="w-schluessel">Öffentlicher / geheimer Schlüssel</dt><dd>der öffentliche steht auf der Visitenkarte, der geheime bleibt im Browser. Nur mit ihm kann man unterschreiben.</dd>
+    <dt id="w-signatur">Unterschrift (Signatur)</dt><dd>jeder kann die Echtheit prüfen, fälschen kann sie niemand. Sie bestätigt die Herkunft, nicht den Inhalt.</dd>
+    <dt id="w-vektor">Bedeutungs-Vektor</dt><dd>384 Zahlen, die sagen, worum es geht. Ähnliche Themen liegen nah beieinander.</dd>
+    <dt id="w-membran">Membran</dt><dd>der Türsteher eines Knotens: lässt nur Erlaubtes herein und meldet fremde Zugriffe.</dd>
+    <dt id="w-netzadmin">Netzadmin</dt><dd>der Knoten, der in einem Netz empfehlen und sperren darf. Im offenen Mycel ist es Sage-Protokol, in einem eigenen Netz der, den die Einstellung nennt.</dd>
+    <dt id="w-netzcode">Netz-Code</dt><dd>das gemeinsame Geheimnis eines eigenen Netzes. Damit werden die Zettel verschlüsselt.</dd>
+    <dt id="w-empfehlung">Empfehlung</dt><dd>eine unterschriebene Aussage „diese Kennung kenne ich“. Im Protokoll heißt sie Bürgschaft.</dd>
+    <dt id="w-sicherheitsnummer">Sicherheitsnummer</dt><dd>aus beiden Schlüsseln berechnet. Stimmt sie auf beiden Geräten überein, gehört die Karte wirklich zu dem, den du kennst.</dd>
+    <dt id="w-sperrliste">Sperrliste</dt><dd>vom Netzadmin unterschriebene Liste gesperrter Kennungen. Sie reist mit den Karten, jede App prüft sie selbst.</dd>
+    <dt id="w-richter">KI-Richter</dt><dd>eine KI, die Antworten bewertet. Läuft mit deinem eigenen Schlüssel und nur hinter der Prüfliste.</dd>
+    <dt id="w-rechenaufwand">Rechenaufwand</dt><dd>eine kleine Rechenaufgabe vor dem Senden. Für einen Zettel kaum spürbar, für tausende teuer.</dd>
+    <dt id="w-handschlag">Handschlag (Anastomose)</dt><dd>zwei Knoten tauschen Visitenkarten und prüfen die Unterschrift.</dd>
+    <dt id="w-apoptose">Apoptose</dt><dd>das geordnete Selbst-Löschen eines Knotens.</dd>
+    <dt id="w-hyphe">Hyphe</dt><dd>ein einzelner Pilzfaden; hier eine Verbindung zwischen zwei Knoten.</dd>
+    <dt id="w-pwa">PWA</dt><dd>eine Webseite, die sich wie eine App installieren lässt.</dd>
+  </dl>
+</div>
+
+<!-- ═══════════════════════════════ ENGLISH ═══════════════════════════════ -->
+<div id="en" lang="en" data-sprache="en" hidden>
+  <div class="kopf">
+    <a class="back" data-zurueck href="./index.html">← back to the app</a>
+    <button class="sprachknopf" type="button" data-sprachknopf hidden translate="no">Deutsch</button>
+  </div>
+
+  <h1>How the mycelium works. And how you are protected.</h1>
+
+  <div class="kasten" id="en-kurz">
+    <h2>In one minute</h2>
     <ul>
-      <li><strong>Du musst nicht wissen, wer es hat.</strong> Eine Mail geht an einen Menschen, den du
-        schon kennst. Eine Frage im Mycel geht an alle deine Knoten auf einmal, und es antwortet, wer
-        zum Thema passt — nach Bedeutung, nicht nach dem genauen Wort.</li>
-      <li><strong>Die Daten bleiben, wo sie sind.</strong> Es wandern eine Frage und eine Antwort,
-        keine Kopie der ganzen Datei. Es entstehen keine fünf Fassungen desselben Dokuments in fünf
-        Postfächern, von denen keiner weiß, welche die richtige ist.</li>
-      <li><strong>Es wird nichts abgetippt.</strong> Was eine App schon weiß, muss niemand aus einer
-        Mail in die nächste App übertragen.</li>
-      <li><strong>Kein Anbieter dazwischen.</strong> Es gibt kein Konto und keinen Dienst, der
-        abgeschaltet oder teurer werden kann. Jede Antwort ist unterschrieben — man sieht, welcher
-        Knoten sie gegeben hat, und eine gefälschte fällt an der Unterschrift durch.</li>
+      <li><strong>What:</strong> Your apps and devices form a small network, the <a class="w" href="#en-mycel">mycelium</a>.
+        They answer questions together, with no corporate server in between.</li>
+      <li><strong>How:</strong> Every app is a <a class="w" href="#en-w-knoten">node</a> with a signed business card,
+        the <a class="w" href="#en-w-spore">spore</a>. The notes travel through a post office, the
+        <a class="w" href="#en-w-relais">relay</a>.</li>
+      <li><strong>What you get:</strong> ask once, and whoever knows answers. Your files stay with you; only the
+        question and the answer travel.</li>
+      <li><strong>How you are protected:</strong> Every card, question and answer is signed. Your app checks
+        everything itself before it believes it. More under <a class="w" href="#en-schutz">How protection works</a>.</li>
+      <li><strong>What the seal says:</strong> This app checked at start-up that its protective building blocks are
+        present. See <a class="w" href="#en-siegel">The seal</a>.</li>
     </ul>
-
-    <h3>Was dazu belegt ist</h3>
-    <p class="nz-quelle">Für SBKIM selbst ist noch nicht gemessen, wie viel Zeit es spart. Belegt ist
-    bisher, dass zwei Knoten einander ohne Server in der Mitte finden und Fragen beantworten. Was es
-    an Nutzen bringen kann, zeigen Messungen zu den Problemen, die es angeht:</p>
-    <ul class="nz-quelle">
-      <li><strong>Hin- und Herspringen zwischen Programmen kostet Zeit.</strong> In einer Studie mit
-        137 Beschäftigten in drei Großunternehmen wechselten sie rund 1.200-mal am Tag zwischen
-        Programmen und brauchten knapp vier Stunden pro Woche, um sich danach wieder zurechtzufinden
-        (Harvard Business Review, 2022,
-        <a href="https://hbr.org/2022/08/how-much-time-and-energy-do-we-waste-toggling-between-applications" target="_blank" rel="noopener noreferrer">Artikel</a>).</li>
-      <li><strong>Abtippen macht Fehler, auch mit Nachsehen.</strong> In einem Versuch mit 195
-        Teilnehmenden war Abtippen mit anschließendem Sichtvergleich nicht deutlich genauer als
-        einfaches Abtippen (Barchard &amp; Pace 2011,
-        <a href="https://www.sciencedirect.com/science/article/abs/pii/S0747563211000707" target="_blank" rel="noopener noreferrer">Studie</a>).
-        Was nicht abgetippt werden muss, kann dabei auch nicht falsch werden.</li>
-      <li><strong>Daten zuerst auf dem eigenen Gerät.</strong> Forschende der Universität Cambridge
-        und von Ink &amp; Switch beschreiben, was das bringt: schnell, ohne Netz nutzbar, und die Daten
-        bleiben erhalten, auch wenn ein Anbieter aufhört
-        (<a href="https://www.inkandswitch.com/essay/local-first/" target="_blank" rel="noopener noreferrer">„Local-first software", 2019</a>).
-        SBKIM-Knoten sind so gebaut.</li>
-    </ul>
-
-    <h3>Beispiele</h3>
-    <div class="nz-karte">
-      <h4>In einer Firma</h4>
-      <p>Das Werkstatt-Tablet mit den Aufträgen, der Büro-Rechner mit der Buchhaltung, der Laptop im
-      Außendienst mit den Angeboten und der Lager-Rechner mit dem Material. Jemand fragt: „Haben wir
-      schon einmal einen Transporter beschriftet — und mit welcher Folie?" Die Auftrags-App meldet die
-      Aufträge, die Buchhaltung die Rechnungen, das Lager die Folie. Niemand muss herumfragen, wer das
-      noch weiß.</p>
-    </div>
-    <div class="nz-karte">
-      <h4>Auf mehreren eigenen Geräten</h4>
-      <p>Dein Rezeptbuch auf dem Tablet, die Getränke-Sammlung auf dem Handy. Du fragst „Was passt zu
-      Lachs?" — das Rezeptbuch antwortet mit dem Gericht, die Getränke-Sammlung mit dem Getränk dazu.</p>
-    </div>
-    <div class="nz-karte">
-      <h4>Im Verein oder beim Hobby</h4>
-      <p>Jedes Mitglied hat seine eigene Sammlung — Bauanleitungen, Ersatzteile, Termine. Eine
-      gemeinsame Pinnwand auf der eigenen Poststelle des Vereins sammelt Fragen, und wer etwas weiß,
-      antwortet. Nichts davon liegt bei einem fremden Anbieter.</p>
-    </div>
-    <p class="nz-heute"><strong>Ehrlich zum Stand:</strong> Heute tauschen die Knoten Fragen und
-    Antworten als Text aus. Dass die Programme ganze Aufträge oder Rechnungen selbstständig
-    untereinander abgleichen, ist nicht gebaut — die Beispiele zeigen, wofür das Netz gedacht ist.</p>
-
-    <h2 id="eigenes-netz">Ein eigenes, abgeschirmtes Netz bauen</h2>
-    <p>Das Mycel braucht keinen Konzern und keinen zentralen Server. Du kannst dir deshalb ein
-    <strong>eigenes</strong> Netz bauen, in das nur deine eigenen Knoten hineinkommen. So sieht das aus:</p>
-
-    <figure>
-      <svg viewBox="0 0 400 480" role="img" aria-labelledby="nz-bild-titel nz-bild-text">
-        <title id="nz-bild-titel">Ein eigenes, abgeschirmtes Mycel</title>
-        <desc id="nz-bild-text">Vier Knoten einer Firma — Werkstatt, Büro, Außendienst, Lager — sind mit
-        der eigenen Poststelle in der Mitte verbunden. Die Poststelle hat eine Gästeliste. Ein fremder
-        Knoten außerhalb kommt nicht hinein, weil sein Schlüssel nicht auf der Gästeliste steht.</desc>
-        <rect x="6" y="6" width="388" height="376" rx="18" fill="rgba(54,190,170,.07)" stroke="#2fb3a2" stroke-width="2" stroke-dasharray="8 6"/>
-        <text x="22" y="34" font-size="16" font-weight="700" fill="currentColor">Deine Firma · Verein · Familie</text>
-        <text x="22" y="54" font-size="14" fill="currentColor" opacity=".8">abgeschirmt: nur eure Knoten</text>
-        <g stroke="#2fb3a2" stroke-width="3">
-          <line x1="148" y1="146" x2="163" y2="168"/><line x1="252" y1="146" x2="237" y2="168"/>
-          <line x1="148" y1="296" x2="163" y2="276"/><line x1="252" y1="296" x2="237" y2="276"/>
-        </g>
-        <circle cx="200" cy="222" r="66" fill="rgba(54,190,170,.2)" stroke="#2fb3a2" stroke-width="3"/>
-        <text x="200" y="206" font-size="16" font-weight="700" text-anchor="middle" fill="currentColor">Eigene</text>
-        <text x="200" y="226" font-size="16" font-weight="700" text-anchor="middle" fill="currentColor">Poststelle</text>
-        <text x="200" y="248" font-size="13" text-anchor="middle" fill="currentColor">🔒 Gästeliste</text>
-        <g font-size="15" text-anchor="middle" fill="currentColor">
-          <rect x="20" y="88" width="128" height="58" rx="10" fill="rgba(127,140,150,.18)" stroke="currentColor" stroke-opacity=".5"/>
-          <text x="84" y="112" font-weight="700">Werkstatt</text><text x="84" y="132">Aufträge</text>
-          <rect x="252" y="88" width="128" height="58" rx="10" fill="rgba(127,140,150,.18)" stroke="currentColor" stroke-opacity=".5"/>
-          <text x="316" y="112" font-weight="700">Büro</text><text x="316" y="132">Buchhaltung</text>
-          <rect x="20" y="296" width="128" height="58" rx="10" fill="rgba(127,140,150,.18)" stroke="currentColor" stroke-opacity=".5"/>
-          <text x="84" y="320" font-weight="700">Außendienst</text><text x="84" y="340">Angebote</text>
-          <rect x="252" y="296" width="128" height="58" rx="10" fill="rgba(127,140,150,.18)" stroke="currentColor" stroke-opacity=".5"/>
-          <text x="316" y="320" font-weight="700">Lager</text><text x="316" y="340">Material</text>
-        </g>
-        <line x1="200" y1="416" x2="200" y2="288" stroke="#c85050" stroke-width="3" stroke-dasharray="6 5"/>
-        <circle cx="200" cy="382" r="15" fill="#c85050"/>
-        <path d="M193 375 L207 389 M207 375 L193 389" stroke="#fff" stroke-width="3"/>
-        <rect x="120" y="416" width="160" height="56" rx="10" fill="rgba(200,80,80,.14)" stroke="#c85050" stroke-width="2"/>
-        <text x="200" y="440" font-size="15" font-weight="700" text-anchor="middle" fill="currentColor">Fremder Knoten</text>
-        <text x="200" y="460" font-size="13" text-anchor="middle" fill="currentColor">nicht auf der Gästeliste</text>
-      </svg>
-      <figcaption>Alle eure Knoten sprechen nur mit eurer eigenen Poststelle. Wer nicht auf der
-      Gästeliste steht, kommt nicht hinein.</figcaption>
-    </figure>
-
-    <h3>Die Bausteine</h3>
-    <ol>
-      <li><strong>Die Knoten</strong> — deine Apps mit den SBKIM-Bausteinen. Jede bekommt beim ersten
-        Start ihre eigene Identität. <span class="nz-stand">✅ vorhanden</span></li>
-      <li><strong>Eine eigene Poststelle (Relais)</strong> — ein kleines Server-Programm, zum Beispiel
-        auf einem Rechner in der Firma oder einem gemieteten Server. Über sie laufen Fragen und
-        Antworten. <span class="nz-stand">✅ läuft so schon</span> (das Netz dieser Apps hat eine eigene);
-        für ein neues Netz muss sie eingerichtet werden.</li>
-      <li><strong>Die Gästeliste an der Poststelle</strong> — nur die Schlüssel eurer Knoten dürfen dort
-        schreiben. Damit ist das Netz geschlossen. <span class="nz-stand">⚠ vorbereitet</span>, heute noch
-        nirgends eingeschaltet.</li>
-      <li><strong>Jeder Knoten spricht nur mit der eigenen Poststelle</strong> — die Adresse wird beim
-        Einrichten in der Konfiguration der App gesetzt. <span class="nz-stand">✅ einstellbar</span></li>
-      <li><strong>Die Membran</strong> — sie nimmt nur Nachrichten von erlaubten Absendern an.
-        <span class="nz-stand">✅ in jedem Knoten</span></li>
-      <li><strong>Das Siegel</strong> — es zeigt an jedem Knoten, ob alle Bausteine da sind.
-        <span class="nz-stand">✅ vorhanden</span></li>
-    </ol>
-    <div class="nz-achtung">
-      <p><strong>Wichtig zu wissen:</strong> Was über eine Poststelle läuft, kann ihr Betreiber lesen —
-      die Fragen sind heute nicht Ende-zu-Ende verschlüsselt. Bei einer eigenen Poststelle seid der
-      Betreiber ihr selbst. Vertrauliches gehört deshalb nicht über fremde Poststellen.</p>
-      <p><strong>Und:</strong> Die Poststelle einzurichten ist heute noch Handarbeit auf einem Server,
-      kein Knopf in der App. Ein eigener, abgetrennter Raum auf einer <em>geteilten</em> öffentlichen
-      Poststelle ist noch nicht einstellbar — abgeschirmt wird über eine eigene.</p>
-    </div>
-  </div>
-  <!-- NUTZEN-ENDE -->
-
-  <div class="section">
-    <h2>Wie läuft das Schritt für Schritt?</h2>
-    <ol>
-      <li>Ein Knoten kommt zur Welt: er erzeugt sich im eigenen Browser eine Identität und
-        beschreibt sein Thema in eigenen Worten.</li>
-      <li>Aus der Beschreibung wird ein Bedeutungs-Vektor, und beides zusammen wird unterschrieben
-        — das ist seine Spore (Visitenkarte). Sie ist öffentlich; nur unterschreiben kann sie der
-        Besitzer.</li>
-      <li>Zwei Knoten verbinden sich, indem sie aufeinander zeigen. Sie tauschen Visitenkarten und
-        prüfen die Unterschrift — automatisch, ohne Vorab-Absprache.</li>
-      <li>Liegen ihre Themen nah → verified-match: sie erkennen sich.</li>
-      <li>Stellt jemand eine Frage, geht sie als Text an die verbundenen Nachbarn; die rechnen ihre
-        besten Treffer und antworten. Nur Daten, nie Programme.</li>
-      <li>Wächst das Netz, geschieht das an den Rändern, durch Empfehlung — wie ein Pilz im
-        Waldboden.</li>
-    </ol>
+    <p class="klein">Every underlined word leads to its explanation. <strong>↩ back</strong> takes you to the place you
+    came from.</p>
   </div>
 
-  <div class="section">
-    <h2>Wie bist du geschützt? — Drei Wände</h2>
-    <p class="wand"><strong>Browser-Sandkasten:</strong> Ein Knoten ist eine Webseite. Eine
-    Webseite kann nicht an deine Dateien oder dein Betriebssystem. Sie hat keine Sonderrechte.</p>
-    <p class="wand"><strong>Daten, kein Code:</strong> Es wandern nur Zettel (Karten, Fragen,
-    Antworten). Es gibt keine Nachricht „führ dieses Programm aus". Ein Wurm braucht genau das —
-    diesen Kanal gibt es nicht.</p>
-    <p class="wand"><strong>Wächter (Membran):</strong> Vor jedem Knoten steht ein Türsteher, der
-    entscheidet, was hereindarf — und nur warnt, nichts von selbst öffnet.</p>
+  <h2 id="en-inhalt">Contents</h2>
+  <ol class="inhalt">
+    <li><a href="#en-mycel">What is the mycelium?</a></li>
+    <li><a href="#en-nutzen">What is it good for?</a></li>
+    <li><a href="#en-fenster">The window “Connect to the node network”</a></li>
+    <li><a href="#en-karten">What the cards in the room show</a></li>
+    <li><a href="#en-siegel">The seal</a></li>
+    <li><a href="#en-lampen">The lamp bar</a></li>
+    <li><a href="#en-warum">Why protection is needed</a></li>
+    <li><a href="#en-schutz">How protection works</a></li>
+    <li><a href="#en-eigenes-netz">Setting up your own network</a></li>
+    <li><a href="#en-empfehlen">Recommending and blocking</a></li>
+    <li><a href="#en-regel">The one rule for you</a></li>
+    <li><a href="#en-offen">What does not work yet</a></li>
+    <li><a href="#en-mehr">Further reading</a></li>
+    <li><a href="#en-woerter">Glossary</a></li>
+  </ol>
+
+  <h2 id="en-mycel">1 · What is the mycelium?</h2>
+  <ul>
+    <li><strong>A network of apps in the browser.</strong> Every app that carries the SBKIM building blocks is a
+      <a class="w" href="#en-w-knoten">node</a>. It runs entirely in your browser.</li>
+    <li><strong>They find each other by meaning.</strong> An app that knows recipes and one that knows drinks notice
+      that their topics are close. For this, each description is turned into a
+      <a class="w" href="#en-w-vektor">meaning vector</a>.</li>
+    <li><strong>The relay is a post office.</strong> It accepts signed notes and passes them on. It has no accounts and
+      keeps no directory. It can hold notes back, but it cannot change them unnoticed, because then the
+      <a class="w" href="#en-w-signatur">signature</a> no longer fits.</li>
+    <li><strong>What “serverless” means here.</strong> It does not work entirely without servers; the relay runs on one.
+      What is missing is the big centre that holds all data, manages users and decides who finds what. There are
+      many relays, and an app can use several at once. If one fails, the others carry on.</li>
+    <li><strong>Your identity stays with you.</strong> The secret <a class="w" href="#en-w-schluessel">key</a> never
+      leaves the browser. You can back it up as an encrypted file with a password.</li>
+    <li><strong>The room.</strong> All apps announce themselves in a shared <a class="w" href="#en-w-raum">room</a>.
+      If you like, you set up <a class="w" href="#en-eigenes-netz">your own network</a> that only your apps can enter.</li>
+  </ul>
+
+  <h2 id="en-nutzen">2 · What is it good for?</h2>
+  <ul>
+    <li><strong>You do not need to know who has it.</strong> An email goes to someone you already know. A question in
+      the mycelium goes to all matching nodes, and whoever fits the topic answers.</li>
+    <li><strong>The data stays where it is.</strong> A question and an answer travel, not a copy of the whole file.
+      No five versions of the same document in five inboxes.</li>
+    <li><strong>Nothing gets retyped.</strong> What one app already knows does not have to be copied into the next.</li>
+    <li><strong>No provider in between.</strong> No account, no service that can be switched off or become more expensive.</li>
+  </ul>
+  <div class="tabelle"><table>
+    <tr><th>Where</th><th>Example</th></tr>
+    <tr><td><strong>Company</strong></td><td>Workshop tablet with orders, office computer with the books, warehouse computer with materials.
+      Question: “Have we ever lettered a van before, and with which film?” Each app answers with what it knows.</td></tr>
+    <tr><td><strong>Your own devices</strong></td><td>Recipes on the tablet, drinks on the phone. Question: “What goes with salmon?”
+      Both answer, each with its part.</td></tr>
+    <tr><td><strong>Club</strong></td><td>Every member has their own collection. Whoever knows something answers. Nothing sits with an
+      outside provider.</td></tr>
+  </table></div>
+  <p class="klein"><strong>Where things stand:</strong> Today the nodes exchange questions and answers as text. Programs
+  matching whole orders or invoices on their own is not built. How much time the network saves has not been measured
+  for SBKIM itself. What is shown is that two nodes find each other without a centre and answer questions. What
+  switching between programs costs has been measured by others: about 1,200 switches a day among 137 employees
+  (Harvard Business Review, 2022,
+  <a href="https://hbr.org/2022/08/how-much-time-and-energy-do-we-waste-toggling-between-applications" target="_blank" rel="noopener noreferrer">article</a>).</p>
+
+  <h2 id="en-fenster">3 · The window “🌐 Connect to the node network”</h2>
+  <p>The window floats above the app. You can drag it, minimise it and close it. The app only needs to stay open
+  so that you can be reached.</p>
+  <h3>Two levels</h3>
+  <p class="klein">Button names are quoted as they appear in the app; apps in German show the German names.</p>
+  <ul>
+    <li><strong>🔎 Just browse:</strong> <span class="knopf">👥 Who is in the room?</span> shows who is there. No identity of
+      your own; you cannot be found yourself.</li>
+    <li><strong>🌐 Take part fully:</strong> <span class="knopf">🌐 Connect to the node network</span> creates your own
+      <a class="w" href="#en-w-identitaet">identity</a> once. Only then can you be found and ask questions.</li>
+  </ul>
+  <h3>The buttons</h3>
+  <div class="tabelle"><table>
+    <tr><th>Button</th><th>What it does</th></tr>
+    <tr><td><span class="knopf">🌐 Connect to the node network</span></td><td>Creates the identity if needed, puts your card in the room, listens.</td></tr>
+    <tr><td><span class="knopf">👥 Who is in the room?</span></td><td>Reads the room and shows the <a class="w" href="#en-karten">cards</a>. Also collects recommendations for you.</td></tr>
+    <tr><td><span class="knopf">🙋 Just re-announce</span></td><td>Puts your own card in the room again.</td></tr>
+    <tr><td><span class="knopf" lang="de" translate="no">🔎 Antwort holen</span> (get an answer)</td><td>Asks your question to the best-matching node. With 🎤 you can speak it.</td></tr>
+    <tr><td><span class="knopf">📬 Fetch replies</span></td><td>Collects answers that arrived while you were away.</td></tr>
+    <tr><td><span class="knopf" lang="de" translate="no">💬 Antworten: an/aus</span> (answering: on/off)</td><td>Whether your app answers others.</td></tr>
+    <tr><td><span class="knopf" lang="de" translate="no">🧬 nur verwandte</span> (related only)</td><td>Shows only nodes with a related topic.</td></tr>
+    <tr><td><span class="knopf" lang="de" translate="no">🧠 KI-Richter</span> (AI judge)</td><td>An AI rates the answers. You enter your own AI key; it stays in the browser, in the vault if you wish. See <a class="w" href="#en-w-richter">AI judge</a>.</td></tr>
+    <tr><td><span class="knopf">🪪 Secure the identifier</span></td><td>💾 Make a backup, 📥 Play a backup in. Without a backup, a browser that cleans up can delete the identity.</td></tr>
+    <tr><td><span class="knopf">🔒 Network</span></td><td>Set up <a class="w" href="#en-eigenes-netz">your own network</a> or go back to the public one.</td></tr>
+    <tr><td><span class="knopf" lang="de" translate="no">🤝 Empfehlungen</span> (recommendations)</td><td>Network admin, own contacts, received recommendations, expiry. See <a class="w" href="#en-empfehlen">Recommending</a>.</td></tr>
+    <tr><td><span class="knopf" lang="de" translate="no">⛔ Sperrliste</span> (block list)</td><td>Shows who is blocked. See <a class="w" href="#en-w-sperrliste">block list</a>.</td></tr>
+    <tr><td><span class="knopf" lang="de" translate="no">🍄 Mycel-Karte ansehen ↗</span> (view the mycelium map)</td><td>The live map of the network in a new tab.</td></tr>
+  </table></div>
+  <p class="klein"><strong>Device name:</strong> Many apps show a field for a device name in the window, such as “phone”
+  or “office”. It helps tell two devices of the same app apart. It is a hint, not proof, because anyone can choose
+  any name.</p>
+
+  <h2 id="en-karten">4 · What the cards in the room show</h2>
+  <p>Each card stands for one node. Its name is in bold; below it is what your app has checked about it.</p>
+  <div class="tabelle"><table>
+    <tr><th>Display</th><th>Meaning</th></tr>
+    <tr><td>(card is there)</td><td>Its signature fits its key. A <strong>forged</strong> card is discarded and does not appear at all.</td></tr>
+    <tr><td>⚠ The same name appears N more time(s)</td><td>Another node carries the same name with a different <a class="w" href="#en-w-kennung">identifier</a>. The name is not verified; only the identifier counts.</td></tr>
+    <tr><td>✓ Meaning matches the description</td><td>Your app recomputed the <a class="w" href="#en-w-vektor">vector</a> from the text, and it matches (<a class="w" href="#en-s2">S2</a>).</td></tr>
+    <tr><td>⚠ Meaning does not match the description, no priority</td><td>The vector does not come from the text shown. The card stays visible but is not moved forward.</td></tr>
+    <tr><td>· Meaning computed from content, cannot be checked</td><td>The vector was computed from the app's content (recipes, for example). Your app does not know that content. No penalty.</td></tr>
+    <tr><td>· Origin of the meaning not stated</td><td>The card does not say where the vector comes from. Cannot be checked.</td></tr>
+    <tr><td>· Meaning not checked</td><td>The language model is not loaded on your side. This is stated openly, never a silent tick.</td></tr>
+    <tr><td>🤝 Network admin</td><td>This card belongs to the <a class="w" href="#en-w-netzadmin">network admin</a> of this network.</td></tr>
+    <tr><td>🤝 own contact</td><td>You saved this identifier as a contact yourself.</td></tr>
+    <tr><td>🤝 recommended by …</td><td>Someone you trust has <a class="w" href="#en-empfehlen">recommended</a> this identifier. Recommended cards come first for a question. All others stay visible.</td></tr>
+    <tr><td><span lang="de" translate="no">🧬 verwandt</span> 0.xx (related)</td><td>How close the topic is to yours.</td></tr>
+    <tr><td>🔎 Question fit 0.xx</td><td>How well the node fits your question.</td></tr>
+    <tr><td>⚠ unconfirmed (not signed)</td><td>Shown on an <strong>answer</strong> without a valid signature. It does not go to the AI judge.</td></tr>
+    <tr><td>(blocked card)</td><td>Does not appear. See <a class="w" href="#en-w-sperrliste">block list</a>.</td></tr>
+  </table></div>
+  <p>Each card has buttons: <span class="knopf">🤝 Connect</span> (exchange business cards),
+  <span class="knopf">❓ ask directly</span>, <span class="knopf">🤝 Recommend</span>,
+  <span class="knopf" lang="de" translate="no">↗ App öffnen</span> (open the app). Only the network admin also sees <span class="knopf">⛔ Block</span>.</p>
+
+  <h2 id="en-siegel">5 · The seal</h2>
+  <ul>
+    <li><strong>Self-issued.</strong> At start-up the app checks whether its required building blocks are loaded and
+      shows the result openly. No authority grants it.</li>
+    <li><strong>What is checked:</strong> eight building blocks, namely storage, spore, meaning (embedding), matching,
+      handshake, relay connection, orderly deletion (<a class="w" href="#en-w-apoptose">apoptosis</a>) and the
+      <a class="w" href="#en-w-membran">membrane</a>.</li>
+    <li><strong>Bronze</strong> means “in the mycelium, dormant”. <strong>Gold</strong> means “active”: a handshake with
+      another node took place in this session. After a reload it shows Bronze again.</li>
+    <li><strong>What it does not say:</strong> “Trust me blindly.” It says: “Check me, the source code is open.”</li>
+    <li><strong>New protection levels become visible.</strong> The seal lists its aspects with dates, most recently the
+      layers <a class="w" href="#en-schutz">S1 to S5b</a>.</li>
+  </ul>
+  <h3>What the seal contains</h3>
+  <div class="tabelle"><table>
+    <tr><th>Part</th><th>What for</th></tr>
+    <tr><td><span class="knopf">🔑 Create / manage your own identity &amp; spore</span></td><td>The docking assistant, five steps:
+      <ol>
+        <li><strong>Create identity:</strong> a key pair; the identifier comes from the public key.</li>
+        <li><strong>Sign and download the spore.</strong></li>
+        <li><strong>Encrypted backup</strong> with a password.</li>
+        <li><strong>Restore identity</strong> from the backup file.</li>
+        <li><strong>Identity switcher:</strong> which identity is currently active.</li>
+      </ol>
+      Keep the backup file and the password safe together. Without both there is no restore.</td></tr>
+    <tr><td><span class="knopf">✍ Semantic description</span></td><td>Describe in your own words what the app is about. With
+      “Apply description → re-sign vector &amp; spore” it takes effect. A good description makes the app easier to find.</td></tr>
+    <tr><td><span class="knopf">🛡 What does this seal mean?</span></td><td>A short note on protection, and the button “Explained in full”, which opens this page.</td></tr>
+    <tr><td><span class="knopf">🔌 Dock a foreign node →</span></td><td>Enter the address of another app, check its spore, match, handshake. No AI, directly in the browser.</td></tr>
+  </table></div>
+
+  <h2 id="en-lampen">6 · The lamp bar</h2>
+  <div class="tabelle"><table>
+    <tr><th>Lamp</th><th>What it shows</th></tr>
+    <tr><td><strong>ALIVE</strong></td><td>Green and breathing: the app is running, its spore is there. A tap opens the status.</td></tr>
+    <tr><td><strong>TRAFFIC</strong></td><td>Lit: connected to the relay, the app is listening. Flashes briefly on a handshake or a message. A tap shows the latest events.</td></tr>
+    <tr><td><strong>FOREIGN</strong></td><td>Red: another AI or a browser agent has addressed the app through messages. The <a class="w" href="#en-w-membran">membrane</a> recorded it. A tap shows who.</td></tr>
+    <tr><td><strong>SEAL</strong></td><td>The medal with ★, once the self-check has passed. A tap opens the <a class="w" href="#en-siegel">seal</a>.</td></tr>
+  </table></div>
+
+  <h2 id="en-warum">7 · Why protection is needed</h2>
+  <p>An open network has no doorman. Anyone can create a node, anyone can write in the room. That is intended;
+  otherwise a centre would have to decide. It follows that:</p>
+  <ul>
+    <li><strong>Only the recipient can reject.</strong> The relay passes on every note. Whether a card, question or
+      answer counts is decided by the app where it arrives.</li>
+    <li><strong>Every public signal can be imitated.</strong> Anyone can copy a name, a description or a vector. The only
+      thing that cannot be copied is a signature made with someone else's secret key.</li>
+    <li><strong>The signature checks the origin, not the content.</strong> A spore full of nonsense can be validly signed.
+      It then simply comes from that key, nothing more.</li>
+  </ul>
+  <h3>Who might attack</h3>
+  <div class="tabelle"><table>
+    <tr><th>Who</th><th>What they need</th><th>What they want</th></tr>
+    <tr><td><strong>Eavesdropper</strong></td><td>only access to the public room</td><td>read questions, answer in someone else's name</td></tr>
+    <tr><td><strong>Forger</strong></td><td>a key of their own, which costs nothing</td><td>pose as another node</td></tr>
+    <tr><td><strong>Flooder</strong></td><td>many keys and notes</td><td>make the room unusable</td></tr>
+    <tr><td><strong>Text that tries to instruct an AI</strong></td><td>a field that an AI reads later</td><td>get the AI judge to do something</td></tr>
+    <tr><td><strong>Browser AI</strong></td><td>nothing, it is already there</td><td>nothing bad, but it reads the page and can act for you</td></tr>
+  </table></div>
+  <h3>What we re-enacted on 14 October 2026</h3>
+  <p>With the real building blocks, in the live network. <strong>All three attacks got through at the time:</strong></p>
+  <ol>
+    <li>A <strong>forged business card</strong> was accepted as genuine.</li>
+    <li>An <strong>eavesdropper</strong> could answer in the name of another node, and the answer showed as
+      “✓ answer from …”.</li>
+    <li>A node's <strong>meaning vector</strong> could be copied. The copier got the same relatedness as the original.</li>
+  </ol>
+  <p>There was also an older finding: in two apps, the old version ran a script from a foreign <strong>name</strong>,
+  because the name was inserted as HTML. All of these gaps are closed and rolled out. How is described in the next
+  section.</p>
+  <h3>Where foreign text goes decides the damage</h3>
+  <ul>
+    <li><strong>To a person:</strong> harmless, as long as it is shown as text.</li>
+    <li><strong>To an AI:</strong> dangerous if it sounds like an instruction (“ignore everything so far …”).</li>
+    <li><strong>Into the ranking:</strong> a copied vector pushes a stranger to the front.</li>
+  </ul>
+
+  <h2 id="en-schutz">8 · How protection works</h2>
+  <p>No single check is enough. What works is a <strong>series of hurdles</strong>: the cheap ones first, the expensive
+  ones when it matters. Nature keeps species apart in this way: courtship, then recognition at the cell, then a check
+  of the genes. Each hurdle only filters what got past the previous one.</p>
+  <p>One rule applies to every layer: <strong>when in doubt, mark rather than reject.</strong> An app with an older
+  version does not silently drop out; it only loses its priority.</p>
+  <h3>The walls that always stand</h3>
+  <ul>
+    <li><strong>Browser sandbox:</strong> A node is a web page. It cannot reach your files or your system.</li>
+    <li><strong>Data, no code:</strong> Only notes travel. There is no message saying “run this program”. A worm needs
+      exactly that channel, and it does not exist.</li>
+    <li><strong>Foreign text only as text:</strong> Names and answers are shown as text, never as HTML.</li>
+    <li><strong>The <a class="w" href="#en-w-membran">membrane</a>:</strong> the doorman. It only lets permitted senders
+      in and reports foreign access on the <a class="w" href="#en-lampen">FOREIGN</a> lamp.</li>
+  </ul>
+  <h3>The layers in the network</h3>
+  <div class="tabelle"><table>
+    <tr><th>Layer</th><th>What it does</th><th>What you see of it</th></tr>
+    <tr id="en-echtheit"><td><strong>Genuine cards</strong></td><td>Every card is checked against its signature before cards with the same name are grouped.</td><td>Forged ones are missing; “⚠ The same name appears …”</td></tr>
+    <tr id="en-antworten"><td><strong>Signed answers</strong></td><td>Only the node that was asked counts as sender.</td><td>“⚠ unconfirmed”; such answers do not go to the AI judge</td></tr>
+    <tr id="en-s1"><td><strong>S1 · Signed questions</strong></td><td>Forged questions are not answered, unsigned ones are throttled (at most 2 of 6 per minute).</td><td>nothing, it works in the background</td></tr>
+    <tr id="en-s2"><td><strong>S2 · Recomputing the vector</strong></td><td>Your app recomputes the vector from the description (threshold 0.99). A copied one stands out.</td><td>“✓ Meaning matches” or “⚠ does not match, no priority”</td></tr>
+    <tr id="en-s3"><td><strong>S3 · Computing effort</strong></td><td>Before sending, the app solves a small puzzle. When the room is full, notes with effort take priority. Flooding becomes expensive.</td><td>nothing, it works in the background</td></tr>
+    <tr id="en-s4"><td><strong>S4 · Block list</strong></td><td>Only the <a class="w" href="#en-w-netzadmin">network admin</a> signs it. Blocked identifiers do not appear, and their questions go unanswered.</td><td>the “<span lang="de" translate="no">⛔ Sperrliste</span>” (block list) box</td></tr>
+    <tr id="en-s5"><td><strong>S5 · Recommending</strong></td><td>A known node says: “I know this identifier.” It only counts if you already trust the recommender.</td><td>“🤝 recommended by …”, first for questions</td></tr>
+    <tr id="en-s5b"><td><strong>S5b · Recommending in the markets</strong></td><td>Markets recommend the outside apps they show. At most 180 days, revocation only with a reason, liability only for that one app. The recommendation arrives by itself.</td><td>“⏳ expires on …”</td></tr>
+    <tr id="en-pruefliste"><td><strong>Check list before the AI judge</strong></td><td>The question and foreign answers are checked for instructions aimed at an AI. Without the list the judge does not run.</td><td>such an answer does not go to the AI</td></tr>
+    <tr id="en-verschluesselt"><td><strong>Own network with a code</strong></td><td>Cards, questions and answers are encrypted. Without the code you see nothing readable.</td><td>“<span lang="de" translate="no">🔒 Eigenes Netz</span>” (own network)</td></tr>
+  </table></div>
+  <p class="klein">Every layer has a test that shows it works, and a counter-test that builds the fault in on purpose and
+  shows that the test then fails. S1 to S5b are built and rolled out in 29 apps (as of 2026-10-16). S6 and S7 are not
+  approved.</p>
+
+  <h2 id="en-eigenes-netz">9 · Setting up your own network</h2>
+  <p>For a company, club or family. Only apps with the same <a class="w" href="#en-w-netzcode">network code</a> see each other.</p>
+  <figure>
+    <svg viewBox="0 0 400 420" role="img" aria-labelledby="en-bild-t en-bild-d">
+      <title id="en-bild-t">Your own network</title>
+      <desc id="en-bild-d">Four of your own nodes talk through a relay. All carry the same network code, and their notes
+      are encrypted. A foreign node without the code cannot read any of it.</desc>
+      <rect x="6" y="6" width="388" height="320" rx="18" fill="rgba(54,190,170,.07)" stroke="#2fb3a2" stroke-width="2" stroke-dasharray="8 6"/>
+      <text x="22" y="32" font-size="15" font-weight="700" fill="#d7dee5">Own network · one code</text>
+      <g stroke="#2fb3a2" stroke-width="3"><line x1="140" y1="118" x2="165" y2="150"/><line x1="260" y1="118" x2="235" y2="150"/><line x1="140" y1="252" x2="165" y2="222"/><line x1="260" y1="252" x2="235" y2="222"/></g>
+      <circle cx="200" cy="186" r="56" fill="rgba(54,190,170,.2)" stroke="#2fb3a2" stroke-width="3"/>
+      <text x="200" y="182" font-size="15" font-weight="700" text-anchor="middle" fill="#d7dee5">Relay</text>
+      <text x="200" y="202" font-size="12" text-anchor="middle" fill="#d7dee5">🔒 encrypted</text>
+      <g font-size="14" text-anchor="middle" fill="#d7dee5">
+        <rect x="20" y="66" width="120" height="52" rx="10" fill="rgba(127,140,150,.18)"/><text x="80" y="97">Workshop</text>
+        <rect x="260" y="66" width="120" height="52" rx="10" fill="rgba(127,140,150,.18)"/><text x="320" y="97">Office</text>
+        <rect x="20" y="252" width="120" height="52" rx="10" fill="rgba(127,140,150,.18)"/><text x="80" y="283">Field staff</text>
+        <rect x="260" y="252" width="120" height="52" rx="10" fill="rgba(127,140,150,.18)"/><text x="320" y="283">Warehouse</text>
+      </g>
+      <line x1="200" y1="360" x2="200" y2="246" stroke="#c85050" stroke-width="3" stroke-dasharray="6 5"/>
+      <rect x="120" y="356" width="160" height="54" rx="10" fill="rgba(200,80,80,.14)" stroke="#c85050" stroke-width="2"/>
+      <text x="200" y="380" font-size="14" font-weight="700" text-anchor="middle" fill="#d7dee5">Foreign node</text>
+      <text x="200" y="399" font-size="12" text-anchor="middle" fill="#d7dee5">no code: reads nothing</text>
+    </svg>
+    <figcaption>Whoever has the code is in the network. Whoever does not sees only encrypted notes.</figcaption>
+  </figure>
+  <h3>Step by step</h3>
+  <ol>
+    <li>In the window, open the <span class="knopf">🔒 Network</span> box.</li>
+    <li>Enter a <strong>name</strong>, for example the name of the company.</li>
+    <li>Enter the <strong>relay</strong> (an address starting with <code>wss://</code>). Your own relay on your own
+      server is best, see below.</li>
+    <li><span class="knopf" lang="de" translate="no">🎲 Code erzeugen</span> (create a code), then <span class="knopf" lang="de" translate="no">✓ Übernehmen</span> (apply).</li>
+    <li>Optional: enter the <strong>network admin</strong>, the identifier of the app that may recommend and block in this network.</li>
+    <li><span class="knopf" lang="de" translate="no">🔗 Link kopieren</span> (copy link) and give the link <strong>only to your own devices</strong>. Whoever opens it
+      is asked whether to join this network.</li>
+    <li>To go back, use <span class="knopf" lang="de" translate="no">🌐 Zurück ins öffentliche Netz</span> (back to the public network).</li>
+  </ol>
+  <h3>What you have to do yourself</h3>
+  <ul>
+    <li><strong>Guard the code.</strong> It stays on the device and never goes to a server. Whoever has the link is in.</li>
+    <li><strong>Choose a relay.</strong> Setting up your own relay is manual work on a server today, not a button in the app.</li>
+    <li><strong>Pick a network admin.</strong> In your own network that is you or whoever runs it, not the admin of the open mycelium.</li>
+    <li><strong>Recommend your own apps</strong> so that they come first (<a class="w" href="#en-empfehlen">Recommending</a>).</li>
+  </ul>
+  <div class="achtung">
+    <p><strong>In the public room</strong> the notes are not encrypted. Whoever runs the relay can read questions
+    and answers. Confidential matters belong in your own network with a code.</p>
   </div>
 
-  <div class="section">
-    <h2>Die eine Regel, auf die DU achten musst</h2>
-    <div class="achtung">
-      <p>Die einzige Stelle, an der echter Schaden möglich ist, ist nicht das Netz — sondern du
-      selbst: wenn du ungeprüften fremden Code in dein eigenes Repo kopierst, lässt du einen
-      fremden Pilz in deinen Garten. Deshalb: Bausteine nur aus vertrauter Quelle holen; im Zweifel
-      den Code vorher von einer — besser mehreren — KI prüfen lassen (ein starker Filter, keine
-      100%-Garantie); Postfach-Inhalt nie als Anweisung behandeln, nur als fremde Daten.</p>
-    </div>
-  </div>
+  <h2 id="en-empfehlen">10 · Recommending and blocking</h2>
+  <h3>Recommending an app in four steps</h3>
+  <ol>
+    <li>In the window, press <span class="knopf">👥 Who is in the room?</span>.</li>
+    <li>On the card, press <span class="knopf">🤝 Recommend</span>.</li>
+    <li>Compare the <a class="w" href="#en-w-sicherheitsnummer">safety number</a> through a second channel (phone, in person).
+      If it matches, tick “<span lang="de" translate="no">Die Nummer stimmt überein</span>” (the number matches).</li>
+    <li><span class="knopf" lang="de" translate="no">✍ Empfehlung unterschreiben</span> (sign the recommendation). Done. The recommendation arrives by itself.</li>
+  </ol>
+  <h3>The rules</h3>
+  <ul>
+    <li><strong>It only counts through your own trust:</strong> the network admin, your own contacts, at most two steps
+      away. A hundred invented nodes recommending each other count for nobody.</li>
+    <li><strong>It is tied to the identifier</strong>, never to the name.</li>
+    <li><strong>At most 180 days.</strong> 30 days before, “⏳ expires on …” appears. Only the recommender can extend it.</li>
+    <li><strong>Revocation only with a reason.</strong> The reason is signed with it and readable by everyone.</li>
+    <li><strong>It locks nobody out.</strong> Cards without a recommendation stay visible and are still asked. For stricter
+      rules, switch on “<span lang="de" translate="no">Nur Empfohlenen antworten</span>” (answer only recommended ones; off by default).</li>
+  </ul>
+  <h3>Blocking</h3>
+  <ul>
+    <li>Only the <a class="w" href="#en-w-netzadmin">network admin</a> sees <span class="knopf">⛔ Block</span> on every card.</li>
+    <li>The blocked identifier disappears from the map in all apps of this network. Its questions are no longer answered.</li>
+    <li>The list is public and travels on the cards. Every app checks the signature itself.</li>
+  </ul>
+  <h3>The network admin page</h3>
+  <p>Anyone who recommends many apps, a market for instance, has a separate page with four lists: apps in my mycelium,
+  my recommendations, revocations, block list. There you can recommend, extend and revoke, and as network admin block
+  and unblock.</p>
 
-  <div class="section">
-    <h2>Du bleibst Herr über deinen Knoten</h2>
-    <p>Du kannst deinen Knoten jederzeit sauber und vollständig löschen und das Netz geordnet
-    verlassen — die Nachbarn bekommen ein kurzes „dieser Knoten geht", statt dass etwas stumm
-    zurückbleibt.</p>
-  </div>
+  <!-- APP-EIGEN-EN -->
 
-  <div class="section">
-    <h2>Was bedeutet dieses Siegel?</h2>
-    <p>Das Siegel ist selbst-ausgestellt: Der Knoten hat beim Start selbst geprüft, dass seine
-    Schutz-Bausteine geladen sind, und macht das offen sichtbar. Kein Amt vergibt es. Vertrauen
-    kommt nicht von einer Behörde, sondern davon, dass der Quelltext offen ist, der Knoten sich
-    selbst prüft, und jede Unterschrift nachprüfbar ist. Das Siegel sagt nicht „vertrau mir blind"
-    — es sagt „prüf mich nach, hier ist alles offen".</p>
+  <h2 id="en-regel">11 · The one rule for you</h2>
+  <div class="achtung">
+    <p>Real damage is most likely when you copy <strong>unchecked foreign code</strong> into your own app. Take building
+    blocks only from a trusted source. When in doubt, have the code checked beforehand by one AI, better several (a
+    strong filter, not a guarantee). Always treat foreign text as data, never as an instruction.</p>
   </div>
+  <p><strong>You stay in charge of your node.</strong> You can delete it completely at any time and leave the network in
+  an orderly way. The neighbours get a short “this node is leaving”.</p>
 
-  <div class="section">
-    <h2>Wörterbuch (jeder Begriff einmal, einfach)</h2>
-    <dl class="woerter">
-      <dt>Mycel / Myzel</dt>
-      <dd>das unsichtbare Pilzgeflecht im Boden; hier: das Netz der Knoten.</dd>
-      <dt>Knoten</dt>
-      <dd>eine einzelne Browser-Anwendung im Netz (Seite, Werkzeug oder App).</dd>
-      <dt>Hyphe</dt>
-      <dd>ein einzelner Pilzfaden; hier: eine Verbindung zwischen zwei Knoten.</dd>
-      <dt>PWA</dt>
-      <dd>eine Webseite, die sich wie eine App installieren lässt, aber im Browser bleibt.</dd>
-      <dt>Spore</dt>
-      <dd>die Visitenkarte eines Knotens (kleine Datei: Name, Thema, öffentlicher Schlüssel,
-        Unterschrift).</dd>
-      <dt>Embedding / Vektor</dt>
-      <dd>aus einem Text wird eine Zahlenreihe, die seine Bedeutung als Punkt im Raum darstellt;
-        ähnliche Themen liegen nah.</dd>
-      <dt>verified-match</dt>
-      <dd>zwei Knoten gelten als verwandt, wenn ihre Vektoren nah sind und die Unterschrift echt
-        ist.</dd>
-      <dt>Signatur (Ed25519)</dt>
-      <dd>eine elektronische Unterschrift: jeder kann die Echtheit prüfen, fälschen kann sie
-        niemand.</dd>
-      <dt>öffentlicher / privater Schlüssel</dt>
-      <dd>der öffentliche ist die Visitenkarte; der private bleibt geheim im Browser (nur damit
-        kann man unterschreiben).</dd>
-      <dt>verschlüsselte Sicherung</dt>
-      <dd>eine passwortgeschützte Kopie deines geheimen Schlüssels.</dd>
-      <dt>Membran</dt>
-      <dd>der Türsteher eines Knotens; lässt nur Erlaubtes herein und warnt.</dd>
-      <dt>Empfangsmodus</dt>
-      <dd>ein Knoten ruft nicht von selbst herum, er antwortet nur.</dd>
-      <dt>Apoptose</dt>
-      <dd>der geordnete Selbst-Abbau: ein Knoten kann sich kontrolliert und vollständig selbst
-        löschen.</dd>
-      <dt>Handshake (Anastomose)</dt>
-      <dd>das Hände-Schütteln zweier Knoten beim Visitenkarten-Tausch.</dd>
-      <dt>self-inscribing</dt>
-      <dd>„selbst-einschreibend": kein Amt stellt das Siegel aus, der Knoten prüft sich selbst und
-        legt es offen.</dd>
-    </dl>
-  </div>
+  <h2 id="en-offen">12 · What does not work yet</h2>
+  <p class="grenze"><strong>The browser AI reads the page.</strong> A browser with a built-in AI sees everything the app
+  shows, including foreign text, and can click for you. No check inside the app protects against that. Only access
+  through messages becomes visible (FOREIGN lamp).</p>
+  <p class="grenze"><strong>A blocked identifier can be replaced.</strong> A new identifier costs nothing. The block only
+  hits those already known.</p>
+  <p class="grenze"><strong>Blocking and recommending govern answers, not reading.</strong> In the public room a blocked
+  node still sees cards and questions.</p>
+  <p class="grenze"><strong>A validly signed namesake is shown.</strong> Only someone who knows the identifier can tell it apart.</p>
+  <p class="grenze"><strong>The check list before the AI judge</strong> recognises fixed phrases. Reworded or in another
+  language, an instruction gets through.</p>
+  <p class="grenze"><strong>Almost nothing has been measured on the tablet.</strong> Only the accuracy of S2 has been measured
+  there. Computing effort, block list and recommendations between two real devices have only been checked in tests.
+  There is no real, signed block list yet.</p>
+  <p class="grenze"><strong>The guest list at the relay</strong> (only your own keys may write) is prepared but not switched
+  on anywhere. Shielding works through the network code.</p>
+
+  <h2 id="en-mehr">13 · Further reading</h2>
+  <ul>
+    <li><strong>Sicherer Umgang im Knotennetz</strong> (paper S, German): which attacks exist, what measurably works
+      against them, where the limit is. Draft, under review.
+      <a href="https://github.com/lausiklauskn-png/Sage-Protokol/blob/main/docs/papers/sicherer-umgang-im-knotennetz.md" target="_blank" rel="noopener noreferrer">read ↗</a></li>
+    <li><strong>The SBKIM paper:</strong> how nodes find each other by meaning.
+      <a href="https://doi.org/10.5281/zenodo.22277738" target="_blank" rel="noopener noreferrer">DOI 10.5281/zenodo.22277738 ↗</a></li>
+    <li><strong>How to recommend an app</strong> (German):
+      <a href="https://github.com/lausiklauskn-png/Sage-Protokol/blob/main/docs/ANLEITUNG_EMPFEHLEN.md" target="_blank" rel="noopener noreferrer">guide ↗</a></li>
+  </ul>
+
+  <h2 id="en-woerter">Glossary</h2>
+  <dl class="woerter">
+    <dt id="en-w-mycel">Mycel (mycelium)</dt><dd>the invisible fungal network in the soil; here, the network of nodes.</dd>
+    <dt id="en-w-knoten">Node</dt><dd>a single app in the network, running entirely in the browser.</dd>
+    <dt id="en-w-raum">Room</dt><dd>the shared meeting place on the relay where the cards lie.</dd>
+    <dt id="en-w-relais">Relay</dt><dd>the post office: accepts signed notes and passes them on. It can hold them back, but cannot change them unnoticed.</dd>
+    <dt id="en-w-spore">Spore</dt><dd>a node's business card: name, description, meaning vector, public key, signature.</dd>
+    <dt id="en-w-kennung">Identifier</dt><dd>the checksum of the public key. It is unique; the name is not.</dd>
+    <dt id="en-w-identitaet">Identity</dt><dd>a node's key pair together with its identifier. It is created in the browser and stays there.</dd>
+    <dt id="en-w-schluessel">Public / secret key</dt><dd>the public one is on the business card, the secret one stays in the browser. Only the secret one can sign.</dd>
+    <dt id="en-w-signatur">Signature</dt><dd>anyone can check that it is genuine, no one can forge it. It confirms the origin, not the content.</dd>
+    <dt id="en-w-vektor">Meaning vector</dt><dd>384 numbers that say what something is about. Similar topics lie close together.</dd>
+    <dt id="en-w-membran">Membrane</dt><dd>a node's doorman: lets in only what is permitted and reports foreign access.</dd>
+    <dt id="en-w-netzadmin">Network admin</dt><dd>the node that may recommend and block in a network. In the open mycelium that is Sage-Protokol; in your own network, whoever the setting names.</dd>
+    <dt id="en-w-netzcode">Network code</dt><dd>the shared secret of your own network. The notes are encrypted with it.</dd>
+    <dt id="en-w-empfehlung">Recommendation</dt><dd>a signed statement “I know this identifier”. In the protocol it is called a voucher.</dd>
+    <dt id="en-w-sicherheitsnummer">Safety number</dt><dd>computed from both keys. If it matches on both devices, the card really belongs to the person you know.</dd>
+    <dt id="en-w-sperrliste">Block list</dt><dd>a list of blocked identifiers signed by the network admin. It travels with the cards; every app checks it itself.</dd>
+    <dt id="en-w-richter">AI judge</dt><dd>an AI that rates answers. It runs with your own key and only behind the check list.</dd>
+    <dt id="en-w-rechenaufwand">Computing effort</dt><dd>a small puzzle before sending. Barely noticeable for one note, expensive for thousands.</dd>
+    <dt id="en-w-handschlag">Handshake (Anastomose)</dt><dd>two nodes exchange business cards and check the signature.</dd>
+    <dt id="en-w-apoptose">Apoptose (apoptosis)</dt><dd>the orderly self-deletion of a node.</dd>
+    <dt id="en-w-hyphe">Hyphe (hypha)</dt><dd>a single fungal thread; here, a connection between two nodes.</dd>
+    <dt id="en-w-pwa">PWA</dt><dd>a web page that can be installed like an app.</dd>
+  </dl>
+</div>
+
+<button id="rueckSchwebe" type="button" hidden>↩ zurück</button>
 
 <script>
-  // Im In-Page-Overlay (iframe) ist der „zurück"-Link überflüssig — ausblenden.
-  try {
-    if (window.self !== window.top) {
-      var bl = document.getElementById("backLink");
-      if (bl) bl.style.display = "none";
-    }
-  } catch (e) {
-    // Cross-Origin-Zugriff auf window.top wirft → wir sind eingebettet → ausblenden.
-    var bl2 = document.getElementById("backLink");
-    if (bl2) bl2.style.display = "none";
+(function () {
+  "use strict";
+  var doc = document, root = doc.documentElement;
+  var bloecke = { de: doc.getElementById("de"), en: doc.getElementById("en") };
+  var schwebe = doc.getElementById("rueckSchwebe");
+  var aktuell = "de";
+  var herkunft = null;     // the link element the reader jumped from
+  var zielEl = null;       // the element jumped to
+  var hierKnopf = null;    // the inline "back" button at the target
+
+  // ── language ────────────────────────────────────────────────
+  function startSprache() {
+    try {
+      var q = /[?&]lang=(de|en)\b/.exec(location.search);
+      if (q) return q[1];
+    } catch (_e) {}
+    try {
+      var key = root.getAttribute("data-sprache-schluessel");
+      if (key) { var v = localStorage.getItem(key); if (v === "de" || v === "en") return v; }
+    } catch (_e) {}
+    try {
+      if (window.self !== window.top) {
+        var pl = String(window.parent.document.documentElement.lang || "").slice(0, 2).toLowerCase();
+        if (pl === "de" || pl === "en") return pl;
+      }
+    } catch (_e) {}
+    try { if (!/^de\b/i.test(navigator.language || "de")) return "en"; } catch (_e) {}
+    return "de";
   }
+  function zeige(sp) {
+    aktuell = sp === "en" ? "en" : "de";
+    bloecke.de.hidden = aktuell !== "de";
+    bloecke.en.hidden = aktuell !== "en";
+    root.lang = aktuell;
+    // keep a carrier's suffix („… — App-Name"), swap only the base
+    var TDE = "So funktioniert das Mycel", TEN = "How the mycelium works";
+    var t = String(doc.title || TDE);
+    doc.title = aktuell === "en" ? t.replace(TDE, TEN) : t.replace(TEN, TDE);
+    schwebe.textContent = aktuell === "en" ? "↩ back" : "↩ zurück";
+    aufraeumen();
+  }
+
+  // ── jump and back ───────────────────────────────────────────
+  function aufraeumen() {
+    if (zielEl) zielEl.classList.remove("ziel", "ziel-aus");
+    if (hierKnopf && hierKnopf.parentNode) hierKnopf.parentNode.removeChild(hierKnopf);
+    zielEl = null; hierKnopf = null; herkunft = null;
+    schwebe.hidden = true;
+  }
+  function hin(el) {
+    try { el.scrollIntoView({ block: "start" }); } catch (_e) { el.scrollIntoView(); }
+  }
+  function zurueck() {
+    var h = herkunft;
+    aufraeumen();
+    if (!h) return;
+    try { h.scrollIntoView({ block: "center" }); } catch (_e) { h.scrollIntoView(); }
+    try { h.focus({ preventScroll: true }); } catch (_e) {}
+    h.classList.add("ziel");
+    setTimeout(function () { h.classList.add("ziel-aus"); }, 900);
+    setTimeout(function () { h.classList.remove("ziel", "ziel-aus"); }, 2600);
+  }
+  function springe(link, ziel) {
+    aufraeumen();
+    herkunft = link; zielEl = ziel;
+    ziel.classList.add("ziel");
+    hierKnopf = doc.createElement("button");
+    hierKnopf.type = "button";
+    hierKnopf.className = "rueck-hier";
+    hierKnopf.setAttribute("data-rueck-hier", "");
+    hierKnopf.textContent = aktuell === "en" ? "↩ back" : "↩ zurück";
+    hierKnopf.addEventListener("click", function (ev) { ev.preventDefault(); ev.stopPropagation(); zurueck(); });
+    // a table row gets the button in its first cell
+    var halter = ziel.tagName === "TR" ? (ziel.cells[0] || ziel) : ziel;
+    halter.appendChild(hierKnopf);
+    schwebe.hidden = false;
+    hin(ziel);
+  }
+  doc.addEventListener("click", function (ev) {
+    var a = ev.target && ev.target.closest ? ev.target.closest("a[href^='#']") : null;
+    if (a) {
+      var id = a.getAttribute("href").slice(1);
+      var ziel = id ? doc.getElementById(id) : null;
+      if (!ziel) return;                       // fail-soft: browser handles it
+      ev.preventDefault();
+      if (zielEl === ziel && herkunft === a) { zurueck(); return; }   // second tap on the same word
+      springe(a, ziel);
+      return;
+    }
+    // a second tap on the explained term itself goes back too
+    if (zielEl && herkunft && ev.target && zielEl.contains(ev.target) && /^(DT|H2|H3|TD|STRONG)$/.test(ev.target.tagName)) {
+      zurueck();
+    }
+  });
+  schwebe.addEventListener("click", zurueck);
+  doc.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && herkunft) zurueck(); });
+
+  // ── language buttons, back link ─────────────────────────────
+  var knoepfe = doc.querySelectorAll("[data-sprachknopf]");
+  for (var i = 0; i < knoepfe.length; i++) {
+    knoepfe[i].hidden = false;
+    knoepfe[i].addEventListener("click", function () { zeige(aktuell === "de" ? "en" : "de"); hin(bloecke[aktuell]); });
+  }
+  var eingebettet = true;
+  try { eingebettet = window.self !== window.top; } catch (_e) { eingebettet = true; }
+  if (eingebettet) {
+    var zl = doc.querySelectorAll("[data-zurueck]");
+    for (var j = 0; j < zl.length; j++) zl[j].style.display = "none";
+  }
+  zeige(startSprache());
+})();
 </script>
 </body>
 </html>
