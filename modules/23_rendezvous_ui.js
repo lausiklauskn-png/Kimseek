@@ -308,8 +308,24 @@
         "No own contacts yet.",
       "entfernen":
         "remove",
-      "Bürgen heißt: „Diese Kennung kenne ich.“ Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und ein Jahr lang. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.":
-        "Vouching means: “I know this identifier.” A vouch only counts for you if you already trust the voucher (network admin or own contact), at most two steps away and for one year. When you ask, vouched cards come first; cards without a vouch stay visible and are still asked.",
+      "Bürgen heißt: „Diese Kennung kenne ich.“ Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und höchstens 180 Tage lang. Ein Widerruf trägt immer einen Grund. Fällt eine verbürgte App auf, verfällt nur ihre Bürgschaft. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.":
+        "Vouching means: “I know this identifier.” A vouch only counts for you if you already trust the voucher (network admin or own contact), at most two steps away and for at most 180 days. A revocation always carries a reason. If a vouched app is flagged, only its own vouch lapses. When you ask, vouched cards come first; cards without a vouch stay visible and are still asked.",
+      "Grund des Widerrufs (Pflicht, wird mit unterschrieben)":
+        "Reason for the revocation (required, signed along)",
+      "Ein Widerruf braucht einen Grund.":
+        "A revocation needs a reason.",
+      "⏳ Bürgschaft von ":
+        "⏳ Vouch from ",
+      " läuft am ":
+        " expires on ",
+      " ab. Verlängerung beim Bürgen anfragen; nur er kann neu unterschreiben.":
+        ". Ask the voucher to renew it; only they can sign again.",
+      " · ⏳ läuft bald ab":
+        " · ⏳ expires soon",
+      "Nur Verbürgten antworten":
+        "Answer only vouched nodes",
+      "An: eine Frage wird nur beantwortet, wenn ihr Absender bei dir Netzadmin, eigener Kontakt oder verbürgt ist. Unsignierte Fragen bleiben dann ohne Antwort. Karten und Fragen im Raum sieht jeder weiter.":
+        "On: a question is only answered if its sender is the network admin, an own contact or vouched for you. Unsigned questions then get no answer. Everyone still sees the cards and questions in the room.",
       "Diese Version von Modul 23 kann keine Sicherheitsnummer rechnen.":
         "This version of module 23 cannot compute a safety number.",
       "Netzadmin (Kennung, optional)":
@@ -2292,6 +2308,11 @@
     weg.setAttribute("data-sbkim-widerruf", "");
     zeile.appendChild(sign); zeile.appendChild(merk); zeile.appendChild(weg);
     f.appendChild(zeile);
+    var grund = el("input", "width:100%;box-sizing:border-box;margin:6px 0 0;padding:5px 8px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:inherit");
+    grund.maxLength = 200; grund.setAttribute("placeholder", T("Grund des Widerrufs (Pflicht, wird mit unterschrieben)"));
+    grund.setAttribute("data-sbkim-widerruf-grund", "");
+    f.appendChild(grund);
     var text = el("textarea", "display:none;width:100%;box-sizing:border-box;margin-top:6px;min-height:70px;padding:5px 8px;" +
       "border-radius:8px;border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:.68rem/1.35 var(--mono,monospace)");
     text.readOnly = true; text.setAttribute("data-sbkim-buergen-text", "");
@@ -2322,7 +2343,9 @@
     });
     weg.addEventListener("click", function () {
       if (!r || typeof r.createRevocation !== "function") return;
-      r.createRevocation(id).then(function (x) {
+      var g = String(grund.value || "").trim();          // S5b: ohne Grund kein Widerruf
+      if (!g) { msg.textContent = T("Ein Widerruf braucht einen Grund."); return; }
+      r.createRevocation(id, g).then(function (x) {
         if (!x || !x.ok) { msg.textContent = "✗ " + ((x && x.reason) || ""); return null; }
         return r.addCarried(x.zettel).then(function (y) {
           msg.textContent = y && y.ok ? T("✓ Widerrufen. Der Widerruf reist mit deiner nächsten Anmeldung im Raum.") : "✗ " + ((y && y.reason) || "");
@@ -2331,8 +2354,36 @@
     });
     return f;
   }
+  // S5b: Hinweis 30 Tage vor dem Ablauf (Modul 23 vouchExpiring) — Name nur
+  // aus den eigenen Kontakten, sonst die Kennung; alles als Text.
+  var buergAblaufEl = null, buergSummaryEl = null, buergNurEl = null;
+  function ablaufZeigen() {
+    var r = rdv();
+    if (!buergAblaufEl || !r || typeof r.vouchExpiring !== "function") return Promise.resolve([]);
+    return r.vouchExpiring().then(function (liste) {
+      clear(buergAblaufEl);
+      liste = Array.isArray(liste) ? liste : [];
+      var kontakte = [];
+      try { kontakte = typeof r.loadVouchContacts === "function" ? r.loadVouchContacts() : []; } catch (_e) { kontakte = []; }
+      liste.forEach(function (x) {
+        var wer = String(x.voucher || "").slice(0, 12) + "…";
+        kontakte.forEach(function (k) { if (k.nodeId === x.voucher && k.name) wer = k.name + " · " + wer; });
+        var d = new Date(x.exp * 1000);
+        var z = el("div", "margin:4px 0;color:#f5c26b", T("⏳ Bürgschaft von ") + wer + T(" läuft am ") +
+          d.toISOString().slice(0, 10) + T(" ab. Verlängerung beim Bürgen anfragen; nur er kann neu unterschreiben."));
+        z.setAttribute("data-sbkim-ablauf", String(x.voucher || ""));
+        buergAblaufEl.appendChild(z);
+      });
+      if (buergSummaryEl) buergSummaryEl.textContent = T("🤝 Bürgschaften") + (liste.length ? T(" · ⏳ läuft bald ab") : "");
+      return liste;
+    }, function () { return []; });
+  }
   function buergenZeigen() {
     var r = rdv();
+    ablaufZeigen();
+    if (buergNurEl) {
+      try { buergNurEl.checked = !!(r && typeof r.answerOnlyVouched === "function" && r.answerOnlyVouched()); } catch (_e) {}
+    }
     if (buergAdminEl) {
       var a = null;
       try { a = r && typeof r.currentNetAdmin === "function" ? r.currentNetAdmin() : null; } catch (_e) { a = null; }
@@ -2493,9 +2544,28 @@
     buergBoxEl = el("details", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
       "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
     buergBoxEl.setAttribute("data-sbkim-buergen-box", "");
-    buergBoxEl.appendChild(el("summary", "cursor:pointer;color:#c7d2de", T("🤝 Bürgschaften")));
+    buergSummaryEl = el("summary", "cursor:pointer;color:#c7d2de", T("🤝 Bürgschaften"));
+    buergBoxEl.appendChild(buergSummaryEl);
     buergAdminEl = el("div", "margin:6px 0;color:#eef2f8;word-break:break-word");
     buergBoxEl.appendChild(buergAdminEl);
+    buergAblaufEl = el("div", "word-break:break-word");
+    buergAblaufEl.setAttribute("data-sbkim-ablauf-liste", "");
+    buergBoxEl.appendChild(buergAblaufEl);
+    var nurLab = el("label", "display:flex;gap:6px;align-items:center;margin:6px 0 2px;color:#eef2f8");
+    buergNurEl = el("input");
+    buergNurEl.type = "checkbox";
+    buergNurEl.setAttribute("data-sbkim-nur-verbuergt", "");
+    buergNurEl.addEventListener("change", function () {
+      var r = ensureRdv();
+      if (!r || typeof r.setAnswerOnlyVouched !== "function") { buergNurEl.checked = false; return; }
+      configModule();
+      var x = r.setAnswerOnlyVouched(buergNurEl.checked);
+      if (!x || !x.ok) { buergNurEl.checked = false; if (buergMsgEl) buergMsgEl.textContent = "✗ " + ((x && x.reason) || ""); }
+    });
+    nurLab.appendChild(buergNurEl); nurLab.appendChild(el("span", null, T("Nur Verbürgten antworten")));
+    buergBoxEl.appendChild(nurLab);
+    buergBoxEl.appendChild(el("div", "color:#7e8b9a;font-size:.7rem;line-height:1.45;margin-bottom:6px",
+      T("An: eine Frage wird nur beantwortet, wenn ihr Absender bei dir Netzadmin, eigener Kontakt oder verbürgt ist. Unsignierte Fragen bleiben dann ohne Antwort. Karten und Fragen im Raum sieht jeder weiter.")));
     buergBoxEl.appendChild(el("div", "color:#9aa7b6", T("Erhaltene Bürgschaft einfügen")));
     var ein = el("textarea", "width:100%;box-sizing:border-box;margin:2px 0 6px;min-height:56px;padding:5px 8px;border-radius:8px;" +
       "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:.68rem/1.35 var(--mono,monospace)");
@@ -2514,8 +2584,9 @@
     buergKontakteEl.setAttribute("data-sbkim-kontakte", "");
     buergBoxEl.appendChild(buergKontakteEl);
     buergBoxEl.appendChild(el("div", "margin-top:6px;color:#7e8b9a;font-size:.7rem;line-height:1.45",
-      T("Bürgen heißt: „Diese Kennung kenne ich.“ Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und ein Jahr lang. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.")));
+      T("Bürgen heißt: „Diese Kennung kenne ich.“ Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und höchstens 180 Tage lang. Ein Widerruf trägt immer einen Grund. Fällt eine verbürgte App auf, verfällt nur ihre Bürgschaft. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.")));
     buergBoxEl.addEventListener("toggle", function () { if (buergBoxEl.open) { configModule(); buergenZeigen(); } });
+    setTimeout(function () { try { configModule(); ablaufZeigen(); } catch (_e) {} }, 0);   // S5b: Hinweis auch bei geschlossenem Kasten
     return buergBoxEl;
   }
 
