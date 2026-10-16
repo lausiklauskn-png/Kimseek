@@ -633,6 +633,8 @@
   var RDV_VOUCH_PER_CARD_MAX = 8;
   var RDV_REVOKE_PER_CARD_MAX = 32;
   var RDV_VOUCH_SEEN_MAX = 400;                // Zettel je discover()-Lauf
+  var RDV_ISSUED_STORE_MAX = 64;               // S5b Teil 2: eigene ausgestellte Empfehlungen im Vorrat
+  var RDV_ISSUED_PER_CARD_MAX = 8;             // S5b Teil 2: davon trägt die Karte die neuesten
   // Netzadmin des OFFENEN Mycels (Klaus 2026-10-15: er bürgt mit Sage-Protokol,
   // sbkim/spore.json). Gilt NUR im öffentlichen Netz; in einem eigenen Netz
   // ist dessen Betreiber der Netzadmin (Feld `admin` der Netz-Einstellung).
@@ -751,7 +753,7 @@
   }
   function buergenSchluessel() { return cfg.dbSuffix ? BUERGEN_SPEICHER_PRAEFIX + cfg.dbSuffix : null; }
   function buergenLesen(store) {
-    var st = netStore(store), k = buergenSchluessel(), leer = { v: 1, contacts: [], carried: [] };
+    var st = netStore(store), k = buergenSchluessel(), leer = { v: 1, contacts: [], carried: [], issued: [] };
     if (!st || !k) return leer;
     var roh; try { roh = st.getItem(k); } catch (_e) { return leer; }
     if (!roh) return leer;
@@ -764,6 +766,8 @@
       }).map(function (c) { return { nodeId: c.nodeId, name: (typeof c.name === "string") ? c.name.slice(0, 60) : "" }; }),
       carried: (Array.isArray(o.carried) ? o.carried : []).filter(function (z) { return z && typeof z === "object"; }),
       onlyVouched: o.onlyVouched === true,   // S5b: „antworte nur Verbürgten"
+      issued: (Array.isArray(o.issued) ? o.issued : []).filter(function (z) { return z && typeof z === "object" && z.kind === RDV_VOUCH_KIND; })
+        .slice(0, RDV_ISSUED_STORE_MAX),     // S5b Teil 2: selbst ausgestellt, reist auf der Karte
     };
   }
   function buergenSchreiben(o, store) {
@@ -984,8 +988,73 @@
     for (var i = 0; i < 15; i++) ziffern += String(h[i] % 100).padStart(2, "0");
     return { ok: true, number: ziffern.replace(/(\d{5})(?=\d)/g, "$1 ") };
   }
-  function createVouch(subjectId, opts) { return vouchAusstellen(RDV_VOUCH_KIND, subjectId, opts); }
-  function createRevocation(subjectId, reason) { return vouchAusstellen(RDV_REVOKE_KIND, subjectId, { reason: reason }); }
+  // ---- S5b Teil 2: „die Empfehlung kommt von selbst an" (Klaus 2026-10-16) ----
+  // Aussteller: jede neue Empfehlung kommt in den Vorrat `issued`; die eigene
+  // Karte trägt die neuesten RDV_ISSUED_PER_CARD_MAX (Feld `issued`).
+  // Empfänger: discover() nimmt eine gültige Empfehlung FÜR die eigene Kennung
+  // von selbst in den eigenen Vorrat (carried) — aber nur, wenn der Aussteller
+  // beim Empfänger schon zählt (Netzadmin, eigener Kontakt oder empfohlen).
+  // Ein Unbekannter kann so niemandes Vorrat fluten; für ihn bleibt der Text.
+  async function issuedMerken(z) {
+    var o = buergenLesen();
+    if (!buergenSchluessel()) return;
+    var jetzt = nowSec();
+    o.issued = [z].concat(o.issued.filter(function (x) {
+      return x.sig !== z.sig && !(x.subject === z.subject && x.ts <= z.ts) && typeof x.exp === "number" && x.exp > jetzt;
+    })).slice(0, RDV_ISSUED_STORE_MAX);
+    buergenSchreiben(o);
+  }
+  function issuedEntfernen(subjectId) {
+    var o = buergenLesen();
+    if (!buergenSchluessel()) return;
+    var vorher = o.issued.length;
+    o.issued = o.issued.filter(function (x) { return x.subject !== subjectId; });
+    if (o.issued.length !== vorher) buergenSchreiben(o);
+  }
+  function cardIssued() {
+    var jetzt = nowSec();
+    return buergenLesen().issued.filter(function (z) { return typeof z.exp === "number" && z.exp > jetzt; })
+      .sort(function (a, b) { return b.ts - a.ts; }).slice(0, RDV_ISSUED_PER_CARD_MAX);
+  }
+  var empfehlungenAbgeholt = 0;   // _meta
+  // cards: schon von vouchTrust angereichert · zettel: alle Zettel des Laufs
+  async function empfehlungenAbholen(ownId, cards, zettel) {
+    if (!ownId || !buergenSchluessel()) return 0;
+    var jetzt = nowSec(), je = Object.create(null);
+    (Array.isArray(zettel) ? zettel : []).forEach(function (z) {
+      if (!z || z.kind !== RDV_VOUCH_KIND || z.subject !== ownId || typeof z.voucher !== "string" || typeof z.sig !== "string") return;
+      if (!je[z.voucher] || z.ts > je[z.voucher].ts) je[z.voucher] = z;   // je Aussteller die neueste
+    });
+    var ids = Object.keys(je);
+    if (!ids.length) return 0;
+    var admin = currentNetAdmin();
+    var kontakte = loadVouchContacts().map(function (c) { return c.nodeId; });
+    var stand = Object.create(null);
+    (Array.isArray(cards) ? cards : []).forEach(function (c) { if (c && c.nodeId && c.vouch) stand[c.nodeId] = c.vouch.status; });
+    var o = buergenLesen(), neu = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var z = je[ids[i]];
+      var zaehlt = z.voucher === admin || kontakte.indexOf(z.voucher) !== -1 || vouchVorn({ vouch: { status: stand[z.voucher] } });
+      if (!zaehlt) continue;
+      if (o.carried.some(function (x) { return x.sig === z.sig; })) continue;
+      if ((await vouchPruefen(z, jetzt)) !== "gueltig") continue;
+      // ältere Empfehlung desselben Ausstellers ersetzen
+      o.carried = o.carried.filter(function (x) { return !(x.kind === RDV_VOUCH_KIND && x.voucher === z.voucher && x.subject === ownId && x.ts <= z.ts); });
+      o.carried.push(z); neu++;
+    }
+    if (neu && buergenSchreiben(o).ok) { empfehlungenAbgeholt += neu; return neu; }
+    return 0;
+  }
+  async function createVouch(subjectId, opts) {
+    var x = await vouchAusstellen(RDV_VOUCH_KIND, subjectId, opts);
+    if (x && x.ok) { try { await issuedMerken(x.zettel); } catch (_e) { /* fail-soft: Text-Weg bleibt */ } }
+    return x;
+  }
+  async function createRevocation(subjectId, reason) {
+    var x = await vouchAusstellen(RDV_REVOKE_KIND, subjectId, { reason: reason });
+    if (x && x.ok) { try { issuedEntfernen(subjectId); } catch (_e) { /* fail-soft */ } }
+    return x;
+  }
 
   // ---- S5b: Hinweis vor dem Ablauf (Klaus 2026-10-16, Punkt 3) ----
   // Eigene mitgetragene Bürgschaften (subject = eigene Kennung), deren neueste
@@ -1505,6 +1574,8 @@
     var mit = cardCarried();                       // S5: Bürgschaften / Widerrufe mittragen
     if (mit.vouches.length) card.vouches = mit.vouches;
     if (mit.revocations.length) card.revocations = mit.revocations;
+    var aus = cardIssued();                        // S5b Teil 2: selbst ausgestellte Empfehlungen
+    if (aus.length) card.issued = aus;
     try { await sperreLaden(); } catch (_e) {}
     if (sperre.stand === "gueltig" && sperre.zettel) card.blocklist = sperre.zettel;   // S4: Liste mittragen
     await powRechnen(card);                        // S3: Aufwand rechnen (nach allen Feldern)
@@ -1653,6 +1724,7 @@
           if (vouchZettel.length < RDV_VOUCH_SEEN_MAX) {
             if (Array.isArray(card.vouches)) vouchZettel = vouchZettel.concat(card.vouches.slice(0, RDV_VOUCH_PER_CARD_MAX));
             if (Array.isArray(card.revocations)) vouchZettel = vouchZettel.concat(card.revocations.slice(0, RDV_REVOKE_PER_CARD_MAX));
+            if (Array.isArray(card.issued)) vouchZettel = vouchZettel.concat(card.issued.slice(0, RDV_ISSUED_PER_CARD_MAX));   // S5b Teil 2
           }
           // S4: nur Listen des eigenen Netzadmins sammeln (Vorfilter ohne Krypto).
           var bl = card.blocklist;
@@ -1764,6 +1836,10 @@
           try { cards = await vouchTrust(cards, { vouches: vouchZettel }); }
           catch (_e) { /* fail-soft: Karten ohne vouch */ }
         }
+        // S5b Teil 2: Empfehlungen für mich von selbst abholen (nur hier, im
+        // nutzer-ausgelösten discover; beim Laden kein Netz).
+        var abgeholt = 0;
+        try { abgeholt = await empfehlungenAbholen(ownId, cards, vouchZettel); } catch (_e) { /* fail-soft */ }
         // Reine Anzeige-Anreicherung: zentrierter Verwandtschafts-Score je Karte
         // (gatet nichts; Handshake bleibt 0.80-Riegel). Fail-soft ohne Modul 04.
         resolve({
@@ -1773,6 +1849,7 @@
           rejected: rejected,             // ehrlich: wie viele fielen raus
           verdraengt: (kartenVerdraengt += verdraengtHier, verdraengtHier),     // S3: Karten ohne Aufwand, die bei vollem Raum weichen mussten
           gesperrt: gesperrtHier,         // S4: Karten gesperrter Kennungen, die herausfielen
+          picked: abgeholt,               // S5b Teil 2: Empfehlungen für mich, die neu abgeholt wurden
         });
       }, listenMs);
     });
@@ -2354,6 +2431,8 @@
         queryVouchMax: RDV_QUERY_VOUCH_MAX,       // S5b
         answerOnlyVouched: answerOnlyVouched(),   // S5b
         fragenNichtVerbuergt: fragenNichtVerbuergt, // S5b: nicht beantwortet, Absender nicht verbürgt
+        issuedPerCardMax: RDV_ISSUED_PER_CARD_MAX,   // S5b Teil 2
+        empfehlungenAbgeholt: empfehlungenAbgeholt,  // S5b Teil 2
         vouchAnchors: idListe(vouchCfg.anchors).length, // S5 (init-Anker, ohne Netzadmin)
         netAdmin: currentNetAdmin(),              // S5 Teil 2
         blockMax: RDV_BLOCK_MAX,                  // S4

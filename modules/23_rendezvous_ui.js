@@ -214,18 +214,18 @@
         "· Meaning not checked",
       "Bedeutungs-Vektor aus dem Text nachgerechnet (S2)":
         "Meaning vector recomputed from the text (S2)",
-      "🤝 verbürgt von ":
-        "🤝 vouched for by ",
+      "🤝 empfohlen von ":
+        "🤝 recommended by ",
       " (über ":
         " (via ",
       " weiteren Schritt)":
         " more step)",
       "🤝 Netzadmin":
         "🤝 Network admin",
-      "🤝 Bürgen":
-        "🤝 Vouch",
-      "Für diese Kennung bürgen, Kontakt merken oder widerrufen":
-        "Vouch for this identifier, keep it as a contact, or revoke",
+      "🤝 Empfehlen":
+        "🤝 Recommend",
+      "Diese Kennung empfehlen, als Kontakt merken oder die Empfehlung widerrufen":
+        "Recommend this identifier, keep it as a contact, or revoke the recommendation",
       "… Sicherheitsnummer wird berechnet":
         "… computing the safety number",
       "Sicherheitsnummer: ":
@@ -236,38 +236,38 @@
         "The number matches",
       "Name (nur bei dir gespeichert)":
         "Name (stored only on your device)",
-      "✍ Bürgschaft unterschreiben":
-        "✍ Sign a vouch",
+      "✍ Empfehlung unterschreiben":
+        "✍ Sign a recommendation",
       "📇 Als eigenen Kontakt merken":
         "📇 Keep as own contact",
-      "↩ Bürgschaft widerrufen":
-        "↩ Revoke the vouch",
+      "↩ Empfehlung widerrufen":
+        "↩ Revoke the recommendation",
       "Erst die Sicherheitsnummer vergleichen und den Haken setzen.":
         "Compare the safety number first and tick the box.",
-      "✓ Unterschrieben. Diesen Text an die andere Person geben; sie fügt ihn bei sich unter „🤝 Bürgschaften“ ein.":
-        "✓ Signed. Give this text to the other person; they paste it under “🤝 Vouches” in their app.",
-      "✓ Als eigenen Kontakt gemerkt. Bürgschaften dieser Kennung zählen jetzt bei dir.":
-        "✓ Kept as own contact. Vouches from this identifier now count for you.",
+      "✓ Unterschrieben. Deine Karte trägt die Empfehlung im Raum mit; die andere App holt sie von selbst ab, wenn sie „👥 Wer ist im Raum?“ drückt. Klappt das nicht: diesen Text geben, sie fügt ihn unter „🤝 Empfehlungen“ ein.":
+        "✓ Signed. Your card carries the recommendation in the room; the other app picks it up by itself when it presses “👥 Who is in the room?”. If that does not work: give them this text, they paste it under “🤝 Recommendations”.",
+      "✓ Als eigenen Kontakt gemerkt. Empfehlungen dieser Kennung zählen jetzt bei dir.":
+        "✓ Kept as own contact. Recommendations from this identifier now count for you.",
       "✓ Widerrufen. Der Widerruf reist mit deiner nächsten Anmeldung im Raum.":
         "✓ Revoked. The revocation travels with your next announcement in the room.",
-      "🤝 Bürgschaften":
-        "🤝 Vouches",
+      "🤝 Empfehlungen":
+        "🤝 Recommendations",
       "Netzadmin dieses Netzes: ":
         "Network admin of this network: ",
       " (Sage-Protokol, offenes Mycel)":
         " (Sage-Protokol, open mycelium)",
       "keiner":
         "none",
-      "Erhaltene Bürgschaft einfügen":
-        "Paste a received vouch",
-      "✓ Bürgschaft übernehmen":
-        "✓ Accept the vouch",
+      "Erhaltene Empfehlung einfügen":
+        "Paste a received recommendation",
+      "✓ Empfehlung übernehmen":
+        "✓ Accept the recommendation",
       "Übernommen: ":
         "Accepted: ",
       " · ungültig: ":
         " · invalid: ",
-      "✗ Der Text ist keine Bürgschaft.":
-        "✗ The text is not a vouch.",
+      "✗ Der Text ist keine Empfehlung.":
+        "✗ The text is not a recommendation.",
       "Eigene Kontakte":
         "Own contacts",
       "⛔ Sperrliste":
@@ -308,32 +308,32 @@
         "No own contacts yet.",
       "entfernen":
         "remove",
-      "Bürgen heißt: „Diese Kennung kenne ich.“ Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und höchstens 180 Tage lang. Ein Widerruf trägt immer einen Grund. Fällt eine verbürgte App auf, verfällt nur ihre Bürgschaft. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.":
-        "Vouching means: “I know this identifier.” A vouch only counts for you if you already trust the voucher (network admin or own contact), at most two steps away and for at most 180 days. A revocation always carries a reason. If a vouched app is flagged, only its own vouch lapses. When you ask, vouched cards come first; cards without a vouch stay visible and are still asked.",
+      "Empfehlen heißt: „Diese Kennung kenne ich.“ Eine Empfehlung zählt bei dir nur, wenn du dem Empfehlenden schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und höchstens 180 Tage lang. Sie kommt von selbst an, wenn beide einmal im Raum sind. Ein Widerruf trägt immer einen Grund. Fällt eine empfohlene App auf, verfällt nur ihre Empfehlung. Bei einer Frage stehen empfohlene Karten vorn; die übrigen bleiben sichtbar und werden weiter gefragt.":
+        "Recommending means: “I know this identifier.” A recommendation only counts for you if you already trust the one who recommends (network admin or own contact), at most two steps away and for at most 180 days. It arrives by itself once both are in the room. A revocation always carries a reason. If a recommended app is flagged, only its own recommendation lapses. When you ask, recommended cards come first; the others stay visible and are still asked.",
       "Grund des Widerrufs (Pflicht, wird mit unterschrieben)":
         "Reason for the revocation (required, signed along)",
       "Ein Widerruf braucht einen Grund.":
         "A revocation needs a reason.",
-      "⏳ Bürgschaft von ":
-        "⏳ Vouch from ",
+      "⏳ Empfehlung von ":
+        "⏳ Recommendation from ",
       " läuft am ":
         " expires on ",
-      " ab. Verlängerung beim Bürgen anfragen; nur er kann neu unterschreiben.":
-        ". Ask the voucher to renew it; only they can sign again.",
+      " ab. Verlängerung beim Empfehlenden anfragen; nur er kann neu unterschreiben.":
+        ". Ask the one who recommended you to renew it; only they can sign again.",
       " · ⏳ läuft bald ab":
         " · ⏳ expires soon",
-      "Nur Verbürgten antworten":
-        "Answer only vouched nodes",
-      "An: eine Frage wird nur beantwortet, wenn ihr Absender bei dir Netzadmin, eigener Kontakt oder verbürgt ist. Unsignierte Fragen bleiben dann ohne Antwort. Karten und Fragen im Raum sieht jeder weiter.":
-        "On: a question is only answered if its sender is the network admin, an own contact or vouched for you. Unsigned questions then get no answer. Everyone still sees the cards and questions in the room.",
+      "Nur Empfohlenen antworten":
+        "Answer only recommended nodes",
+      "An: eine Frage wird nur beantwortet, wenn ihr Absender bei dir Netzadmin, eigener Kontakt oder empfohlen ist. Unsignierte Fragen bleiben dann ohne Antwort. Karten und Fragen im Raum sieht jeder weiter.":
+        "On: a question is only answered if its sender is the network admin, an own contact or recommended for you. Unsigned questions then get no answer. Everyone still sees the cards and questions in the room.",
       "Diese Version von Modul 23 kann keine Sicherheitsnummer rechnen.":
         "This version of module 23 cannot compute a safety number.",
       "Netzadmin (Kennung, optional)":
         "Network admin (identifier, optional)",
       "🤝 eigener Kontakt":
         "🤝 own contact",
-      "Bürgschaft geprüft (S5) — gatet nichts, unverbürgte Knoten bleiben sichtbar":
-        "Vouch checked (S5) — blocks nothing, nodes without a vouch stay visible",
+      "Empfehlung geprüft (S5) — gatet nichts, nicht empfohlene Knoten bleiben sichtbar":
+        "Recommendation checked (S5) — blocks nothing, nodes without a recommendation stay visible",
       "\n\n🧠 KI-Richter: nicht gefragt — die Antwort ist nicht unterschrieben.":
         "\n\n🧠 AI judge: not asked — the answer is not signed.",
       "KI-Anbieter wählen":
@@ -2300,11 +2300,11 @@
     name.setAttribute("data-sbkim-kontakt-name", "");
     f.appendChild(name);
     var zeile = el("div", "display:flex;gap:6px;flex-wrap:wrap");
-    var sign = el("button", idBtnCss(true), T("✍ Bürgschaft unterschreiben")); sign.type = "button";
+    var sign = el("button", idBtnCss(true), T("✍ Empfehlung unterschreiben")); sign.type = "button";
     sign.setAttribute("data-sbkim-buergen-sign", "");
     var merk = el("button", idBtnCss(false), T("📇 Als eigenen Kontakt merken")); merk.type = "button";
     merk.setAttribute("data-sbkim-kontakt-merken", "");
-    var weg = el("button", idBtnCss(false), T("↩ Bürgschaft widerrufen")); weg.type = "button";
+    var weg = el("button", idBtnCss(false), T("↩ Empfehlung widerrufen")); weg.type = "button";
     weg.setAttribute("data-sbkim-widerruf", "");
     zeile.appendChild(sign); zeile.appendChild(merk); zeile.appendChild(weg);
     f.appendChild(zeile);
@@ -2329,7 +2329,7 @@
         var t = JSON.stringify(typeof r.vouchPassOn === "function" ? r.vouchPassOn(x.zettel) : [x.zettel]);
         text.value = t; text.style.display = "";
         kopieren(t);
-        msg.textContent = T("✓ Unterschrieben. Diesen Text an die andere Person geben; sie fügt ihn bei sich unter „🤝 Bürgschaften“ ein.");
+        msg.textContent = T("✓ Unterschrieben. Deine Karte trägt die Empfehlung im Raum mit; die andere App holt sie von selbst ab, wenn sie „👥 Wer ist im Raum?“ drückt. Klappt das nicht: diesen Text geben, sie fügt ihn unter „🤝 Empfehlungen“ ein.");
       }, function (e) { msg.textContent = "✗ " + errText(e); });
     });
     merk.addEventListener("click", function () {
@@ -2338,7 +2338,7 @@
       var liste = (r.loadVouchContacts() || []).filter(function (k) { return k.nodeId !== id; });
       liste.push({ nodeId: id, name: String(name.value || "").trim().slice(0, 60) });
       var x = r.saveVouchContacts(liste);
-      msg.textContent = x && x.ok ? T("✓ Als eigenen Kontakt gemerkt. Bürgschaften dieser Kennung zählen jetzt bei dir.") : "✗ " + ((x && x.reason) || "");
+      msg.textContent = x && x.ok ? T("✓ Als eigenen Kontakt gemerkt. Empfehlungen dieser Kennung zählen jetzt bei dir.") : "✗ " + ((x && x.reason) || "");
       buergenZeigen();
     });
     weg.addEventListener("click", function () {
@@ -2369,12 +2369,12 @@
         var wer = String(x.voucher || "").slice(0, 12) + "…";
         kontakte.forEach(function (k) { if (k.nodeId === x.voucher && k.name) wer = k.name + " · " + wer; });
         var d = new Date(x.exp * 1000);
-        var z = el("div", "margin:4px 0;color:#f5c26b", T("⏳ Bürgschaft von ") + wer + T(" läuft am ") +
-          d.toISOString().slice(0, 10) + T(" ab. Verlängerung beim Bürgen anfragen; nur er kann neu unterschreiben."));
+        var z = el("div", "margin:4px 0;color:#f5c26b", T("⏳ Empfehlung von ") + wer + T(" läuft am ") +
+          d.toISOString().slice(0, 10) + T(" ab. Verlängerung beim Empfehlenden anfragen; nur er kann neu unterschreiben."));
         z.setAttribute("data-sbkim-ablauf", String(x.voucher || ""));
         buergAblaufEl.appendChild(z);
       });
-      if (buergSummaryEl) buergSummaryEl.textContent = T("🤝 Bürgschaften") + (liste.length ? T(" · ⏳ läuft bald ab") : "");
+      if (buergSummaryEl) buergSummaryEl.textContent = T("🤝 Empfehlungen") + (liste.length ? T(" · ⏳ läuft bald ab") : "");
       return liste;
     }, function () { return []; });
   }
@@ -2419,7 +2419,7 @@
     try { o = JSON.parse(String(roh || "")); } catch (_e) { o = null; }
     var liste = Array.isArray(o) ? o : (o && typeof o === "object" ? [o] : null);
     if (!liste || !liste.length || !r || typeof r.addCarried !== "function") {
-      if (buergMsgEl) buergMsgEl.textContent = T("✗ Der Text ist keine Bürgschaft.");
+      if (buergMsgEl) buergMsgEl.textContent = T("✗ Der Text ist keine Empfehlung.");
       return Promise.resolve({ ok: 0, bad: 0 });
     }
     liste = liste.slice(0, 16);
@@ -2544,7 +2544,7 @@
     buergBoxEl = el("details", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
       "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
     buergBoxEl.setAttribute("data-sbkim-buergen-box", "");
-    buergSummaryEl = el("summary", "cursor:pointer;color:#c7d2de", T("🤝 Bürgschaften"));
+    buergSummaryEl = el("summary", "cursor:pointer;color:#c7d2de", T("🤝 Empfehlungen"));
     buergBoxEl.appendChild(buergSummaryEl);
     buergAdminEl = el("div", "margin:6px 0;color:#eef2f8;word-break:break-word");
     buergBoxEl.appendChild(buergAdminEl);
@@ -2562,17 +2562,17 @@
       var x = r.setAnswerOnlyVouched(buergNurEl.checked);
       if (!x || !x.ok) { buergNurEl.checked = false; if (buergMsgEl) buergMsgEl.textContent = "✗ " + ((x && x.reason) || ""); }
     });
-    nurLab.appendChild(buergNurEl); nurLab.appendChild(el("span", null, T("Nur Verbürgten antworten")));
+    nurLab.appendChild(buergNurEl); nurLab.appendChild(el("span", null, T("Nur Empfohlenen antworten")));
     buergBoxEl.appendChild(nurLab);
     buergBoxEl.appendChild(el("div", "color:#7e8b9a;font-size:.7rem;line-height:1.45;margin-bottom:6px",
-      T("An: eine Frage wird nur beantwortet, wenn ihr Absender bei dir Netzadmin, eigener Kontakt oder verbürgt ist. Unsignierte Fragen bleiben dann ohne Antwort. Karten und Fragen im Raum sieht jeder weiter.")));
-    buergBoxEl.appendChild(el("div", "color:#9aa7b6", T("Erhaltene Bürgschaft einfügen")));
+      T("An: eine Frage wird nur beantwortet, wenn ihr Absender bei dir Netzadmin, eigener Kontakt oder empfohlen ist. Unsignierte Fragen bleiben dann ohne Antwort. Karten und Fragen im Raum sieht jeder weiter.")));
+    buergBoxEl.appendChild(el("div", "color:#9aa7b6", T("Erhaltene Empfehlung einfügen")));
     var ein = el("textarea", "width:100%;box-sizing:border-box;margin:2px 0 6px;min-height:56px;padding:5px 8px;border-radius:8px;" +
       "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#eef2f8;font:.68rem/1.35 var(--mono,monospace)");
     ein.setAttribute("data-sbkim-buergen-einfuegen", "");
     ein.spellcheck = false;
     buergBoxEl.appendChild(ein);
-    var ok = el("button", idBtnCss(true), T("✓ Bürgschaft übernehmen")); ok.type = "button";
+    var ok = el("button", idBtnCss(true), T("✓ Empfehlung übernehmen")); ok.type = "button";
     ok.setAttribute("data-sbkim-buergen-uebernehmen", "");
     ok.addEventListener("click", function () { buergenEinfuegen(ein.value).then(function (x) { if (x.ok) ein.value = ""; }); });
     buergBoxEl.appendChild(ok);
@@ -2584,7 +2584,7 @@
     buergKontakteEl.setAttribute("data-sbkim-kontakte", "");
     buergBoxEl.appendChild(buergKontakteEl);
     buergBoxEl.appendChild(el("div", "margin-top:6px;color:#7e8b9a;font-size:.7rem;line-height:1.45",
-      T("Bürgen heißt: „Diese Kennung kenne ich.“ Eine Bürgschaft zählt bei dir nur, wenn du dem Bürgen schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und höchstens 180 Tage lang. Ein Widerruf trägt immer einen Grund. Fällt eine verbürgte App auf, verfällt nur ihre Bürgschaft. Bei einer Frage stehen verbürgte Karten vorn; unverbürgte bleiben sichtbar und werden weiter gefragt.")));
+      T("Empfehlen heißt: „Diese Kennung kenne ich.“ Eine Empfehlung zählt bei dir nur, wenn du dem Empfehlenden schon traust (Netzadmin oder eigener Kontakt), höchstens zwei Schritte weit und höchstens 180 Tage lang. Sie kommt von selbst an, wenn beide einmal im Raum sind. Ein Widerruf trägt immer einen Grund. Fällt eine empfohlene App auf, verfällt nur ihre Empfehlung. Bei einer Frage stehen empfohlene Karten vorn; die übrigen bleiben sichtbar und werden weiter gefragt.")));
     buergBoxEl.addEventListener("toggle", function () { if (buergBoxEl.open) { configModule(); buergenZeigen(); } });
     setTimeout(function () { try { configModule(); ablaufZeigen(); } catch (_e) {} }, 0);   // S5b: Hinweis auch bei geschlossenem Kasten
     return buergBoxEl;
@@ -3396,14 +3396,14 @@
             var kList = (rdv() && typeof rdv().loadVouchContacts === "function") ? rdv().loadVouchContacts() : [];
             kList.forEach(function (k) { if (k.nodeId === vonId && k.name) vonName = k.name; });
           } catch (_e) { vonName = ""; }
-          vText = T("🤝 verbürgt von ") + (vonName ? vonName + " · " : "") + vonId.slice(0, 8) + "…" +
+          vText = T("🤝 empfohlen von ") + (vonName ? vonName + " · " : "") + vonId.slice(0, 8) + "…" +
             (c.vouch.depth > 1 ? T(" (über ") + (c.vouch.depth - 1) + T(" weiteren Schritt)") : "");
         } else {
           vText = c.vouch.status === "anker" ? T("🤝 Netzadmin") : T("🤝 eigener Kontakt");
         }
         info.appendChild(el("br"));
         var vBadge = el("span", "display:inline-block;margin-top:3px;font-size:.68rem;color:" + ac, vText);
-        vBadge.title = T("Bürgschaft geprüft (S5) — gatet nichts, unverbürgte Knoten bleiben sichtbar");
+        vBadge.title = T("Empfehlung geprüft (S5) — gatet nichts, nicht empfohlene Knoten bleiben sichtbar");
         vBadge.setAttribute("data-sbkim-vouch", c.vouch.status);
         info.appendChild(vBadge);
       }
@@ -3424,8 +3424,8 @@
       qb.addEventListener("click", function () { onAsk(c); });
       rowEl.appendChild(qb);
       // S5 Teil 2 — bürgen, Kontakt merken, widerrufen (Feld klappt unter der Zeile auf).
-      var vb = el("button", bs + ";margin-left:6px;opacity:.72;font-size:.72rem", T("🤝 Bürgen")); vb.type = "button";
-      vb.title = T("Für diese Kennung bürgen, Kontakt merken oder widerrufen");
+      var vb = el("button", bs + ";margin-left:6px;opacity:.72;font-size:.72rem", T("🤝 Empfehlen")); vb.type = "button";
+      vb.title = T("Diese Kennung empfehlen, als Kontakt merken oder die Empfehlung widerrufen");
       vb.setAttribute("data-sbkim-buergen-knopf", "");
       vb.addEventListener("click", function () {
         var da = rowEl.querySelector("[data-sbkim-buergen-feld]");
