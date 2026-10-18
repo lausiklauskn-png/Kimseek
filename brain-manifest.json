@@ -6,7 +6,7 @@
   "dir": "ltr",
   "start_url": "./brain.html",
   "scope": "./",
-  "id": "./brain.html",
+  "id": "/Kimseek/brain.html",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#0B0B1A",
