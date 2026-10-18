@@ -19,7 +19,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimseek-v73";
+var CACHE_VERSION = "kimseek-v74";
 
 
 /* ⚠ NUR EIGENE VORRAETE AUFRAEUMEN — `caches` gehoert dem URSPRUNG, nicht dem
@@ -47,6 +47,7 @@ var APP_SHELL = [
   "./assets/schutz-init.js",
   "./assets/siegel-inhalt.js",
   "./assets/sbkim-andock-wizard.js",
+  "./assets/installieren.js",
   "./modules/noble-secp256k1.js",
   "./modules/01_storage.js",
   "./modules/02_spore.js",

@@ -24,6 +24,16 @@ Zuletzt gemessen: **11 bestanden, 0 fehlgeschlagen**.
 - **KI-Schlüssel sind BYOK** und bleiben im Browser; nichts davon ins Repo.
 - **Der Gerätename** wird vom app-eigenen Glue ins Verbinden-Panel gehängt — hier `assets/rendezvous-init.js`, **nie** in eine byte-kopierte Panel-Datei. Regel: [NETZWEIT § 2](https://github.com/lausiklauskn-png/Sage-Protokol/blob/main/docs/NETZWEIT.md).
 
+## ⬇ Installieren-Knopf (2026-10-18, Klaus: „In jede App“)
+
+`assets/installieren.js` ist byte-1:1 aus Sage-Protokol (SHA-256 `e0644084…c3`) — nie hier abwandeln. `index.html` hat weder
+Einstellungen noch eine Kopfleiste (der ⟳ steckt im Such-Widget, Modul 22, Kanon): der Knopf steht in einer kleinen Zeile
+oben in der Seite, vor dem Platzhalter `#install-anker`. Als installierte App verschwindet er. Im Vorrat (ohne `?v=`, die
+Probe liest die Pfade aus `APP_SHELL` als Dateien), Cache v74. `brain.html` behält seinen eigenen Knopf (`#installBtn`,
+erscheint nur, wenn der Browser es anbietet, und verschwindet nach dem Installieren) — nicht doppelt gebaut. Gemessen im
+Browser: sichtbar, als App weg, Meldung lesbar, `getInstallabilityErrors` leer, App-Id `/Kimseek/`, 360 px ohne Überlauf.
+`npm test` 17 bestanden. Am Tablet nicht gemessen.
+
 ## Netzweit — gilt in jedem Repo, steht in Sage
 
 Freibrief zum Selbst-Mergen · Gerätename im Verbinden-Panel · frisch von
