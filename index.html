@@ -65,6 +65,16 @@
       display: flex; flex-direction: column;
     }
     main { flex: 1; max-width: 680px; margin: 0 auto; padding: 13vh 22px 40px; }
+    /* Installieren-Knopf (2026-10-18): keine Einstellungen, kein Menü → eine kleine Zeile oben in der Seite.
+       #install-anker ist nur der Platzhalter, VOR den assets/installieren.js den Knopf setzt. */
+    .kopf-leiste { display: flex; justify-content: flex-end; margin: -8vh 0 1.2rem; min-height: 36px; }
+    .kopf-knopf {
+      display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 10px;
+      font: inherit; font-size: .9rem; cursor: pointer; color: rgba(245,245,255,.85);
+      border: 1px solid rgba(110,231,211,.35); background: rgba(255,255,255,.04);
+    }
+    .kopf-knopf:hover { border-color: #6EE7D3; color: #6EE7D3; }
+    #install-anker { display: none; }
     .badge {
       display: inline-flex; align-items: center; gap: 0.5rem;
       font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase;
@@ -101,6 +111,7 @@
 </head>
 <body>
   <main>
+    <div class="kopf-leiste"><span id="install-anker" class="kopf-knopf" aria-hidden="true"></span></div>
     <span class="badge"><img class="badge-mush" src="./icon-192.png" alt="" aria-hidden="true"> SBKIM · Endknoten · server-los</span>
     <h1>Kimseek — sucht nach <span class="accent">Bedeutung</span>, nicht nach Stichwörtern.</h1>
     <p class="lead">
@@ -197,6 +208,7 @@
   <!-- Andock-Werkzeug IM Siegel-Modal (🔑 Identität & Spore · ✍ Semantik · 🛡 Schutz) -->
   <script src="./assets/siegel-inhalt.js"></script>
   <script src="./assets/sbkim-andock-wizard.js"></script>
+  <script src="./assets/installieren.js" data-name="Kimseek" data-vor="install-anker" defer></script>
 
   <!-- ── Such-Widget (Modul 22) + seine Eingabe-Module (21 Sprache, 24 OCR) ── -->
   <script src="./modules/21_spracheingabe.js"></script>
