@@ -82,7 +82,9 @@
       border: 1px solid var(--line); background: rgba(255,255,255,.05); color: var(--ink);
     }
     .iconbtn:hover { background: rgba(255,255,255,.11); }
-    #installBtn { display: none; border-color: rgba(167,139,250,.5); }
+    #installieren { border-color: rgba(167,139,250,.5); }
+    @media (max-width: 480px) { #installieren .t { display: none; } }
+    @media (max-width: 340px) { .topbar .inner { padding-left: 12px; padding-right: 12px; } }
 
     /* ---- Buttons ---- */
     button, .btn { font: inherit; cursor: pointer; border-radius: 12px; padding: .62rem 1rem;
@@ -224,7 +226,6 @@
   <div class="topbar"><div class="inner">
     <div class="logo"><span class="mk">🧠</span><span>Kim-Brain<small>Dateien nach Bedeutung</small></span></div>
     <div class="spacer"></div>
-    <button id="installBtn" class="iconbtn" title="Als App installieren">⬇︎ App installieren</button>
     <button id="helpBtn" class="iconbtn" title="So funktioniert's">?</button>
   </div></div>
 
@@ -403,17 +404,8 @@
         navigator.serviceWorker.register("./sbkim-sw.js").catch(function () {});
       });
     }
-    // Installier-Knopf (beforeinstallprompt)
-    var deferredPrompt = null;
-    window.addEventListener("beforeinstallprompt", function (e) {
-      e.preventDefault(); deferredPrompt = e; $("installBtn").style.display = "inline-block";
-    });
-    $("installBtn").onclick = function () {
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.finally(function () { deferredPrompt = null; $("installBtn").style.display = "none"; });
-    };
-    window.addEventListener("appinstalled", function () { $("installBtn").style.display = "none"; });
+    // Installier-Knopf: assets/installieren.js (byte-1:1 aus Sage) setzt ihn vor „?“ in die Kopfleiste —
+    // immer sichtbar, solange die Seite nicht als App läuft (Klaus 2026-10-18), nicht erst nach beforeinstallprompt.
 
     // ---------------- IndexedDB (eigene Schublade `kimbrain`) ----------------
     var DB_NAME = "kimbrain", STORE = "dateien", db = null;
@@ -764,5 +756,6 @@
     refresh();
   })();
   </script>
+  <script src="./assets/installieren.js" data-name="Kim-Brain" data-vor="helpBtn" defer></script>
 </body>
 </html>

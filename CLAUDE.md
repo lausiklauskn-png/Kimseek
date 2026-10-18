@@ -82,3 +82,15 @@ Spore und Unterschrift und gelten nur vom gefragten Knoten. Fremde Namen und Tex
 `test/smoke.test.js` nachgezogen, Cache `kimseek-v63`. Die eigene Glue (`assets/rendezvous-init.js`, `brain.html`) ist
 nachgesehen: fremder Text geht nur über `textContent` bzw. `esc`. Gemessen: `npm test` 12 grün. Gegenprobe von Hand (alte
 23-Fassung zurück): Drift-Guard rot. ⚠ Nicht gemessen: das Tablet, ein Raum mit echten fremden Knoten.
+
+## ⬇ Kim-Brain: Installieren oben in der Kopfleiste (Klaus 2026-10-18)
+
+Klaus: *„setze den Installationsbutton oben in die Navi-Leiste … verschwinden, wenn die App installiert ist … Macht das
+bitte überall so.“* `brain.html` hatte einen eigenen Knopf `#installBtn`, der nur nach `beforeinstallprompt` erschien.
+⚠ **Tafel-Evolution, benannt:** oben steht noch *„`brain.html` behält seinen eigenen Knopf … nicht doppelt gebaut“*. Der
+eigene Knopf ist jetzt weg; `brain.html` lädt dieselbe Datei `assets/installieren.js` (byte-1:1 aus Sage) mit
+`data-vor="helpBtn"` — der Knopf steht immer vor „?“ in der Kopfleiste, bis 480 px nur ⬇, als App weg. Bis 340 px
+schmalerer Rand, sonst bricht der Name um. Cache v75. Gemessen im Browser (300 · 320 · 360 · 412 · 1280 px): Knopf
+sichtbar, Kopfleiste 63 px wie vorher, als App weg, Meldung lesbar, `getInstallabilityErrors` leer. `npm test` grün.
+⚠ Der Inhalt von `brain.html` läuft unter 412 px schon auf main über (nicht die Kopfleiste). Am Tablet nicht gemessen.
+
